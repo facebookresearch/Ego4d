@@ -1,2 +1,4 @@
-# Ego4d
-Ego4d Public Repo
+# Ego4D
+
+For the CLI readme: [CLI README](ego4d/cli/README.md)
+
