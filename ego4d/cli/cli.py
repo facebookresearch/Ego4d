@@ -10,12 +10,10 @@ Examples:
         --datasets full_scale annotations \
         --output_directory="~/ego4d_data"
 """
+import logging
 from typing import List
 
 import boto3
-import logging
-from tqdm import tqdm
-
 from ego4d.cli.config import DATASETS_VIDEO, config_from_args, Config, validate_config
 from ego4d.cli.download import (
     list_videos_for_download,
@@ -30,6 +28,7 @@ from ego4d.cli.download import (
 )
 from ego4d.cli.manifest import download_manifest_for_version
 from ego4d.cli.progressbar import DownloadProgressBar
+from tqdm import tqdm
 
 
 def main(cfg: Config) -> None:
@@ -44,7 +43,9 @@ def main(cfg: Config) -> None:
     )
 
     if cfg.video_uids and all(x not in DATASETS_VIDEO for x in validated_cfg.datasets):
-        logging.error("ERROR: video_uids specified for non-video datasets (and will be ignored)")
+        logging.error(
+            "ERROR: video_uids specified for non-video datasets (and will be ignored)"
+        )
 
     downloads: List[FileToDownload] = []
     print("Checking requested datasets and versions...")
@@ -74,10 +75,7 @@ def main(cfg: Config) -> None:
             )
         to_download = list_videos_for_download(validated_cfg, dataset, manifest_path)
         downloads.extend(
-            [
-                FileToDownload.create(video, download_path)
-                for video in to_download
-            ]
+            [FileToDownload.create(video, download_path) for video in to_download]
         )
 
     print("Retrieving object metadata from S3...")
@@ -92,7 +90,9 @@ def main(cfg: Config) -> None:
         print("ABORT: All S3 Objects Invalid")
         return
     elif cnt_invalid > 0:
-        logging.error(f"{cnt_invalid}/{len(downloads)} invalid S3 downloads will be ignored")
+        logging.error(
+            f"{cnt_invalid}/{len(downloads)} invalid S3 downloads will be ignored"
+        )
 
     print("Checking if latest file versions are already downloaded...")
     active_downloads = filter_already_downloaded(downloads, version_entries)
@@ -108,7 +108,9 @@ def main(cfg: Config) -> None:
 
     assert all(x.s3_object for x in active_downloads)
 
-    total_size_bytes = sum(x.s3_object.content_length for x in active_downloads if x.s3_object)
+    total_size_bytes = sum(
+        x.s3_object.content_length for x in active_downloads if x.s3_object
+    )
     if total_size_bytes == 0:
         print(
             "The latest versions of all requested videos already exist in the output "

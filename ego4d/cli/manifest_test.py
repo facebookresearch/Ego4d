@@ -61,7 +61,9 @@ def test_csv_reader():
         )
         f.flush()
 
-        full_generator = list_videos_in_manifest(manifest_path=Path(f.name), for_universities=set())
+        full_generator = list_videos_in_manifest(
+            manifest_path=Path(f.name), for_universities=set()
+        )
         georgiatech_generator = list_videos_in_manifest(
             manifest_path=Path(f.name),
             for_universities={BUCKET_TO_UNIV["ego4d-georgiatech"]},

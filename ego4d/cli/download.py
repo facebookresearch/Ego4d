@@ -7,18 +7,27 @@ import csv
 import logging
 import os
 import threading
-from concurrent.futures import ThreadPoolExecutor 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, fields
 from itertools import compress
 from pathlib import Path
-from typing import List, Optional, Collection, NamedTuple, Callable, Iterable, Tuple, Union, Any
+from typing import (
+    List,
+    Optional,
+    Collection,
+    NamedTuple,
+    Callable,
+    Iterable,
+    Tuple,
+    Union,
+    Any,
+)
 
 import boto3.session
-from tqdm import tqdm
-
 from ego4d.cli import manifest
 from ego4d.cli.config import ValidatedConfig, DATASETS_VIDEO
 from ego4d.cli.manifest import VideoMetadata
+from tqdm import tqdm
 
 
 __VERSION_ENTRY_FILENAME = "manifest.ver"
@@ -49,10 +58,12 @@ class FileToDownload:
 
     def file_version_base(self) -> str:
         if not self.filename:
-            raise RuntimeError('Invalid filename for file_version')
+            raise RuntimeError("Invalid filename for file_version")
         base, ext = os.path.splitext(self.filename)
         if ext not in [".mp4", ".json", ".jpg", ".txt"]:
-            logging.warning(f'Unexpected file_version extension: {ext} filename: {self.filename}')
+            logging.warning(
+                f"Unexpected file_version extension: {ext} filename: {self.filename}"
+            )
         assert "/" not in base
         return base
 
@@ -66,24 +77,26 @@ class FileToDownload:
         return f"{base}.*"
 
     def to_version_entry(self) -> VersionEntry:
-        return VersionEntry(uid=self.uid, version=self.s3_version, filename=self.filename)
+        return VersionEntry(
+            uid=self.uid, version=self.s3_version, filename=self.filename
+        )
 
     @staticmethod
-    def create(video: VideoMetadata, download_folder: Path) -> 'FileToDownload':
+    def create(video: VideoMetadata, download_folder: Path) -> "FileToDownload":
         if video.file_download:
             filename = os.path.basename(video.s3_path)
             assert filename
         else:
             filename = f"{video.uid}.mp4"
-        
+
         x = FileToDownload(
-            filename=filename, 
-            download_folder=download_folder, 
+            filename=filename,
+            download_folder=download_folder,
             uid=video.uid,
         )
         if video.s3_bucket and video.s3_object_key:
-            x.s3_bucket=video.s3_bucket
-            x.s3_object_key=video.s3_object_key
+            x.s3_bucket = video.s3_bucket
+            x.s3_object_key = video.s3_object_key
         return x
 
 
@@ -134,14 +147,14 @@ def create_download_directory(validated_cfg: ValidatedConfig, dataset: str) -> P
 
 
 def filter_already_downloaded(
-    downloads: Iterable[FileToDownload], 
-    version_entries: List[VersionEntry]
+    downloads: Iterable[FileToDownload], version_entries: List[VersionEntry]
 ) -> List[FileToDownload]:
     """
     Takes a collection of videos that are to be downloaded and a list of the S3.Objects
     corresponding to the videos to download and removes any videos that have already
     been downloaded.
     """
+
     def already_downloaded(download: FileToDownload) -> bool:
         assert download.filename
         # file_version_name = download.file_version_name(s3_object.version_id)
@@ -152,12 +165,16 @@ def filter_already_downloaded(
         if not file_location.exists():
             return False
 
-        version_entry = next((x for x in version_entries if x.uid == download.uid), None)
+        version_entry = next(
+            (x for x in version_entries if x.uid == download.uid), None
+        )
         if not version_entry:
             return False
 
         if not download.s3_object:
-            logging.error(f'filter_already_downloaded: invalid s3 object: {download.uid}')
+            logging.error(
+                f"filter_already_downloaded: invalid s3 object: {download.uid}"
+            )
             return False
 
         s3_version = download.s3_object.version_id
@@ -171,7 +188,9 @@ def filter_already_downloaded(
     with ThreadPoolExecutor(max_workers=32) as pool:
         to_download = list(
             tqdm(
-                pool.map(lambda x: x.s3_object and not already_downloaded(x), downloads),
+                pool.map(
+                    lambda x: x.s3_object and not already_downloaded(x), downloads
+                ),
                 total=len(downloads),
                 unit="file",
             )
@@ -205,7 +224,9 @@ def download_all(
 
         # TODO: Can remove for ship
         # Remove any existing version files
-        old_version_files = list(download.download_folder.glob(download.file_version_pattern()))
+        old_version_files = list(
+            download.download_folder.glob(download.file_version_pattern())
+        )
         for file in old_version_files:
             file.unlink()
 
@@ -247,7 +268,9 @@ def list_videos_for_download(
 
     if cfg.video_uids:
         if any(x != x.lower() for x in cfg.video_uids):
-            raise RuntimeError("ERROR: Upper case uids invalid - please sanity check your inputs: {cfg.video_uids}")
+            raise RuntimeError(
+                "ERROR: Upper case uids invalid - please sanity check your inputs: {cfg.video_uids}"
+            )
         matches = [x for x in videos if x.uid in cfg.video_uids]
         if dataset in DATASETS_VIDEO or dataset.lower() in DATASETS_VIDEO:
             missing = cfg.video_uids - {v.uid for v in videos}
@@ -262,7 +285,9 @@ def list_videos_for_download(
             videos = matches
         else:
             if matches:
-                print("ERROR: video_uids not supported for non-video datasets: {[x.uid for x in matches]}")
+                print(
+                    "ERROR: video_uids not supported for non-video datasets: {[x.uid for x in matches]}"
+                )
 
     return videos
 
@@ -282,37 +307,45 @@ def _file_is_corrupt(download: FileToDownload):
 
 
 def load_version_file(download_path: Path) -> List[VersionEntry]:
-    file_path = (download_path / __VERSION_ENTRY_FILENAME)
+    file_path = download_path / __VERSION_ENTRY_FILENAME
     if not os.path.exists(file_path):
         return []
     with open(file_path) as f:
         reader = csv.DictReader(f)
         data = list(reader)
-        entries = [VersionEntry(row['uid'], row['version'], row['filename']) for row in data]
+        entries = [
+            VersionEntry(row["uid"], row["version"], row["filename"]) for row in data
+        ]
     return entries
 
 
 def save_version_file(entries: List[VersionEntry], download_path: Path):
-    file_path = (download_path / __VERSION_ENTRY_FILENAME)
-    with open(file_path, 'w', newline='', encoding='utf-8') as f:
+    file_path = download_path / __VERSION_ENTRY_FILENAME
+    with open(file_path, "w", newline="", encoding="utf-8") as f:
         fieldnames = [field.name for field in fields(VersionEntry)]
         writer = csv.DictWriter(f, fieldnames)
         writer.writeheader()
-        writer.writerows({'uid': x.uid, 'version': x.version, 'filename': x.filename } for x in entries)
+        writer.writerows(
+            {"uid": x.uid, "version": x.version, "filename": x.filename}
+            for x in entries
+        )
 
 
 def upsert_version(download: FileToDownload, entries: List[VersionEntry]):
-    assert download and download.uid 
+    assert download and download.uid
 
     matches = [x for x in entries if x.uid == download.uid]
     if len(matches) == 0:
         entries.append(download.to_version_entry())
     else:
-        assert len(matches) == 1, f"Multiple version entries for uid invalid: {download.uid}"
+        assert (
+            len(matches) == 1
+        ), f"Multiple version entries for uid invalid: {download.uid}"
         entry = matches[0]
         if download.s3_version:
             entry.version = download.s3_version
         if download.filename != entry.filename:
-            logging.error(f"Suspect version info: Filename ({download.filename}) changed for existing entry: {entry.filename}")
+            logging.error(
+                f"Suspect version info: Filename ({download.filename}) changed for existing entry: {entry.filename}"
+            )
             entry.filename = download.filename
-

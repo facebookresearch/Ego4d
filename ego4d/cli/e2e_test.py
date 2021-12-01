@@ -1,8 +1,6 @@
-
-
 import boto3
-
 from moto import mock_s3
+
 
 @mock_s3
 def test_s3():

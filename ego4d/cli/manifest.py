@@ -45,10 +45,10 @@ class VideoMetadata:
             self.university: str = BUCKET_TO_UNIV.get(self.s3_bucket, "")
 
         type = row.get(self.__FILE_TYPE_KEY)
-        if not type or type in ['mp4', 'video']:
+        if not type or type in ["mp4", "video"]:
             self.file_download = False
         else:
-            assert type in ['file', 'json']
+            assert type in ["file", "json"]
             self.file_download = True
 
 

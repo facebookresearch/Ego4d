@@ -11,12 +11,11 @@ from typing import NamedTuple, List, Set, Union
 
 import boto3.session
 from botocore.exceptions import ProfileNotFound
-
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
-DATASETS_VIDEO = ['full_scale']
-DATASETS_FILE = ['annotations']
+DATASETS_VIDEO = ["full_scale"]
+DATASETS_FILE = ["annotations"]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE
 
 
@@ -87,7 +86,7 @@ def config_from_args(args=None) -> Config:
     json_parser = argparse.ArgumentParser(
         description="Command line tool to download Ego4D datasets from Amazon S3"
     )
-    
+
     json_parser.add_argument(
         "--config_path",
         type=Path,
@@ -102,7 +101,8 @@ def config_from_args(args=None) -> Config:
 
     required_flags = {"output_directory"}
     flag_parser.add_argument(
-        "-o", "--output_directory",
+        "-o",
+        "--output_directory",
         help="A local path where the downloaded files and metadata will be stored",
     )
     flag_parser.add_argument(
@@ -179,29 +179,29 @@ def config_from_args(args=None) -> Config:
         with open(args.config_path.expanduser()) as f:
             config_contents = json.load(f)
             flag_parser.set_defaults(**config_contents)
-    
+
     parsed_args = flag_parser.parse_args(remaining)
     if parsed_args.datasets is None and parsed_args.annotations is None:
-        raise RuntimeError(f"Please specify either datasets, annotations or manifest for a minimal download set.")
+        raise RuntimeError(
+            f"Please specify either datasets, annotations or manifest for a minimal download set."
+        )
 
     unknown_datasets = [x for x in parsed_args.datasets if x not in DATASETS_ALL]
     if unknown_datasets:
-        print(f"Warning: Non-standard Dataset Specfied (Allowed, will attempt download): {unknown_datasets}")
+        print(
+            f"Warning: Non-standard Dataset Specfied (Allowed, will attempt download): {unknown_datasets}"
+        )
 
     if parsed_args.viz:
         if parsed_args.datasets:
-            if 'viz' not in parsed_args.datasets:
-                print('Adding viz to datasets..')
-                parsed_args.datasets.append('viz')
+            if "viz" not in parsed_args.datasets:
+                print("Adding viz to datasets..")
+                parsed_args.datasets.append("viz")
         else:
-            parsed_args.datasets = ['viz']
+            parsed_args.datasets = ["viz"]
         del parsed_args.viz
 
-    flags = {
-        k: v
-        for k, v in vars(parsed_args).items()
-        if v is not None
-    }
+    flags = {k: v for k, v in vars(parsed_args).items() if v is not None}
 
     # Note: Since the flags from the config file are being used as default argparse
     # values, we can't set required=True. Doing so would mean that the user couldn't
