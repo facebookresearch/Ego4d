@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
 
 import threading
+
 import tqdm
 
 
@@ -22,4 +23,4 @@ class DownloadProgressBar:
 
     def update(self, num_bytes: int) -> None:
         with self.__lock:
-            self.__tqdm.update(n=num_bytes*8)
+            self.__tqdm.update(n=num_bytes * 8)
