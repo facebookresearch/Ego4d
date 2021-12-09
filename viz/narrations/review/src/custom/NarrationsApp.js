@@ -102,7 +102,9 @@ function Viewer({ data }) {
           <h3>Active annotations:</h3>
           {segData
             .filter(
-              (seg) => progress >= seg.start_time && progress <= seg.end_time
+              (seg) =>
+                progress >= seg.start_time - 0.5 &&
+                progress <= seg.end_time + 0.5
             )
             .map((seg) => (
               <Segment
