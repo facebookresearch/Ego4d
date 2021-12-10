@@ -51,7 +51,7 @@ class FileToDownload:
     s3_bucket: str = None
     s3_object_key: str = None
     s3_object: Any = None
-    s3_exists: bool = False
+    s3_exists: Optional[bool] = None
     # Size of the file on S3. This should match the file size on disk.
     s3_content_size_bytes: int = 0
     s3_version: str = None
@@ -174,6 +174,13 @@ def filter_already_downloaded(
         # file_version_name = download.file_version_name(s3_object.version_id)
         # assert file_version_name
 
+        download.s3_exists = download.exists()
+        if not download.s3_exists:
+            logging.info(
+                f"Missing s3 object (ignored for download): {download.uid}"
+            )
+            return False
+
         file_location = download.download_folder / download.filename
         # file_version_location = download.download_folder / file_version_name
         if not file_location.exists():
@@ -188,13 +195,6 @@ def filter_already_downloaded(
         if not download.s3_object:
             logging.error(
                 f"filter_already_downloaded: invalid s3 object: {download.uid}"
-            )
-            return False
-
-        download.s3_exists = download.exists()
-        if not download.s3_exists:
-            logging.info(
-                f"missing s3 object (ignored for download): {download.uid}"
             )
             return False
 
