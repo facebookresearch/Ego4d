@@ -104,6 +104,12 @@ def main(cfg: Config) -> None:
         )
         exit(0)
 
+    missing = [x for x in downloads if not x.s3_exists]
+    if len(missing) > 0:
+        logging.error(
+            f"{len(missing)}/{len(downloads)} missing S3 downloads will be ignored"
+        )
+
     print(f"Downloading {len(active_downloads)}/{len(downloads)}..")
 
     assert all(x.s3_object for x in active_downloads)
