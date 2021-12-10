@@ -23,6 +23,7 @@ from typing import (
     Any,
 )
 
+import botocore.exceptions
 import boto3.session
 from ego4d.cli import manifest
 from ego4d.cli.config import ValidatedConfig, DATASETS_VIDEO
@@ -50,17 +51,30 @@ class FileToDownload:
     s3_bucket: str = None
     s3_object_key: str = None
     s3_object: Any = None
+    s3_exists: Optional[bool] = None
     # Size of the file on S3. This should match the file size on disk.
     s3_content_size_bytes: int = 0
     s3_version: str = None
     # Location of the local file downloaded.
     file_path: Optional[Path] = None
 
+    def exists(self) -> bool:
+        if not self.s3_object:
+            raise RuntimeError(f"No s3_object for exists call: {self.uid}")
+        try:
+            self.s3_object.load()
+            return True
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == "404":
+                return False
+            else:
+                raise
+
     def file_version_base(self) -> str:
         if not self.filename:
             raise RuntimeError("Invalid filename for file_version")
         base, ext = os.path.splitext(self.filename)
-        if ext not in [".mp4", ".json", ".jpg", ".txt"]:
+        if ext not in [".mp4", ".json", ".jsonl", ".jpg", ".txt"]:
             logging.warning(
                 f"Unexpected file_version extension: {ext} filename: {self.filename}"
             )
@@ -150,15 +164,22 @@ def filter_already_downloaded(
     downloads: Iterable[FileToDownload], version_entries: List[VersionEntry]
 ) -> List[FileToDownload]:
     """
-    Takes a collection of videos that are to be downloaded and a list of the S3.Objects
-    corresponding to the videos to download and removes any videos that have already
-    been downloaded.
+    Takes a collection of files that are to be downloaded and a list of the S3.Objects
+    corresponding to the files to download and removes any that have already been 
+    downloaded.
     """
 
     def already_downloaded(download: FileToDownload) -> bool:
         assert download.filename
         # file_version_name = download.file_version_name(s3_object.version_id)
         # assert file_version_name
+
+        download.s3_exists = download.exists()
+        if not download.s3_exists:
+            logging.info(
+                f"Missing s3 object (ignored for download): {download.uid}"
+            )
+            return False
 
         file_location = download.download_folder / download.filename
         # file_version_location = download.download_folder / file_version_name
@@ -189,7 +210,8 @@ def filter_already_downloaded(
         to_download = list(
             tqdm(
                 pool.map(
-                    lambda x: x.s3_object and not already_downloaded(x), downloads
+                    lambda x: x.s3_object and not already_downloaded(x) and x.s3_exists, 
+                    downloads
                 ),
                 total=len(downloads),
                 unit="file",

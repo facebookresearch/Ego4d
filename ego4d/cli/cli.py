@@ -96,6 +96,13 @@ def main(cfg: Config) -> None:
 
     print("Checking if latest file versions are already downloaded...")
     active_downloads = filter_already_downloaded(downloads, version_entries)
+
+    missing = [x for x in downloads if not x.s3_exists]
+    if len(missing) > 0:
+        logging.error(
+            f"{len(missing)}/{len(downloads)} missing S3 downloads will be ignored"
+        )
+
     if len(active_downloads) == 0:
         print(
             "The latest versions of all requested videos already exist in the output "
