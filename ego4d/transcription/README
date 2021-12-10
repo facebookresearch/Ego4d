@@ -1,0 +1,31 @@
+# README for the transcription task
+
+Requirements:
+- Install ffmpeg: https://ffmpeg.org/download.html
+- Install sclite: https://github.com/usnistgov/SCTK.git
+  - Add the bin folder to your PATH or adjust the PATH in score_asr.sh
+- Download Kaldi English GLM: https://github.com/kaldi-asr/kaldi/blob/master/egs/ami/s5/local/english.glm
+- Install PyTorch and espnet_model_zoo: https://github.com/espnet/espnet_model_zoo
+- Install Python soundfile library (pip install soundfile) 
+  
+Assumptions:
+- Assuming that you have already dowloaded the videos and annotations
+- Assuming that you have already ran voice activity detection (VAD) from audio diarization
+  - If not, please check the diarization steps and at least run the VAD
+  - OR, you can by-pass VAD based audio segmentation by creating a temporary lab directory and decoding the audios segmented at every 10 sec. NOTE: this will result in changes in the final WER!!!
+
+Running ASR:
+1) Extract 16kHz single channel audio files in wav format from videos (if not done already)
+   ./extract_wav.sh <video-dir> <output-wav-dir>
+2) Modify the paths in the ./score_asr.sh to point to your ego4d/video/lab directories and paths. 
+   If you only want to decode a certain subset of the data (e.g. val or test), modify the "for" loops, accordingly. 
+3) Extract transcriptions from the annotation files, decode audio and score the decoding output by running
+   ./score_asr.sh <result-dir> 1
+   (Note: If you have successfully ran stage 1 of the script and want only the second stage use 2 as the argument)
+
+Additional Notes:
+- While running the decoding script for the first time, you may also need python NLTK library.
+Please follow the directions in the error message
+
+- System is tested on a Python 3.8.11 environment.
+
