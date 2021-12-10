@@ -23,8 +23,8 @@ from typing import (
     Any,
 )
 
-import botocore.exceptions
 import boto3.session
+import botocore.exceptions
 from ego4d.cli import manifest
 from ego4d.cli.config import ValidatedConfig, DATASETS_VIDEO
 from ego4d.cli.manifest import VideoMetadata
@@ -65,7 +65,7 @@ class FileToDownload:
             self.s3_object.load()
             return True
         except botocore.exceptions.ClientError as e:
-            if e.response['Error']['Code'] == "404":
+            if e.response["Error"]["Code"] == "404":
                 return False
             else:
                 raise
@@ -165,7 +165,7 @@ def filter_already_downloaded(
 ) -> List[FileToDownload]:
     """
     Takes a collection of files that are to be downloaded and a list of the S3.Objects
-    corresponding to the files to download and removes any that have already been 
+    corresponding to the files to download and removes any that have already been
     downloaded.
     """
 
@@ -176,9 +176,7 @@ def filter_already_downloaded(
 
         download.s3_exists = download.exists()
         if not download.s3_exists:
-            logging.info(
-                f"Missing s3 object (ignored for download): {download.uid}"
-            )
+            logging.info(f"Missing s3 object (ignored for download): {download.uid}")
             return False
 
         file_location = download.download_folder / download.filename
@@ -210,8 +208,8 @@ def filter_already_downloaded(
         to_download = list(
             tqdm(
                 pool.map(
-                    lambda x: x.s3_object and not already_downloaded(x) and x.s3_exists, 
-                    downloads
+                    lambda x: x.s3_object and not already_downloaded(x) and x.s3_exists,
+                    downloads,
                 ),
                 total=len(downloads),
                 unit="file",
