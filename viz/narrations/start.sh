@@ -12,8 +12,7 @@ INPUT_FILE=${INPUT_FILE:-$VID_ROOT/v1/viz/preprocessed_narrations_input.jsonl}
 # Check that Mephisto is installed:
 if ! command -v mephisto &> /dev/null
 then
-    echo "Mephisto could not be found. Find installation instructions here:";
-    echo "https://github.com/facebookresearch/mephisto/blob/main/docs/quickstart.md"
+    echo "Mephisto could not be found. Install with: pip install mephisto";
     exit
 fi
 
@@ -24,7 +23,7 @@ if [ -f "$INPUT_FILE" ]; then
 else
     # If the file cannot be found within the ego4d viz dataset location,
     # we will need to download the dataset first:
-    echo "Preprocessed file not found, downloading the 'viz' dataset to $VID_ROOT..."
+    echo "Preprocessed file not found, downloading the 'viz' dataset using the Ego4D CLI to $VID_ROOT..."
     python -m ego4d.cli.cli --yes --datasets viz --output_directory $VID_ROOT
 fi
 
