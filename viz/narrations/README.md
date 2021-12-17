@@ -7,7 +7,7 @@ This folder consists of:
 ## Start Script
 
 The easiest way to run the interface is to use the start script.
-Once you have [Mephisto installed](https://github.com/facebookresearch/mephisto/blob/main/docs/quickstart.md), you can run:
+Once you have Mephisto installed ([`pip install mephisto`](https://github.com/facebookresearch/mephisto/blob/main/docs/quickstart.md)) and the Ego4D CLI installed, you can run:
 
 ```
 ./start.sh
