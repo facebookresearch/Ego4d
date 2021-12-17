@@ -5,7 +5,7 @@ FIRST_X="${1:-2}"
 
 if [[ $FIRST_X = "ALL" ]]
 then
-  jq -r 'keys | @csv' ../narrations_v2_7-27-21.json | tr -d '"' | tr , ' '
+  jq -r 'keys | @csv' $INPUT_FILE | tr -d '"' | tr , ' '
 else
   jq -r --arg FIRST_X "$FIRST_X"  'keys | .[0:($FIRST_X|tonumber)] | @csv' $INPUT_FILE | tr -d '"' | tr , ' '
 fi

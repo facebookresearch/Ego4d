@@ -8,5 +8,5 @@ then
   xargs -n 1 -I {} python -m ego4d.cli.cli --yes --datasets full_scale viz --output_directory $VID_ROOT --video_uids {}
 else
   cat
-  xargs -n 1 -I {} python -m ego4d.cli.cli --yes --datasets full_scale --output_directory $VID_ROOT --video_uids {} > /dev/null
+  xargs -n 1 -I {} python -m ego4d.cli.cli --yes --datasets full_scale viz --output_directory $VID_ROOT --video_uids {} > /dev/null
 fi
