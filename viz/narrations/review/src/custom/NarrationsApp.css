@@ -37,6 +37,7 @@
 .app-container {
   display: flex;
   background-color: white;
+  min-height: calc(100vh - 50px);
 }
 
 .segment-viewer {

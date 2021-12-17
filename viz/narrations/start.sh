@@ -19,10 +19,12 @@ fi
 
 # Check that the preprocessed data exists, if not attempt to download it:
 if [ -f "$INPUT_FILE" ]; then
+    echo "Preprocessed file found, using $INPUT_FILE"
     true
 else
     # If the file cannot be found within the ego4d viz dataset location,
     # we will need to download the dataset first:
+    echo "Preprocessed file not found, downloading the 'viz' dataset to $VID_ROOT..."
     python -m ego4d.cli.cli --yes --datasets viz --output_directory $VID_ROOT
 fi
 
