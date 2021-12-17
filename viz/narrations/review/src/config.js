@@ -10,7 +10,7 @@ const config = {
     the interface at <some_placeholder_dir>, you can run `npm start` to get a
     live-reloading developer build server.
     */
-  // port: 5000,
+  // port: 3030,
 };
 
 export default config;

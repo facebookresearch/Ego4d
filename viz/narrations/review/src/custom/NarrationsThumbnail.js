@@ -7,6 +7,8 @@ function NarrationsThumbnail({ item }) {
   const data = item.data;
   const payload = data.info.payload;
 
+  const [isError, setError] = React.useState(false);
+
   return (
     <div className="json-item-renderer">
       <Card
@@ -19,17 +21,18 @@ function NarrationsThumbnail({ item }) {
         </p>
         <img
           role="presentation"
-          onerror={(e) => {
-            console.log(e);
+          onError={(e) => {
+            // console.log(e);
             e.target.onerror = null;
-            e.target.src = "image_path_here";
+            // e.target.src = "image_path_here";
+            setError(true);
           }}
           src={
-            data.img
+            data.img && !isError
               ? getHostname() + data.img
               : "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="
           }
-          alt="test"
+          alt="Thumbnail"
           style={{ width: data.img ? "100%" : "1px" }}
         />
         {/* {JSON.stringify(payload[0].label)} */}

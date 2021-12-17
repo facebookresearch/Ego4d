@@ -1,10 +1,13 @@
 # Recipes for running a narrations visualization server
 
-Get the prerequisites setup
+Get the prerequisites set up:
 
-- [Ego4D CLI](https://github.com/fairinternal/Ego4D/tree/master/ego4d/cli)
+- [Ego4D CLI](https://github.com/facebookresearch/Ego4D/tree/master/ego4d/cli)
 - [Mephisto CLI](https://github.com/facebookresearch/mephisto/blob/main/docs/quickstart.md)
-- [`jq`](https://stedolan.github.io/jq/download/), unless you have a precomputed input file already in which case you don't need this
+
+_Optional:_
+
+- [`jq`](https://stedolan.github.io/jq/download/) - We provide a precomputed input file which makes this dependency unnecessary. If you'd like to create custom input files from the `recipes/` folder, however, you'll need this utility.
 
 Then from the `recipes/` folder, you can do:
 

@@ -1,6 +1,7 @@
 import React from "react";
 import ReactPlayer from "react-player"; /* dependency */
 import { getHostname } from "../utils";
+import { Callout, Intent } from "@blueprintjs/core";
 
 import "./NarrationsApp.css";
 const USE_MOCK = false;
@@ -81,10 +82,39 @@ function Viewer({ data }) {
   const [playing, setPlaying] = React.useState(false);
   const vidRef = React.useRef();
 
+  const [isError, setError] = React.useState(false);
+
+  const activeAnnotations = segData
+    .filter(
+      (seg) =>
+        progress >= seg.start_time - 0.5 && progress <= seg.end_time + 0.5
+    )
+    .map((seg) => (
+      <Segment
+        segment={seg}
+        duration={duration}
+        progress={progress}
+        onClick={() => {
+          vidRef?.current && vidRef.current.seekTo(seg.start_time, "seconds");
+          setPlaying(true);
+        }}
+      />
+    ));
+
   return (
     <div>
       <div className="app-container">
         <div className="video-viewer">
+          {isError ? (
+            <Callout intent={Intent.WARNING} style={{ marginBottom: 10 }}>
+              The video was not found. You may not have it downloaded. You can
+              try downloading it with the Ego4D cli:
+              <pre style={{ whiteSpace: "break-spaces" }}>
+                python -m ego4d.cli.cli --yes --datasets full_scale
+                --output_directory $OUTPUT_DIR --video_uids {data.uid}
+              </pre>
+            </Callout>
+          ) : null}
           <ReactPlayer
             url={file}
             controls
@@ -92,6 +122,10 @@ function Viewer({ data }) {
             ref={vidRef}
             width={"100%"}
             progressInterval={350}
+            onError={(error) => {
+              console.log(error);
+              setError(true);
+            }}
             onProgress={({ playedSeconds }) => {
               setProgress(playedSeconds);
             }}
@@ -100,24 +134,7 @@ function Viewer({ data }) {
           {/* <h3>{Math.floor(progress * 10) / 10}</h3>
             <h3>{duration}</h3> */}
           <h3>Active annotations:</h3>
-          {segData
-            .filter(
-              (seg) =>
-                progress >= seg.start_time - 0.5 &&
-                progress <= seg.end_time + 0.5
-            )
-            .map((seg) => (
-              <Segment
-                segment={seg}
-                duration={duration}
-                progress={progress}
-                onClick={() => {
-                  vidRef?.current &&
-                    vidRef.current.seekTo(seg.start_time, "seconds");
-                  setPlaying(true);
-                }}
-              />
-            ))}
+          {activeAnnotations.length > 0 ? activeAnnotations : <span>None</span>}
         </div>
         <div className="segment-viewer">
           <h3>All annotations:</h3>

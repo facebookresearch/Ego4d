@@ -40,13 +40,9 @@
 }
 
 .segment-viewer {
-  /* margin-top: 20px; */
-  margin-left: 20px;
-}
-
-.segment-viewer {
   margin-left: 50%;
   padding: 10px 20px 30px 30px;
+  flex: 1;
 }
 
 .video-viewer {
