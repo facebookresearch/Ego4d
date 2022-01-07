@@ -202,7 +202,11 @@ def filter_already_downloaded(
 
         s3_size = download.s3_object.content_length
         # Return true if the size on S3 matches the file size on disk
-        return file_location.stat().st_size == s3_size
+        if file_location.stat().st_size != s3_size:
+            logging.warning(f"already_downloaded=False for file size: {file_location}")
+            return False
+
+        return True
 
     with ThreadPoolExecutor(max_workers=32) as pool:
         to_download = list(
@@ -215,6 +219,12 @@ def filter_already_downloaded(
                 unit="file",
             )
         )
+
+    n_filtered = len(downloads) - len(to_download)
+    if n_filtered > 0:
+        logging.info(f"Filtered {n_filtered}/{len(to_download)} existing videos for download.")
+    else:
+        logging.info("No existing videos to filter.")
 
     return list(compress(downloads, to_download))
 
@@ -256,10 +266,15 @@ def download_all(
         # Create an empty file with the version name so that it can be tracked later
         # (download.download_folder / file_version_name).touch()
 
-        obj.download_file(str(file_path), Callback=callback)
+        try:
+            obj.download_file(str(file_path), Callback=callback)
 
-        download.file_path = file_path
-        download.s3_content_size_bytes = obj.content_length
+            download.file_path = file_path
+            download.s3_content_size_bytes = obj.content_length
+        except Exception as ex:
+            logging.exception("S3 Download Exception: {ex}")
+            download.file_path = None
+            download.s3_content_size_bytes = 0
 
         return download
 
@@ -320,7 +335,7 @@ def list_corrupt_files(downloads: Collection[FileToDownload]) -> List[FileToDown
 
 
 def _file_is_corrupt(download: FileToDownload):
-    if download.file_path.exists():
+    if download.file_path and download.file_path.exists():
         return download.file_path.stat().st_size != download.s3_content_size_bytes
 
     return True
@@ -353,6 +368,11 @@ def save_version_file(entries: List[VersionEntry], download_path: Path):
 
 def upsert_version(download: FileToDownload, entries: List[VersionEntry]):
     assert download and download.uid
+
+    if download.s3_content_size_bytes == 0:
+        # download failed, just ignore?
+        logging.warning("upsert_version: ignoring 0 byte download: " + download.uid)
+        return
 
     matches = [x for x in entries if x.uid == download.uid]
     if len(matches) == 0:
