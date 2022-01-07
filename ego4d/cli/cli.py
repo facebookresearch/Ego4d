@@ -145,14 +145,19 @@ def main(cfg: Config) -> None:
         callback=DownloadProgressBar(total_size_bytes=total_size_bytes).update,
     )
 
+    # TODO: Handle/filter? failed download pre-corrupted?
+
     print("Checking file integrity...")
     corrupted = list_corrupt_files(files)
 
     if corrupted:
-        pass
-        # TODO: log error
+        msg = f"ERROR: {len(corrupted)} files failed download: "
+        for x in corrupted:
+            msg += f"\t{x.uid}\n"
+        logging.error(msg)
         # TODO: retry these downloads?
 
+    # TODO: Only succeeded/non-corrupted files (currently warns in upsert)
     for x in active_downloads:
         upsert_version(x, version_entries)
 
