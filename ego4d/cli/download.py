@@ -222,7 +222,9 @@ def filter_already_downloaded(
 
     n_filtered = len(downloads) - len(to_download)
     if n_filtered > 0:
-        logging.info(f"Filtered {n_filtered}/{len(to_download)} existing videos for download.")
+        logging.info(
+            f"Filtered {n_filtered}/{len(to_download)} existing videos for download."
+        )
     else:
         logging.info("No existing videos to filter.")
 
