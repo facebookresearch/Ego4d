@@ -160,6 +160,11 @@ def create_download_directory(validated_cfg: ValidatedConfig, dataset: str) -> P
 #     return [s3.Object(d.s3_bucket, d.s3_object_key) for d in downloads if d.s3_object_key]
 
 
+def info(msg):
+    logging.info(msg)
+    print(msg)
+
+
 def filter_already_downloaded(
     downloads: Iterable[FileToDownload], version_entries: List[VersionEntry]
 ) -> List[FileToDownload]:
@@ -176,18 +181,20 @@ def filter_already_downloaded(
 
         download.s3_exists = download.exists()
         if not download.s3_exists:
-            logging.info(f"Missing s3 object (ignored for download): {download.uid}")
+            info(f"Missing s3 object (ignored for download): {download.uid}")
             return False
 
         file_location = download.download_folder / download.filename
         # file_version_location = download.download_folder / file_version_name
         if not file_location.exists():
+            logging.info(f"already_downloaded: missing file: {file_location}")
             return False
 
         version_entry = next(
             (x for x in version_entries if x.uid == download.uid), None
         )
         if not version_entry:
+            info(f"already_downloaded: no version entry for existing file: {file_location}")
             return False
 
         if not download.s3_object:
@@ -197,7 +204,11 @@ def filter_already_downloaded(
             return False
 
         s3_version = download.s3_object.version_id
-        if not version_entry and version_entry.version == s3_version:
+        if version_entry.version != s3_version:
+            info(
+                f"filter_already_downloaded: mismatched s3 object version: {download.uid} "
+                f" {version_entry.version} v {s3_version} "
+            )
             return False
 
         s3_size = download.s3_object.content_length
@@ -222,11 +233,9 @@ def filter_already_downloaded(
 
     n_filtered = len(downloads) - len(to_download)
     if n_filtered > 0:
-        logging.info(
-            f"Filtered {n_filtered}/{len(to_download)} existing videos for download."
-        )
+        info(f"Filtered {n_filtered}/{len(to_download)} existing videos for download.")
     else:
-        logging.info("No existing videos to filter.")
+        info("No existing videos to filter.")
 
     return list(compress(downloads, to_download))
 
