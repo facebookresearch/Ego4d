@@ -194,7 +194,9 @@ def filter_already_downloaded(
             (x for x in version_entries if x.uid == download.uid), None
         )
         if not version_entry:
-            info(f"already_downloaded: no version entry for existing file: {file_location}")
+            info(
+                f"already_downloaded: no version entry for existing file: {file_location}"
+            )
             return False
 
         if not download.s3_object:
