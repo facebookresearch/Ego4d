@@ -6,7 +6,9 @@ representation for the download operation.
 """
 import csv
 from enum import Enum
+import logging
 from pathlib import Path
+import re
 from typing import Dict, Set, Iterable
 
 from ego4d.cli.s3path import bucket_and_key_from_path
@@ -23,6 +25,7 @@ class VideoMetadata:
     __VIDEO_UID_KEY = "video_uid"
     __S3_LOCATION_KEY = "canonical_s3_location"
     __FILE_TYPE_KEY = "type"
+    __BENCHMARKS_KEY = "benchmarks"
 
     def __init__(self, row: Dict[str, str]):
         # The raw contents of the CSV row
@@ -51,9 +54,15 @@ class VideoMetadata:
             assert type in ["file", "json"]
             self.file_download = True
 
+        benchmarks = row.get(self.__BENCHMARKS_KEY)
+        if benchmarks:
+            self.benchmarks = re.sub(r"\s+", "", benchmarks.lower())
+        else:
+            self.benchmarks = None
+
 
 def list_videos_in_manifest(
-    manifest_path: Path, for_universities: Set[str]
+    manifest_path: Path, benchmarks: Set[str], for_universities: Set[str]
 ) -> Iterable[VideoMetadata]:
     """
     Creates a generator that reads every row of a manifest CSV file and returns the row
@@ -65,10 +74,36 @@ def list_videos_in_manifest(
             returned. If the set is empty then all videos will be returned.
     """
     with open(manifest_path, newline="") as f:
-        for row in csv.DictReader(f):
+        reader = csv.DictReader(f)
+
+        has_benchmarks = False
+        if len(benchmarks) > 0:
+            if "benchmarks" in reader.fieldnames:
+                has_benchmarks = True
+                benchmarks = [x.lower() for x in benchmarks]
+                b_re = re.compile(r'\[(\w+)?(?:\,(\w+))*\]', re.IGNORECASE)
+                print(f"Filtering by benchmarks: {benchmarks}")
+            else:
+                print("Benchmarks specified but ignored without a benchmarks field in manifest.")
+        
+        for row in reader:
             metadata = VideoMetadata(row)
-            if not for_universities or metadata.university in for_universities:
-                yield metadata
+            if has_benchmarks:
+                # print(f"row benchmarks: {metadata.benchmarks}")
+                if not metadata.benchmarks:
+                    continue
+                m = b_re.match(metadata.benchmarks)
+                if not m:
+                    if metadata.benchmarks:
+                        logging.warning(f"Invalid benchmarks manifest entry ignored: {metadata.benchmarks}")
+                    continue
+                # print(f"row benchmark groups: {m.groups()}")
+                # assert all(x is not None for x in m.groups())
+                if not any(x in benchmarks for x in m.groups()):
+                    continue
+            if for_universities and metadata.university not in for_universities:
+                continue
+            yield metadata
 
 
 def download_manifest_for_version(

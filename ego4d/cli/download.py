@@ -308,7 +308,7 @@ def list_videos_for_download(
         cfg:
         manifest_path:
     """
-    generator = manifest.list_videos_in_manifest(manifest_path, cfg.universities)
+    generator = manifest.list_videos_in_manifest(manifest_path, cfg.benchmarks, cfg.universities)
 
     videos = list(generator)
 

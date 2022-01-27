@@ -29,6 +29,7 @@ class ValidatedConfig(NamedTuple):
     assume_yes: bool
     version: str
     datasets: Set[str]
+    benchmarks: Set[str]
     aws_profile_name: str
     video_uids: Set[str]
     universities: Set[str]
@@ -45,6 +46,7 @@ class Config(NamedTuple):
     assume_yes: bool
     version: str
     datasets: List[str] = []
+    benchmarks: Set[str] = []
     aws_profile_name: str = "default"
     video_uids: List[str] = []
     universities: List[str] = []
@@ -69,6 +71,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         output_directory=Path(cfg.output_directory).expanduser(),
         version=cfg.version,
         datasets=set(cfg.datasets),
+        benchmarks=set(cfg.benchmarks),
         aws_profile_name=cfg.aws_profile_name,
         video_uids=set(cfg.video_uids) if cfg.video_uids else {},
         universities=set(cfg.universities) if cfg.universities else {},
@@ -111,6 +114,12 @@ def config_from_args(args=None) -> Config:
         help="The datasets to download: 'full_scale', 'annotations', etc."
         "\nThe datasets will be stored in folders in the output directory with the name "
         "of the dataset (e.g. output_dir/full_scale/).",
+        default=["annotations"],
+    )
+    flag_parser.add_argument(
+        "--benchmarks",
+        nargs="*",
+        help="The benchmarks to download dataset subsets of: 'EM', 'FHO', 'AV'",
         default=["annotations"],
     )
     flag_parser.add_argument(
