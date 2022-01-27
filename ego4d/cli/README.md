@@ -29,13 +29,14 @@ than "ego4d", or the system default (default), you can change the `aws_profile_n
 | ---------------- | ----------- |
 | `--dataset` |  [Required] A list of identifiers to download: [annotations, full-scale]  Each dataset will be stored in folders in the output directory with the name of the dataset (e.g. output_dir/full-scale/) and manifest. |
 | `--output_directory`  | [Required]A local path where the downloaded files and metadata will be stored |
-| `--config` | [Optional] Local path to a config JSON file. If specified, the flags will be read from this file instead of the command line |
 | `--version`  |  [Optional] A version identifier - e.g. “v1” |
+| `--benchmarks`  |  [Optional] A list of benchmarks to filter dataset downloads by - e.g. Narrations/EM/FHO/AV |
 | `--aws_profile_name` | [Optional] Defaults to “default”. Specifies the AWS profile name from ~/.aws/credentials to use for the download |
 | `--video_uids` | [Optional] List of video UIDs to be downloaded. If not specified, all relevant UIDs will be downloaded. |
 | `--video_uid_file` | [Optional] Path to a whitespace delimited file that contains a list of UIDs. Mutually exclusive with the `video_uids` flag. |
 | `--universities` | [Optional] List of university IDs. If specified, only UIDs from the S3 buckets belonging to the listed universities will be downloaded. |
 | `-y` `--yes` | [Optional] If this flag is set, then the CLI will not show a prompt asking the user to confirm the download. This is so that the tool can be used as part of shell scripts. |
+| `--config` | [Optional] Local path to a config JSON file. If specified, the flags will be read from this file instead of the command line |
 
 ### Universities
 The following university IDs can be specified:
