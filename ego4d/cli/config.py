@@ -14,8 +14,8 @@ from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
-DATASETS_VIDEO = ["full_scale"]
-DATASETS_FILE = ["annotations"]
+DATASETS_VIDEO = ["full_scale", "clips"]
+DATASETS_FILE = ["annotations", "viz", "av_models", "vq2d_models"]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE
 
 
