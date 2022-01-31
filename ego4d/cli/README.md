@@ -25,9 +25,10 @@ AWS credentials stored in a different [named profile](https://docs.aws.amazon.co
 than "ego4d", or the system default (default), you can change the `aws_profile_name` flag to the name of the profile that you want to use.
 
 ### Detailed Flags
+
 | Flag Name   | Description |
 | ---------------- | ----------- |
-| `--dataset` |  [Required] A list of identifiers to download: [annotations, full-scale]  Each dataset will be stored in folders in the output directory with the name of the dataset (e.g. output_dir/full-scale/) and manifest. |
+| `--dataset` |  [Required] A list of identifiers to download: [annotations, full-scale, clips]  Each dataset will be stored in folders in the output directory with the name of the dataset (e.g. output_dir/v1/full-scale/) and manifest. |
 | `--output_directory`  | [Required]A local path where the downloaded files and metadata will be stored |
 | `--version`  |  [Optional] A version identifier - e.g. “v1” |
 | `--benchmarks`  |  [Optional] A list of benchmarks to filter dataset downloads by - e.g. Narrations/EM/FHO/AV |
@@ -37,6 +38,23 @@ than "ego4d", or the system default (default), you can change the `aws_profile_n
 | `--universities` | [Optional] List of university IDs. If specified, only UIDs from the S3 buckets belonging to the listed universities will be downloaded. |
 | `-y` `--yes` | [Optional] If this flag is set, then the CLI will not show a prompt asking the user to confirm the download. This is so that the tool can be used as part of shell scripts. |
 | `--config` | [Optional] Local path to a config JSON file. If specified, the flags will be read from this file instead of the command line |
+
+### Manifests
+
+
+### Datasets
+The following datasets are available (not exhaustive):
+
+| Dataset | Description |
+| --- |
+| full-scale | The full scale version of all videos.  (Provide `benchmarks` or `video_uids` filters to reduce the 5TB download size.) |
+| clips | Clips available for benchmark training tasks. |
+| annotations | The full set of annotations. | 
+| viz | The data and thumbnails required to use the visualization package.  | 
+| 3d | 3D location scans and model checkpoints for the 3D VQ benchmark. |
+| av_models | Model checkpoints for the AV/Social benchmark. |
+| vq2s_models | Model checkpoints for the 2D VQ benchmark. |
+
 
 ### Universities
 The following university IDs can be specified:
