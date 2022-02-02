@@ -97,14 +97,10 @@ class FileToDownload:
 
     @staticmethod
     def create(video: VideoMetadata, download_folder: Path) -> "FileToDownload":
-        if video.file_download:
-            filename = os.path.basename(video.s3_path)
-            assert filename
-        else:
-            filename = f"{video.uid}.mp4"
+        assert video.filename_base, f"VideoMetadata missing filename_base: " + video.uid
 
         x = FileToDownload(
-            filename=filename,
+            filename=video.filename_base,
             download_folder=download_folder,
             uid=video.uid,
         )
