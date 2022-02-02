@@ -120,7 +120,6 @@ def config_from_args(args=None) -> Config:
         "--benchmarks",
         nargs="*",
         help="The benchmarks to download dataset subsets of: 'EM', 'FHO', 'AV'",
-        default=["annotations"],
     )
     flag_parser.add_argument(
         "--annotations",

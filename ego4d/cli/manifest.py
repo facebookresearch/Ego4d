@@ -25,7 +25,7 @@ class VideoMetadata:
 
     __FILE_UID_KEY = "file_uid"
     __VIDEO_UID_KEY = "video_uid"
-    __S3_LOCATION_KEY = "canonical_s3_location"
+    __S3_LOCATION_KEYS = ["canonical_s3_location", "s3_path"]
     __FILE_TYPE_KEY = "type"
     __BENCHMARKS_KEY = "benchmarks"
 
@@ -45,7 +45,10 @@ class VideoMetadata:
             self.uid: str = row[self.__VIDEO_UID_KEY]
 
         # Path to the video file on AWS S3 (e.g. "s3://bucket/key")
-        self.s3_path: str = row[self.__S3_LOCATION_KEY]
+        for x in self.__S3_LOCATION_KEYS:
+            if x in row:
+                self.s3_path: str = row[x]
+                break
 
         # Name of the S3 bucket that holds the video
         self.s3_bucket: str = None
