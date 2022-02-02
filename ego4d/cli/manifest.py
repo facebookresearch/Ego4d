@@ -6,6 +6,7 @@ representation for the download operation.
 """
 import csv
 import logging
+import os
 import re
 from enum import Enum
 from pathlib import Path
@@ -22,8 +23,9 @@ class VideoMetadata:
     Data object that corresponds to a single video entry in a manifest CSV file.
     """
 
+    __FILE_UID_KEY = "file_uid"
     __VIDEO_UID_KEY = "video_uid"
-    __S3_LOCATION_KEY = "canonical_s3_location"
+    __S3_LOCATION_KEYS = ["canonical_s3_location", "s3_path"]
     __FILE_TYPE_KEY = "type"
     __BENCHMARKS_KEY = "benchmarks"
 
@@ -31,11 +33,22 @@ class VideoMetadata:
         # The raw contents of the CSV row
         self.raw_data: Dict[str, str] = dict(row)
 
-        # Unique identifier for the vido
-        self.uid: str = row[self.__VIDEO_UID_KEY]
+        # Unique identifier for the video
+        if self.__FILE_UID_KEY in row:
+            self.file_download = True
+            self.uid: str = row[self.__FILE_UID_KEY]
+        else:
+            assert (
+                self.__VIDEO_UID_KEY in row
+            ), f"Either file_uid or video_uid must be specified"
+            self.file_download = False
+            self.uid: str = row[self.__VIDEO_UID_KEY]
 
         # Path to the video file on AWS S3 (e.g. "s3://bucket/key")
-        self.s3_path: str = row[self.__S3_LOCATION_KEY]
+        for x in self.__S3_LOCATION_KEYS:
+            if x in row:
+                self.s3_path: str = row[x]
+                break
 
         # Name of the S3 bucket that holds the video
         self.s3_bucket: str = None
@@ -48,11 +61,18 @@ class VideoMetadata:
             self.university: str = BUCKET_TO_UNIV.get(self.s3_bucket, "")
 
         type = row.get(self.__FILE_TYPE_KEY)
-        if not type or type in ["mp4", "video"]:
+        if type in ["mp4", "video"]:
             self.file_download = False
-        else:
-            assert type in ["file", "json"]
+        elif type in ["file", "json"]:
             self.file_download = True
+        else:
+            # Default to above
+            pass
+
+        if self.file_download:
+            self.filename_base = os.path.basename(self.s3_path)
+        else:
+            self.filename_base = f"{self.uid}.mp4"
 
         benchmarks = row.get(self.__BENCHMARKS_KEY)
         if benchmarks:
