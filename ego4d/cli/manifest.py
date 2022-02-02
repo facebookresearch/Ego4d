@@ -40,7 +40,7 @@ class VideoMetadata:
         else:
             assert (
                 self.__VIDEO_UID_KEY in row
-            ), f"Either file_uid or video_uid must be specified"
+            ), "Either file_uid or video_uid must be specified"
             self.file_download = False
             self.uid: str = row[self.__VIDEO_UID_KEY]
 
@@ -101,7 +101,7 @@ def list_videos_in_manifest(
             if "benchmarks" in reader.fieldnames:
                 has_benchmarks = True
                 benchmarks = [x.lower() for x in benchmarks]
-                b_re = re.compile(r"\[(\w+)?(?:\,(\w+))*\]", re.IGNORECASE)
+                b_re = re.compile(r"\[(\w+)?(?:\|(\w+))*\]", re.IGNORECASE)
                 print(f"Filtering by benchmarks: {benchmarks}")
             else:
                 print(
