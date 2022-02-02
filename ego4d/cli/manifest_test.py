@@ -110,7 +110,7 @@ def test_csv_benchmarks():
             {
                 "video_uid": "12345",
                 "canonical_s3_location": "s3://ego4d-georgiatech/object/key/123",
-                "benchmarks": "[FHO ,EM]",
+                "benchmarks": "[FHO |EM]",
             }
         )
         writer.writerow(
