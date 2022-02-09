@@ -22,25 +22,25 @@ This will download and run the first 5 narrations and view in the Mephisto revie
 If you already have all of the files saved down somewhere, you can just do:
 
 ```shell
-$ VID_ROOT=~/e4d-videos ./3_prepare_input.sh ALL | ./4_review.sh
+$ VID_ROOT=~/ego4d ./3_prepare_input.sh ALL | ./4_review.sh
 ```
 
 If you also have a precomputed input file, you can use it as such:
 
 ```shell
-$ VID_ROOT=~/e4d-videos cat precomputed.json | ./4_review.sh
+$ VID_ROOT=~/ego4d cat precomputed.json | ./4_review.sh
 ```
 
 #### Cross-script Variables (with defaults)
 
 ```bash
 INPUT_FILE=./narrations_v2_7-27-21.json
-VID_ROOT=~/e4d/vids
+VID_ROOT=~/ego4d
 ```
 
 These variables can also be updated and exported into your current terminal session by running `./0_config.sh`.
 
-- By default, `./2_dl_videos.sh` will download files to `~/e4d/vids` and the review server launched in `./4_review.sh` will also serve them from there. This can be configured via the `$VID_ROOT` ENV var, also exported from `./0_config.sh`
+- By default, `./2_dl_videos.sh` will download files to `~/ego4d` and the review server launched in `./4_review.sh` will also serve them from there. This can be configured via the `$VID_ROOT` ENV var, also exported from `./0_config.sh`
 - By default, the narrations file that will be used is `./narrations_v2_7-27-21.json` (used by `./1_gather_ids.sh` and `./3_prepare_input.sh`). This can be configured via the `$INPUT_FILE` ENV var, also exported from `./0_config.sh`
 
 # Details

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VID_ROOT=${VID_ROOT:-~/e4d/vids}
+VID_ROOT=${VID_ROOT:-~/ego4d}
 OUTPUT=${1:LOG}
 
 if [[ $OUTPUT = "LOG" ]]
