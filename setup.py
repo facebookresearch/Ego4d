@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) Meta, Inc. and its affiliates. All Rights Reserved.
+# Copyright (c) Meta Platforms, Inc. and its affiliates. All Rights Reserved.
 
 from setuptools import find_packages, setup
 
