@@ -2,7 +2,7 @@
 set -e
 
 # Configuration options:
-VID_ROOT=${VID_ROOT:-~/e4d/vids}
+VID_ROOT=${VID_ROOT:-~/ego4d/}
 REVIEW_DIR=${REVIEW_DIR:-./review/build/}
 PORT=${PORT:-3030}
 
