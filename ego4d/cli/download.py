@@ -217,7 +217,7 @@ def filter_already_downloaded(
 
         return True
 
-    with ThreadPoolExecutor(max_workers=32) as pool:
+    with ThreadPoolExecutor(max_workers=15) as pool:
         to_download = list(
             tqdm(
                 pool.map(
