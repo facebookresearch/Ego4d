@@ -13,9 +13,7 @@ Once you have Mephisto installed ([`pip install mephisto`](https://github.com/fa
 ./start.sh
 ```
 
-This will install the ego4d `viz` dataset and launch the interface. You can examine the script to modify configurations options.  
-
-In particular, `VID_ROOT` will default to `~\ego4d` and should be updated if you've already used the CLI to download the videos (and/or the `viz` dataset, which is used here).
+This will install the ego4d `viz` dataset and launch the interface. You can examine the script to modify configurations options.
 
 ## Review Interface
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VID_ROOT=${VID_ROOT:-~/ego4d}
+VID_ROOT=${VID_ROOT:-~/e4d/vids}
 REVIEW_DIR=${REVIEW_DIR:-../review/build/}
 PORT=${PORT:-3030}
 
