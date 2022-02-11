@@ -1,4 +1,5 @@
 #!/bin/bash
+# Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 VID_ROOT=${VID_ROOT:-~/e4d/vids}
 OUTPUT=${1:LOG}

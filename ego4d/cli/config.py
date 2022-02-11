@@ -14,6 +14,7 @@ from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
+DATASET_PRIMARY = "full_scale"
 DATASETS_VIDEO = ["full_scale", "clips"]
 DATASETS_FILE = ["annotations", "viz", "av_models", "vq2d_models"]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE
@@ -31,6 +32,7 @@ class ValidatedConfig(NamedTuple):
     datasets: Set[str]
     benchmarks: Set[str]
     aws_profile_name: str
+    manifest: bool
     video_uids: Set[str]
     universities: Set[str]
     annotations: Union[bool, Set[str]]
@@ -48,6 +50,7 @@ class Config(NamedTuple):
     datasets: List[str] = []
     benchmarks: Set[str] = []
     aws_profile_name: str = "default"
+    manifest: bool = False
     video_uids: List[str] = []
     universities: List[str] = []
     annotations: Union[bool, List[str]] = True
@@ -73,6 +76,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         datasets=set(cfg.datasets),
         benchmarks=set(cfg.benchmarks),
         aws_profile_name=cfg.aws_profile_name,
+        manifest=cfg.manifest,
         video_uids=set(cfg.video_uids) if cfg.video_uids else {},
         universities=set(cfg.universities) if cfg.universities else {},
         assume_yes=bool(cfg.assume_yes),
@@ -129,6 +133,8 @@ def config_from_args(args=None) -> Config:
     )
     flag_parser.add_argument(
         "--manifest",
+        const=True,
+        action="store_const",
         help="Downloads the video manifest. (True by default, only relevant if you want only the manifest.)",
     )
     flag_parser.add_argument(

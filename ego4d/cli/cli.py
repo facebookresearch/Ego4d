@@ -11,10 +11,17 @@ Examples:
         --output_directory="~/ego4d_data"
 """
 import logging
+import os
 from typing import List
 
 import boto3
-from ego4d.cli.config import DATASETS_VIDEO, config_from_args, Config, validate_config
+from ego4d.cli.config import (
+    DATASETS_VIDEO, 
+    DATASET_PRIMARY, 
+    config_from_args, 
+    Config, 
+    validate_config,
+)
 from ego4d.cli.download import (
     list_videos_for_download,
     create_download_directory,
@@ -46,6 +53,25 @@ def main(cfg: Config) -> None:
         logging.error(
             "ERROR: video_uids specified for non-video datasets (and will be ignored)"
         )
+
+    # Download the manifest to the root directory
+    if cfg.manifest:
+        assert (
+            os.path.exists(validated_cfg.output_directory)
+        ), f"Output path doesn't exist for download: {validated_cfg.output_directory}"
+        
+        toplevel_manifest_path = download_manifest_for_version(
+            validated_cfg.version, 
+            DATASET_PRIMARY, 
+            validated_cfg.output_directory, 
+            s3,
+        )
+        if not toplevel_manifest_path:
+            logging.error(
+                "ERROR: Primary Manifest Download Failed"
+            )
+        else:
+            print(f"Manifest downloaded: {toplevel_manifest_path}")
 
     downloads: List[FileToDownload] = []
     print("Checking requested datasets and versions...")
