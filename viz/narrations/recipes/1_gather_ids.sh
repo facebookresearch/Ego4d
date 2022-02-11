@@ -1,4 +1,5 @@
 #!/bin/bash
+# Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 INPUT_FILE=${INPUT_FILE:-./narrations_v2_7-27-21.json}
 FIRST_X="${1:-2}"

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 VID_ROOT=${VID_ROOT:-~/ego4d}
 OUTPUT=${1:LOG}

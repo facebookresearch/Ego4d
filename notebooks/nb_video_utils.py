@@ -1,3 +1,5 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
+
 from fractions import Fraction
 
 import av
