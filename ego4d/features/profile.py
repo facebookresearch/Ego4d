@@ -1,3 +1,5 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
+
 import functools
 import time
 from typing import List, Optional, Tuple

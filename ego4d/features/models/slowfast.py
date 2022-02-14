@@ -1,3 +1,5 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
+
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
