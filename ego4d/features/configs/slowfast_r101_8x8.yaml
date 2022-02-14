@@ -1,0 +1,45 @@
+fps: 30
+force_yes: false
+io:
+  filter_completed: true
+  video_dir_path: /datasets01/ego4d_track2/220127/v1/full_scale/
+  uid_list: null
+  video_limit: -1
+  out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/test/action_features
+inference_config:
+  device: cuda
+  batch_size: 1
+  num_workers: 9
+  prefetch_factor: 2
+  fps: 30
+  frame_window: 32
+  stride: 16
+  include_audio: false
+  include_video: true
+schedule_config:
+  run_locally: false
+  log_folder: slurm_log/%j
+  timeout_min: 720
+  constraint: volta
+  slurm_partition: pixar
+  slurm_array_parallelism: 256
+  gpus_per_node: 1
+  cpus_per_task: 10
+  overhead: 2.0
+  time_per_forward_pass: 0.8
+  schedule_time_per_node: 10.0
+model_config:
+  model_path: null
+  hub_path: slowfast_r101
+  slowfast_alpha: 4
+  side_size: 256
+  crop_size: 256
+  mean:
+  - 0.45
+  - 0.45
+  - 0.45
+  std:
+  - 0.225
+  - 0.225
+  - 0.225
+model_module_str: ego4d.features.models.slowfast
