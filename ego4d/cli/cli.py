@@ -23,6 +23,7 @@ from ego4d.cli.config import (
     validate_config,
 )
 from ego4d.cli.download import (
+    create_output_directory,
     list_videos_for_download,
     create_download_directory,
     download_all,
@@ -33,7 +34,7 @@ from ego4d.cli.download import (
     upsert_version,
     list_corrupt_files,
 )
-from ego4d.cli.manifest import download_manifest_for_version
+from ego4d.cli.manifest import download_manifest_for_version, download_metadata
 from ego4d.cli.progressbar import DownloadProgressBar
 from tqdm import tqdm
 
@@ -54,12 +55,26 @@ def main(cfg: Config) -> None:
             "ERROR: video_uids specified for non-video datasets (and will be ignored)"
         )
 
+    output_path = create_output_directory(validated_cfg)
+    print(f"Download Path: {output_path}\n")
+
+    # Download the primary metadata to the root directory
+    if cfg.metadata:
+        # TODO: Check for file version
+        print("Downloading Ego4D metadata json..")
+
+        metadata_path = download_metadata(
+            validated_cfg.version,
+            validated_cfg.output_directory,
+            s3,
+        )
+        if not metadata_path:
+            logging.error("ERROR: Primary Metadata Download Failed")
+        else:
+            print(f"Metadata downloaded: {metadata_path}")
+
     # Download the manifest to the root directory
     if cfg.manifest:
-        assert os.path.exists(
-            validated_cfg.output_directory
-        ), f"Output path doesn't exist for download: {validated_cfg.output_directory}"
-
         toplevel_manifest_path = download_manifest_for_version(
             validated_cfg.version,
             DATASET_PRIMARY,
@@ -68,8 +83,10 @@ def main(cfg: Config) -> None:
         )
         if not toplevel_manifest_path:
             logging.error("ERROR: Primary Manifest Download Failed")
-        else:
-            print(f"Manifest downloaded: {toplevel_manifest_path}")
+            print("ABORT: Primary Manifest Download Failed")
+            return
+
+        print(f"Manifest downloaded: {toplevel_manifest_path}")
 
     downloads: List[FileToDownload] = []
     print("Checking requested datasets and versions...")

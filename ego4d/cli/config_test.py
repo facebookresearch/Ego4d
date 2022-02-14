@@ -13,13 +13,9 @@ def test_invalid_flags():
         # missing required flag output_directory
         config_from_args(["--version=v1", "--datasets", "full_scale"])
 
-    with pytest.raises(RuntimeError):
-        # missing required flag datasets
-        config_from_args(["--version=v1", "--output_directory=~/test"])
-
-    with pytest.raises(RuntimeError):
-        # missing required flag version
-        config_from_args(["--datasets", "full_scale", "--output_directory=~/test"])
+    # with pytest.raises(RuntimeError):
+    #     # missing required flag datasets
+    #     config_from_args(["--version=v1", "--output_directory=~/test"])
 
     with pytest.raises(SystemExit):
         # invalid university choice
@@ -78,6 +74,7 @@ def test_valid_flags():
             "123",
             "456",
             "789",
+            "--metadata",
         ]
     )
 
@@ -87,6 +84,7 @@ def test_valid_flags():
     assert c.output_directory == "~/test"
     assert c.aws_profile_name == "ego4d"
     assert c.video_uids == ["123", "456", "789"]
+    assert c.metadata == True
 
 
 def test_video_uid_file():
