@@ -12,7 +12,6 @@ from typing import NamedTuple, List, Set, Union
 import boto3.session
 from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
-from importlib_metadata import metadata
 
 
 DATASET_PRIMARY = "full_scale"
