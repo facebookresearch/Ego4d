@@ -8,7 +8,7 @@ For feature extraction: refer to the [Feature README](ego4d/features/README.md)
 
 For a demo notebook: [Annotation Notebook](notebooks/annotation_visualization.ipynb)
 
-For the visualization engine: [Viz README](ego4d/viz/narrations/README.md)
+For the visualization engine: [Viz README](viz/narrations/README.md)
 
 # License
 
