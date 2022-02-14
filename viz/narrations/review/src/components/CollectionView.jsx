@@ -1,3 +1,5 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
+
 import React, { useState } from "react";
 import { Redirect } from "react-router-dom";
 import { useMephistoReview } from "mephisto-review-hook";

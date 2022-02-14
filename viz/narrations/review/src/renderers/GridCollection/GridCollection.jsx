@@ -1,3 +1,5 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
+
 import React from "react";
 import { Link } from "react-router-dom";
 import { JSONItem } from "../JSONItem";
