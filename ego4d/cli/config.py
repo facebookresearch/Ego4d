@@ -11,12 +11,13 @@ from typing import NamedTuple, List, Set, Union
 
 import boto3.session
 from botocore.exceptions import ProfileNotFound
+from importlib_metadata import metadata
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
 DATASET_PRIMARY = "full_scale"
 DATASETS_VIDEO = ["full_scale", "clips"]
-DATASETS_FILE = ["annotations", "viz", "av_models", "vq2d_models"]
+DATASETS_FILE = ["annotations", "viz", "av_models", "vq2d_models", "sta_models"]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE
 
 
@@ -32,6 +33,7 @@ class ValidatedConfig(NamedTuple):
     datasets: Set[str]
     benchmarks: Set[str]
     aws_profile_name: str
+    metadata: bool
     manifest: bool
     video_uids: Set[str]
     universities: Set[str]
@@ -50,6 +52,7 @@ class Config(NamedTuple):
     datasets: List[str] = []
     benchmarks: Set[str] = []
     aws_profile_name: str = "default"
+    metadata: bool = False
     manifest: bool = False
     video_uids: List[str] = []
     universities: List[str] = []
@@ -77,6 +80,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         benchmarks=set(cfg.benchmarks),
         aws_profile_name=cfg.aws_profile_name,
         manifest=cfg.manifest,
+        metadata=cfg.metadata,
         video_uids=set(cfg.video_uids) if cfg.video_uids else {},
         universities=set(cfg.universities) if cfg.universities else {},
         assume_yes=bool(cfg.assume_yes),
@@ -132,16 +136,23 @@ def config_from_args(args=None) -> Config:
         "Otherwise, a list of specific annotations to pass, e.g. narration, fho, moments, vq, nlq, av",
     )
     flag_parser.add_argument(
-        "--manifest",
-        const=True,
-        action="store_const",
-        help="Downloads the video manifest. (True by default, only relevant if you want only the manifest.)",
-    )
-    flag_parser.add_argument(
         "--viz",
         const=True,
         action="store_const",
         help="Downloads the visualization dataset. (Convenience option equivalent to including viz in datasets.)",
+    )
+    flag_parser.add_argument(
+        "--metadata",
+        # TODO: default=True,
+        const=True,
+        action="store_const",
+        help="Download the primary ego4d.json to the folder root.  (Default: True)",
+    )
+    flag_parser.add_argument(
+        "--manifest",
+        const=True,
+        action="store_const",
+        help="Downloads the video manifest. (True by default, only relevant if you want only the manifest.)",
     )
     flag_parser.add_argument(
         "--version",
@@ -173,7 +184,6 @@ def config_from_args(args=None) -> Config:
         "to confirm the download. This is so that the tool can be used as part of "
         "shell scripts.",
     )
-
     video_uid_group = flag_parser.add_mutually_exclusive_group()
     video_uid_group.add_argument(
         "--video_uids",

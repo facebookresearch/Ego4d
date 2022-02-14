@@ -124,6 +124,18 @@ class VideoOnDisk:
     s3_content_size_bytes: int
 
 
+def create_output_directory(validated_cfg: ValidatedConfig) -> Path:
+    """
+    Creates a top level download directory if it does not already exist, and returns
+    the Path to the download directory.
+    """
+    download_path = (
+        validated_cfg.output_directory / f"{validated_cfg.version}"
+    )
+    download_path.mkdir(parents=True, exist_ok=True)
+    return download_path
+
+
 def create_download_directory(validated_cfg: ValidatedConfig, dataset: str) -> Path:
     """
     Creates a download directory for a dataset if it does not already exist, and returns
@@ -267,10 +279,13 @@ def download_all(
             download.download_folder.glob(download.file_version_pattern())
         )
         for file in old_version_files:
-            file.unlink()
+            # file.unlink()
+            os.unlink(str(file))
 
         # Remove the old video file (if it exists)
-        file_path.unlink(missing_ok=True)
+        if os.path.exists(file_path):
+            # file_path.unlink(missing_ok=True)
+            os.unlink(str(file_path))
 
         # Create an empty file with the version name so that it can be tracked later
         # (download.download_folder / file_version_name).touch()

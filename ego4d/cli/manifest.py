@@ -16,6 +16,7 @@ from ego4d.cli.s3path import bucket_and_key_from_path
 from ego4d.cli.universities import BUCKET_TO_UNIV
 
 __MANIFEST_BUCKET = "ego4d-consortium-sharing"
+__METADATA_FILENAME = "ego4d.json"
 
 
 class VideoMetadata:
@@ -163,3 +164,23 @@ def _manifest_object(version: str, dataset: str, s3):
     return s3.Bucket(__MANIFEST_BUCKET).Object(
         f"public/{version}/{dataset}/manifest.csv"
     )
+
+
+def _metadata_object(version: str, s3):
+    """
+    The primary metadata JSON
+    """
+    return s3.Bucket(__MANIFEST_BUCKET).Object(
+        f"public/{version}/{__METADATA_FILENAME}"
+    )
+
+
+def download_metadata(
+    version: str, download_dir: Path, s3
+) -> Path:
+    """
+    Downloads the primary metadata JSON to the download_path
+    """
+    download_path = download_dir / __METADATA_FILENAME
+    _metadata_object(version, s3).download_file(str(download_path))
+    return download_path
