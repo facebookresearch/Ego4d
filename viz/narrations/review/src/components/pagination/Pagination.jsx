@@ -1,3 +1,5 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
+
 import React from "react";
 import { Button, Icon, Intent } from "@blueprintjs/core";
 import "./Pagination.css";

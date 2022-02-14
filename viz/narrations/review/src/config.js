@@ -1,3 +1,5 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
+
 const config = {
   /*
     The port that useMephistoReview() in the browser will connect to the
