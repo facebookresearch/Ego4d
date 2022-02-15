@@ -20,9 +20,11 @@ DATASETS_FILE = [
     "annotations",
     "viz",
     "imu",
+    "3d",
     "av_models",
     "vq2d_models",
     "sta_models",
+    "lta_models",
     "slowfast8x8_r101_k400",
 ]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE

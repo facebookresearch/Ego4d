@@ -47,14 +47,18 @@ than "ego4d", or the system default (default), you can change the `aws_profile_n
 The following datasets are available (not exhaustive):
 
 | Dataset | Description |
-| --- |
+| --- | --- |
 | full-scale | The full scale version of all videos.  (Provide `benchmarks` or `video_uids` filters to reduce the 5TB download size.) |
-| clips | Clips available for benchmark training tasks. |
+| clips | Clips available for benchmark training tasks.  (Provide `benchmarks` or `video_uids` filters to reduce the download size.) |
 | annotations | The full set of annotations. | 
 | viz | The data and thumbnails required to use the visualization package.  | 
 | 3d | 3D location scans and model checkpoints for the 3D VQ benchmark. |
+| imu | IMU data for the subset of videos available |
 | av_models | Model checkpoints for the AV/Social benchmark. |
+| lta_models | Model checkpoints for the Long Term Anticipation benchmark. |
+| sta_models | Model checkpoints for the Short Term Anticipation benchmark. |
 | vq2s_models | Model checkpoints for the 2D VQ benchmark. |
+| slowfast8x8_r101_k400 | Model checkpoints for the 2D VQ benchmark. |
 
 
 ### Universities
