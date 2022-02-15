@@ -30,6 +30,7 @@ than "ego4d", or the system default (default), you can change the `aws_profile_n
 | ---------------- | ----------- |
 | `--dataset` |  [Required] A list of identifiers to download: [annotations, full-scale, clips]  Each dataset will be stored in folders in the output directory with the name of the dataset (e.g. output_dir/v1/full-scale/) and manifest. |
 | `--output_directory`  | [Required]A local path where the downloaded files and metadata will be stored |
+| `--metadata`  |  [Optional] Download the primary `ego4d.json` metadata at the top level |
 | `--benchmarks`  |  [Optional] A list of benchmarks to filter dataset downloads by - e.g. Narrations/EM/FHO/AV |
 | `--manifest`  |  [Optional] Download only the manifest |
 | `--version`  |  [Optional] A version identifier - e.g. “v1” |
@@ -40,22 +41,28 @@ than "ego4d", or the system default (default), you can change the `aws_profile_n
 | `-y` `--yes` | [Optional] If this flag is set, then the CLI will not show a prompt asking the user to confirm the download. This is so that the tool can be used as part of shell scripts. |
 | `--config` | [Optional] Local path to a config JSON file. If specified, the flags will be read from this file instead of the command line |
 
-### Manifests
-
-
 ### Datasets
+
 The following datasets are available (not exhaustive):
 
 | Dataset | Description |
-| --- |
+| --- | --- |
 | full-scale | The full scale version of all videos.  (Provide `benchmarks` or `video_uids` filters to reduce the 5TB download size.) |
-| clips | Clips available for benchmark training tasks. |
+| clips | Clips available for benchmark training tasks.  (Provide `benchmarks` or `video_uids` filters to reduce the download size.) |
 | annotations | The full set of annotations. | 
 | viz | The data and thumbnails required to use the visualization package.  | 
 | 3d | 3D location scans and model checkpoints for the 3D VQ benchmark. |
+| imu | IMU data for the subset of videos available |
 | av_models | Model checkpoints for the AV/Social benchmark. |
+| lta_models | Model checkpoints for the Long Term Anticipation benchmark. |
+| sta_models | Model checkpoints for the Short Term Anticipation benchmark. |
 | vq2s_models | Model checkpoints for the 2D VQ benchmark. |
+| slowfast8x8_r101_k400 | Model checkpoints for the 2D VQ benchmark. |
 
+
+### Manifests
+
+Each dataset contains a manifest.csv file that lists it's contents as well as additional metadata that's available.  In particular, for `full_scale` there is metadata for each video available.  While the top level metadata `ego4d.json` is generally easier to consume and contains more information, you can consume most simple metadata from the manifest itself for each dataset.
 
 ### Universities
 The following university IDs can be specified:
