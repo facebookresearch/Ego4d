@@ -26,7 +26,7 @@ from typing import (
 import boto3.session
 import botocore.exceptions
 from ego4d.cli import manifest
-from ego4d.cli.config import ValidatedConfig, DATASETS_VIDEO
+from ego4d.cli.config import DATASET_FILE_EXTENSIONS, ValidatedConfig, DATASETS_VIDEO
 from ego4d.cli.manifest import VideoMetadata
 from tqdm import tqdm
 
@@ -74,7 +74,7 @@ class FileToDownload:
         if not self.filename:
             raise RuntimeError("Invalid filename for file_version")
         base, ext = os.path.splitext(self.filename)
-        if ext not in [".mp4", ".json", ".jsonl", ".jpg", ".txt"]:
+        if ext not in DATASET_FILE_EXTENSIONS:
             logging.warning(
                 f"Unexpected file_version extension: {ext} filename: {self.filename}"
             )

@@ -16,8 +16,17 @@ from ego4d.cli.universities import UNIV_TO_BUCKET
 
 DATASET_PRIMARY = "full_scale"
 DATASETS_VIDEO = ["full_scale", "clips"]
-DATASETS_FILE = ["annotations", "viz", "av_models", "vq2d_models", "sta_models"]
+DATASETS_FILE = [
+    "annotations",
+    "viz",
+    "imu",
+    "av_models",
+    "vq2d_models",
+    "sta_models",
+    "slowfast8x8_r101_k400",
+]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE
+DATASET_FILE_EXTENSIONS = [".mp4", ".json", ".jsonl", ".jpg", ".txt", ".csv", ".pt"]
 
 
 class ValidatedConfig(NamedTuple):
