@@ -1,0 +1,8 @@
+*.log
+*.pyc
+dist/
+*.egg-info
+.idea/
+lightning_logs/
+venv/
+.vscode/

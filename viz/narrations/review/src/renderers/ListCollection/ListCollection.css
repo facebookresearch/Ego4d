@@ -1,0 +1,28 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved. */
+
+.list-view-renderer-container {
+  width: 75vw;
+  margin: 12px 0px 0px 0px;
+  justify-content: center;
+}
+
+.list-view-renderer-item {
+  text-align: left;
+  padding: 0px 4px;
+  width: 100%;
+  margin: auto 0px;
+}
+
+.list-view-renderer-item.divider {
+  margin-top: 18px;
+}
+
+.list-view-renderer-item > pre {
+  text-align: left;
+  white-space: pre-wrap;
+  max-width: 75vw;
+  max-height: 75vh;
+  overflow: auto;
+  color: #555555;
+  height: 16vh;
+}

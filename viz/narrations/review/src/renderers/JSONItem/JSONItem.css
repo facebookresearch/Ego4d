@@ -1,0 +1,24 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved. */
+
+.json-item-renderer {
+  margin: auto 0px;
+  height: 100%;
+  width: 100%;
+}
+
+.json-item-card {
+  height: 100%;
+}
+
+.json-item-renderer-pre {
+  text-align: left;
+  white-space: pre-wrap;
+  max-width: 75vw;
+  max-height: 75vh;
+  overflow: auto;
+  color: #555555;
+}
+
+.json-item-renderer-pre.small {
+  height: 16vh;
+}

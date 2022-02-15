@@ -1,0 +1,19 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved. */
+
+.default-collection-renderer-container {
+  display: grid;
+  grid-template-rows: auto;
+  grid-template-columns: 50% 50%;
+  grid-row-gap: 12px;
+  grid-column-gap: 12px;
+  padding: 12px 24px 0px 24px;
+  min-width: 75vw;
+  max-width: 100vw;
+  justify-content: center;
+}
+
+@media only screen and (min-width: 1400px) {
+  .default-collection-renderer-container {
+    grid-template-columns: 33.33% 33.33% 33.33%;
+  }
+}

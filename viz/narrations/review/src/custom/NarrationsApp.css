@@ -1,0 +1,83 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved. */
+
+.segment {
+}
+.segment-wrapper {
+  display: block;
+  margin: 3px 0px 10px 0px;
+  background-color: #eee;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #dedede;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.15s ease-out;
+}
+
+.segment-wrapper:hover {
+  box-shadow: 0px 5px 10px 3px rgba(56, 55, 53, 0.1);
+  transform: translateY(-4px);
+  border-color: #c1c1c1;
+}
+
+.segment-wrapper.active {
+  background-color: rgb(253, 247, 220);
+}
+
+.bar {
+  background-color: orangered;
+  height: 5px;
+}
+
+.track {
+  background-color: #ddd;
+  border-radius: 3px;
+  height: 5px;
+  margin: 4px 0 10px;
+}
+
+.app-container {
+  display: flex;
+  background-color: white;
+  min-height: calc(100vh - 50px);
+}
+
+.segment-viewer {
+  margin-left: 50%;
+  padding: 10px 20px 30px 30px;
+  flex: 1;
+}
+
+.video-viewer {
+  position: fixed;
+  width: 50%;
+  padding: 10px 30px 30px 20px;
+}
+
+.duration {
+  font-size: 10px;
+}
+
+.button {
+  color: black !important;
+  font-weight: bold;
+  text-transform: uppercase;
+  text-decoration: none;
+  background: #eee;
+  padding: 10px;
+  border-radius: 5px;
+  display: inline-block;
+  border: none;
+  transition: all 0.3s ease 0s;
+  cursor: pointer;
+  margin: 0 auto;
+}
+
+.button:hover {
+  background: #ccc;
+  letter-spacing: 1px;
+  -webkit-box-shadow: 0px 5px 40px -10px rgba(0, 0, 0, 0.57);
+  -moz-box-shadow: 0px 5px 40px -10px rgba(0, 0, 0, 0.57);
+  box-shadow: 5px 40px -10px rgba(0, 0, 0, 0.57);
+  transition: all 0.4s ease 0s;
+}

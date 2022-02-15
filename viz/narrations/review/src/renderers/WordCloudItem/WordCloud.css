@@ -1,0 +1,29 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved. */
+
+.word-cloud {
+  text-align: center;
+  justify-content: center;
+}
+
+.word-cloud p {
+  text-align: center;
+  vertical-align: middle;
+  width: 100%;
+}
+
+.word-cloud-item-renderer {
+  margin: auto 0px;
+}
+
+.word-cloud-item-renderer-card.small {
+  width: 100%;
+  height: 27vh;
+  overflow: auto;
+}
+
+.word-cloud-item-renderer-card {
+  height: 100%;
+  max-width: 75vw;
+  max-height: 75vh;
+  overflow: auto;
+}
