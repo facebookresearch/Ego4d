@@ -21,6 +21,8 @@ DATASETS_FILE = [
     "viz",
     "imu",
     "3d",
+    "3d_scan_keypoints",
+    "3d_scans",
     "av_models",
     "vq2d_models",
     "sta_models",
