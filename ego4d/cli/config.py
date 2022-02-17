@@ -15,7 +15,11 @@ from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
 DATASET_PRIMARY = "full_scale"
-DATASETS_VIDEO = ["full_scale", "clips"]
+DATASETS_VIDEO = [
+    "full_scale",
+    "clips",
+    "slowfast8x8_r101_k400",
+]
 DATASETS_FILE = [
     "annotations",
     "viz",
