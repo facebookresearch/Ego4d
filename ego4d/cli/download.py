@@ -67,8 +67,11 @@ class FileToDownload:
         except botocore.exceptions.ClientError as e:
             if e.response["Error"]["Code"] == "404":
                 return False
-            else:
-                raise
+            if e.response["Error"]["Code"] == "403":
+                print(f"Boto 403 Exception For exists: {self.uid} | {self.filename}")
+                return False
+            print(f"Boto Unexpected Exception For exists: {self.uid} | {self.filename}")
+            raise
 
     def file_version_base(self) -> str:
         if not self.filename:
@@ -187,7 +190,9 @@ def filter_already_downloaded(
 
         download.s3_exists = download.exists()
         if not download.s3_exists:
-            info(f"Missing s3 object (ignored for download): {download.uid}")
+            info(
+                f"Missing s3 object (ignored for download): {download.uid} | {download.filename}"
+            )
             return False
 
         file_location = download.download_folder / download.filename
