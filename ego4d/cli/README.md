@@ -16,13 +16,13 @@ have credentials configured then you can skip this step. If not, then:
 
 ### Basic Usage
 ```
-python -m ego4d.cli.cli --output_directory="~/ego4d_data" --datasets full_scale annotations
+python -m ego4d.cli.cli --output_directory="~/ego4d_data" --datasets full_scale annotations --metadata
 ```
 
 This will download all the full scale Ego4D v1 video files and annotations to a directory on
-your local computer at `~/ego4d_data/full_scale`. Note that if you want to use the
-AWS credentials stored in a different [named profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html)
-than "ego4d", or the system default (default), you can change the `aws_profile_name` flag to the name of the profile that you want to use.
+your local computer at `~/ego4d_data/v1/full_scale` and `~/ego4d_data/v1/annotations`, as well the master metadata file at `~/ego4d_data/v1/ego4d.json`. 
+
+Note that if you want to use the AWS credentials stored in a different [named profile](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-profiles.html) than "ego4d", or the system default (default), you can change the `aws_profile_name` flag to the name of the profile that you want to use.
 
 ### Detailed Flags
 
