@@ -28,6 +28,7 @@ DATASETS_FILE = [
     "sta_models",
     "lta_models",
     "slowfast8x8_r101_k400",
+    "components/videos",
 ]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE
 DATASET_FILE_EXTENSIONS = [".mp4", ".json", ".jsonl", ".jpg", ".txt", ".csv", ".pt"]
