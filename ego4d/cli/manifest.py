@@ -180,5 +180,11 @@ def download_metadata(version: str, download_dir: Path, s3) -> Path:
     Downloads the primary metadata JSON to the download_path
     """
     download_path = download_dir / __METADATA_FILENAME
+    if download_path.exists():
+        # TODO: Check for file version
+        return download_path
+    else:
+        print("Downloading Ego4D metadata json..")
+
     _metadata_object(version, s3).download_file(str(download_path))
     return download_path

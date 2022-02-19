@@ -154,12 +154,18 @@ def config_from_args(args=None) -> Config:
         help="Downloads the visualization dataset. (Convenience option equivalent to including viz in datasets.)",
     )
     flag_parser.add_argument(
-        "--metadata",
-        # TODO: default=True,
-        const=True,
-        action="store_const",
-        help="Download the primary ego4d.json to the folder root.  (Default: True)",
+        "--metadata", 
+        dest="metadata", 
+        action="store_true", 
+        help="Download the primary ego4d.json to the folder root.  (Default: True)"
     )
+    flag_parser.add_argument(
+        "--no-metadata", 
+        dest="metadata", 
+        action="store_false", 
+        help="Bypass downloading the primary ego4d.json."
+    )
+    flag_parser.set_defaults(metadata=True)
     flag_parser.add_argument(
         "--manifest",
         const=True,
