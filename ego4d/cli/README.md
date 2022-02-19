@@ -53,11 +53,12 @@ The following datasets are available (not exhaustive):
 | viz | The data and thumbnails required to use the visualization package.  | 
 | 3d | 3D location scans and model checkpoints for the 3D VQ benchmark. |
 | imu | IMU data for the subset of videos available |
+| slowfast8x8_r101_k400 | Precomputed [action features](https://ego4d-data.org/docs/data/features/) for Slowfast 8x8 (R101) model |
+| fut_loc | Images and annotations for the future locomotion benchmark. |
 | av_models | Model checkpoints for the AV/Social benchmark. |
 | lta_models | Model checkpoints for the Long Term Anticipation benchmark. |
 | sta_models | Model checkpoints for the Short Term Anticipation benchmark. |
 | vq2s_models | Model checkpoints for the 2D VQ benchmark. |
-| slowfast8x8_r101_k400 | Model checkpoints for the 2D VQ benchmark. |
 
 
 ### Manifests
