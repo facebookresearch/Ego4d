@@ -155,11 +155,17 @@ def config_from_args(args=None) -> Config:
     )
     flag_parser.add_argument(
         "--metadata",
-        # TODO: default=True,
-        const=True,
-        action="store_const",
+        dest="metadata",
+        action="store_true",
         help="Download the primary ego4d.json to the folder root.  (Default: True)",
     )
+    flag_parser.add_argument(
+        "--no-metadata",
+        dest="metadata",
+        action="store_false",
+        help="Bypass downloading the primary ego4d.json.",
+    )
+    flag_parser.set_defaults(metadata=True)
     flag_parser.add_argument(
         "--manifest",
         const=True,

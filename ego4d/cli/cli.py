@@ -60,9 +60,6 @@ def main(cfg: Config) -> None:
 
     # Download the primary metadata to the root directory
     if cfg.metadata:
-        # TODO: Check for file version
-        print("Downloading Ego4D metadata json..")
-
         metadata_path = download_metadata(
             validated_cfg.version,
             validated_cfg.output_directory,
@@ -71,7 +68,7 @@ def main(cfg: Config) -> None:
         if not metadata_path:
             logging.error("ERROR: Primary Metadata Download Failed")
         else:
-            print(f"Metadata downloaded: {metadata_path}")
+            print(f"Ego4D Metadata: {metadata_path}")
 
     # Download the manifest to the root directory
     if cfg.manifest:
@@ -171,14 +168,20 @@ def main(cfg: Config) -> None:
     if validated_cfg.assume_yes:
         print(f"Downloading {expected_gb:.1f} GB..")
     else:
-        response = input(
-            f"Expected size of downloaded files is "
-            f"{expected_gb:.1f} GB. "
-            f"Do you want to start the download? (y/n) "
-        )
-        if response.lower() not in ["yes", "y"]:
-            print("Aborting the download operation.")
-            exit(0)
+        confirm = None
+        while confirm is None:
+            response = input(
+                f"Expected size of downloaded files is "
+                f"{expected_gb:.1f} GB. "
+                f"Do you want to start the download? ([y]/n) "
+            )
+            if response.lower() in ["yes", "y", ""]:
+                confirm = True
+            elif response.lower() in ["no", "n"]:
+                print("Aborting the download operation.")
+                exit(0)
+            else:
+                continue
 
     files = download_all(
         active_downloads,

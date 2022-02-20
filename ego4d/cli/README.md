@@ -11,6 +11,8 @@ have credentials configured then you can skip this step. If not, then:
 1. Open a command line and type `aws configure` (Or `aws configure --profile ego4d` if you'd prefer to use a profile and not the default credentials, in which case you'll need to specify `--aws_profile_name` below.)
 1. Leave the default region blank, and enter your AWS access id and secret key when 
    prompted.
+
+The CLI requires python >= 3.8.  Please install the prerequisites via `python setup.py install` (easyinstall) at the repo root, or via `pip install requirements.txt`.  (Note that the notebooks and viz engine have separate requirements - please install them by following the relevant README.)
    
 ## Getting Started
 
