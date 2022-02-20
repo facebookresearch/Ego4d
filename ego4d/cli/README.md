@@ -12,7 +12,7 @@ have credentials configured then you can skip this step. If not, then:
 1. Leave the default region blank, and enter your AWS access id and secret key when 
    prompted.
 
-The CLI requires python >= 3.8.  Please install the prerequisites via `python setup.py install` (easyinstall) at the repo root, or via `pip install requirements.txt`.  (Note that the notebooks and viz engine have separate requirements - please install them by following the relevant README.)
+The CLI requires python >= 3.8.  Please install the prerequisites via `python setup.py install` (easyinstall) at the repo root, or via `pip install -r requirements.txt`.  (Note that the notebooks and viz engine have separate requirements - please install them by following the relevant README.)
    
 ## Getting Started
 
