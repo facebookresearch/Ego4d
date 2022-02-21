@@ -244,13 +244,16 @@ def filter_already_downloaded(
             )
         )
 
+    # Filter to_download set from all downloads
+    to_download = list(compress(downloads, to_download))
+
     n_filtered = len(downloads) - len(to_download)
     if n_filtered > 0:
-        info(f"Filtered {n_filtered}/{len(to_download)} existing videos for download.")
+        info(f"Filtered {n_filtered}/{len(downloads)} existing videos for download.")
     else:
         info("No existing videos to filter.")
 
-    return list(compress(downloads, to_download))
+    return to_download
 
 
 def download_all(
