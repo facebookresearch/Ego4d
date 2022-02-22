@@ -47,6 +47,7 @@ class ValidatedConfig(NamedTuple):
     aws_profile_name: str
     metadata: bool
     manifest: bool
+    bypass_version_check: bool
     video_uids: Set[str]
     universities: Set[str]
     annotations: Union[bool, Set[str]]
@@ -66,6 +67,7 @@ class Config(NamedTuple):
     aws_profile_name: str = "default"
     metadata: bool = False
     manifest: bool = False
+    bypass_version_check: bool = False
     video_uids: List[str] = []
     universities: List[str] = []
     annotations: Union[bool, List[str]] = True
@@ -96,6 +98,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         video_uids=set(cfg.video_uids) if cfg.video_uids else {},
         universities=set(cfg.universities) if cfg.universities else {},
         assume_yes=bool(cfg.assume_yes),
+        bypass_version_check=cfg.bypass_version_check,
         annotations=cfg.annotations if isinstance(cfg.annotations, bool) else set(),
     )
 
@@ -171,6 +174,12 @@ def config_from_args(args=None) -> Config:
         const=True,
         action="store_const",
         help="Downloads the video manifest. (True by default, only relevant if you want only the manifest.)",
+    )
+    flag_parser.add_argument(
+        "--bypass-existing",
+        const=True,
+        action="store_const",
+        help="Bypass existing files without checking file versions/sizes.",
     )
     flag_parser.add_argument(
         "--version",
