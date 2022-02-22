@@ -175,7 +175,9 @@ def info(msg):
 
 
 def filter_already_downloaded(
-    downloads: Iterable[FileToDownload], version_entries: List[VersionEntry]
+    downloads: Iterable[FileToDownload], 
+    version_entries: List[VersionEntry],
+    bypass_version_check: bool = False,
 ) -> List[FileToDownload]:
     """
     Takes a collection of files that are to be downloaded and a list of the S3.Objects
@@ -201,18 +203,21 @@ def filter_already_downloaded(
             logging.info(f"already_downloaded: missing file: {file_location}")
             return False
 
+        if not download.s3_object:
+            logging.error(
+                f"filter_already_downloaded: invalid s3 object: {download.uid}"
+            )
+            return False
+
+        if bypass_version_check:
+            return True
+
         version_entry = next(
             (x for x in version_entries if x.uid == download.uid), None
         )
         if not version_entry:
             info(
                 f"already_downloaded: no version entry for existing file: {file_location}"
-            )
-            return False
-
-        if not download.s3_object:
-            logging.error(
-                f"filter_already_downloaded: invalid s3 object: {download.uid}"
             )
             return False
 
@@ -244,9 +249,9 @@ def filter_already_downloaded(
             )
         )
 
-    n_filtered = len(downloads) - len(to_download)
+    n_filtered = len(downloads) - sum(to_download)
     if n_filtered > 0:
-        info(f"Filtered {n_filtered}/{len(to_download)} existing videos for download.")
+        info(f"Filtered {n_filtered}/{len(downloads)} existing videos for download.")
     else:
         info("No existing videos to filter.")
 

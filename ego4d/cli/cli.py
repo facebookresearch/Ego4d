@@ -133,7 +133,11 @@ def main(cfg: Config) -> None:
         )
 
     print("Checking if latest file versions are already downloaded...")
-    active_downloads = filter_already_downloaded(downloads, version_entries)
+    active_downloads = filter_already_downloaded(
+        downloads, 
+        version_entries, 
+        bypass_check=validated_cfg.bypass_version_check,
+    )
 
     missing = [x for x in downloads if not x.s3_exists]
     if len(missing) > 0:
