@@ -175,7 +175,7 @@ def info(msg):
 
 
 def filter_already_downloaded(
-    downloads: Iterable[FileToDownload], 
+    downloads: Iterable[FileToDownload],
     version_entries: List[VersionEntry],
     bypass_version_check: bool = False,
 ) -> List[FileToDownload]:

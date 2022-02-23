@@ -134,8 +134,8 @@ def main(cfg: Config) -> None:
 
     print("Checking if latest file versions are already downloaded...")
     active_downloads = filter_already_downloaded(
-        downloads, 
-        version_entries, 
+        downloads,
+        version_entries,
         bypass_check=validated_cfg.bypass_version_check,
     )
 
