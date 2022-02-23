@@ -136,7 +136,7 @@ def main(cfg: Config) -> None:
     active_downloads = filter_already_downloaded(
         downloads,
         version_entries,
-        bypass_check=validated_cfg.bypass_version_check,
+        bypass_version_check=validated_cfg.bypass_version_check,
     )
 
     missing = [x for x in downloads if not x.s3_exists]
