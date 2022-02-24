@@ -49,11 +49,13 @@ The following datasets are available (not exhaustive):
 
 | Dataset | Description |
 | --- | --- |
-| full-scale | The full scale version of all videos.  (Provide `benchmarks` or `video_uids` filters to reduce the 5TB download size.) |
+| annotations | The full set of annotations for the majority of benchmarks. | 
+| full_scale | The full scale version of all videos.  (Provide `benchmarks` or `video_uids` filters to reduce the 5TB download size.) |
 | clips | Clips available for benchmark training tasks.  (Provide `benchmarks` or `video_uids` filters to reduce the download size.) |
-| annotations | The full set of annotations. | 
 | viz | The data and thumbnails required to use the visualization package.  | 
-| 3d | 3D location scans and model checkpoints for the 3D VQ benchmark. |
+| 3d | Annotations for the 3D VQ benchmark. |
+| 3d_scans | 3D location scans for the 3D VQ benchmark. |
+| 3d_scan_keypoints | 3D location scan keypoints for the 3D VQ benchmark. |
 | imu | IMU data for the subset of videos available |
 | slowfast8x8_r101_k400 | Precomputed [action features](https://ego4d-data.org/docs/data/features/) for Slowfast 8x8 (R101) model |
 | fut_loc | Images and annotations for the future locomotion benchmark. |
