@@ -30,7 +30,17 @@ DATASETS_FILE = [
     "slowfast8x8_r101_k400",
 ]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE
-DATASET_FILE_EXTENSIONS = [".mp4", ".json", ".jsonl", ".jpg", ".txt", ".csv", ".pt", ".tar", ".tgz"]
+DATASET_FILE_EXTENSIONS = [
+    ".mp4",
+    ".json",
+    ".jsonl",
+    ".jpg",
+    ".txt",
+    ".csv",
+    ".pt",
+    ".tar",
+    ".tgz"
+]
 
 
 class ValidatedConfig(NamedTuple):
