@@ -179,6 +179,7 @@ def config_from_args(args=None) -> Config:
         "--bypass-existing",
         const=True,
         action="store_const",
+        dest="bypass_version_check",
         help="Bypass existing files without checking file versions/sizes.",
     )
     flag_parser.add_argument(
