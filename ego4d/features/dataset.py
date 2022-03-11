@@ -81,8 +81,12 @@ def create_dset(
     clip_sampler = UniformClipSampler(
         clip_duration=Fraction(
             config.inference_config.frame_window, config.inference_config.fps
-        ),
-        stride=Fraction(config.inference_config.stride, config.inference_config.fps),
+        )
+        if isinstance(config.inference_config.frame_window, int)
+        else config.inference_config.frame_window,
+        stride=Fraction(config.inference_config.stride, config.inference_config.fps)
+        if isinstance(config.inference_config.stride, int)
+        else config.inference_config.stride,
         backpad_last=True,
     )
 
@@ -92,7 +96,7 @@ def create_dset(
 
 def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:
     if config.inference_config.batch_size == 0:
-        return dset
+        raise AssertionError("not supported")
 
     return DataLoader(
         dset,

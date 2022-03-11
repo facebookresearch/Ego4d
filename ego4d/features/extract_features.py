@@ -78,28 +78,29 @@ def _extract_features(
     videos: List[Video],
     config: FeatureExtractConfig,
     max_examples: int = -1,
+    silent: bool = False,
 ) -> Iterator[ExtractedFeature]:
     device = config.inference_config.device
 
     data = create_data_loader_or_dset(videos, config)
 
-    print(f"extracting from {videos}")
+    if not silent:
+        print(f"extracting from {videos}")
 
     t1 = time.time()
     for i, x in enumerate(data):
         t2 = time.time()
+
         inputs = x["video"]
 
         load_time = t2 - t1
 
         t1 = time.time()
-        if len(inputs[0].shape) != 5:
-            inputs = [i.to(device)[None, ...] for i in inputs]
-            batch_size = 1
-        else:
+        if isinstance(inputs, list):
             inputs = [i.to(device) for i in inputs]
-            batch_size = inputs[0].shape[0]
-
+        else:
+            inputs = inputs.to(device)
+        batch_size = inputs[0].shape[0]
         t2 = time.time()
         transfer_time = t2 - t1
 
@@ -122,8 +123,10 @@ def _extract_features(
             gc.collect()
 
         if max_examples > 0 and (i + 1) * batch_size >= max_examples:
-            print("Breaking...")
+            if not silent:
+                print("Breaking...")
             break
+        t1 = time.time()
 
 
 def extract_features(
@@ -132,11 +135,13 @@ def extract_features(
     model: Optional[Module] = None,
     log_info: bool = True,
     max_examples: int = -1,
+    silent: bool = False,
+    assert_feature_size: bool = True,
 ) -> FeatureExtractionResult:
     if model is None:
         model = load_model(config)
 
-    if log_info:
+    if log_info and not silent:
         print(f"config={config}")
         print(f"Number of videos = {len(videos)}")
 
@@ -158,12 +163,16 @@ def extract_features(
     total_num_clips = math.ceil(total_num_clips)
 
     all_vectors = []
-    print(
-        f"extracting features - there are {total_num_clips} for {len(videos)} videos",
-        flush=True,
-    )
+    if not silent:
+        print(
+            f"extracting features - there are {total_num_clips} for {len(videos)} videos",
+            flush=True,
+        )
+
     for ef in tqdm(
-        _extract_features(model, videos, config, max_examples=max_examples),
+        _extract_features(
+            model, videos, config, max_examples=max_examples, silent=silent
+        ),
         total=total_num_clips,
     ):
         if batch_size == 0:
@@ -194,11 +203,12 @@ def extract_features(
         clip = uid_to_video_clips[k]
         expected_fvs = num_fvs(clip, config.inference_config)
         if expected_fvs != fv_amount:
-            print(
-                f"""
-            {k} should have {expected_fvs} fvs, but has {fv_amount}
-            """
-            )
+            if assert_feature_size:
+                raise AssertionError(
+                    f"""
+{k} should have {expected_fvs} fvs, but has {fv_amount}
+"""
+                )
 
         total_num += fv_amount
 
@@ -215,15 +225,10 @@ def extract_features(
     )
 
 
-def ensure_exists(path: str):
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
 def perform_feature_extraction(
     videos: List[Video], config: FeatureExtractConfig
 ) -> TimeStats:
-    ensure_exists(f"{config.io.out_path}")
+    os.makedirs(config.io.out_path, exist_ok=True)
 
     # TODO batch this
     time_stats = TimeStats(

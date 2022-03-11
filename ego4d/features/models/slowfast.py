@@ -43,7 +43,11 @@ class GetFv(Module):
         return x.view(bs, fv_s, -1).mean(2)
 
 
-def load_model(inference_config: InferenceConfig, config: ModelConfig) -> Module:
+def load_model(
+    inference_config: InferenceConfig,
+    config: ModelConfig,
+    patch_final_layer: bool = True,
+) -> Module:
     if config.model_path is not None:
         raise AssertionError("not supported yet")
         model = None
@@ -55,7 +59,8 @@ def load_model(inference_config: InferenceConfig, config: ModelConfig) -> Module
 
     assert model is not None
 
-    model.blocks[6] = GetFv()
+    if patch_final_layer:
+        model.blocks[6] = GetFv()
 
     # Set to GPU or CPU
     model = model.eval()
@@ -92,11 +97,11 @@ def get_transform(inference_config: InferenceConfig, config: ModelConfig):
         transform=Compose(
             [
                 UniformTemporalSubsample(inference_config.frame_window),
-                Lambda(lambda x: x / 255.0),  # scale
-                NormalizeVideo(config.mean, config.std),  # normalize
-                ShortSideScale(size=config.side_size),  # scale to 256x-1 or -1x256
-                CenterCropVideo(config.crop_size),  # crop to 256x256
-                PackPathway(config.slowfast_alpha),  # create pathway
+                Lambda(lambda x: x / 255.0),
+                NormalizeVideo(config.mean, config.std),
+                ShortSideScale(size=config.side_size),
+                CenterCropVideo(config.crop_size),
+                PackPathway(config.slowfast_alpha),
             ]
         ),
     )
