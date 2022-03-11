@@ -39,7 +39,10 @@ DATASET_FILE_EXTENSIONS = [
     ".csv",
     ".pt",
     ".tar",
-    ".tgz"
+    ".tgz",
+    ".ckpt",
+    ".pth",
+    ".zip",
 ]
 
 
