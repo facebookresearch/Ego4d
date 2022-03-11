@@ -50,6 +50,17 @@ python3 ego4d/features/inference.py --config-name mvit_k400 schedule_config.run_
     +num_examples=4
 ```
 
+Omnivore on imagenet:
+```sh
+python3 ego4d/features/inference.py --config-name omnivore_image schedule_config.run_locally=1 \
+    +dataset_type="imagenet" \
+    +dataset_dir="/datasets01/imagenet_full_size/061417/" \
+    +set_to_use="train" \
+    +seed=1337 \
+    +top_k=2\
+    +num_examples=3
+```
+
 
 ### Schedule The Extraction
 
