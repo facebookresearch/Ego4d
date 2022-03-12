@@ -38,7 +38,7 @@ class InputOutputConfig:
 
     # input
     filter_completed: bool = True
-    video_dir_path: str = "/datasets01/ego4d_track2/220127/v1/full_scale/"
+    video_dir_path: str = "/datasets01/ego4d_track2/v1/full_scale/"
     uid_list: Optional[List[str]] = None
     video_limit: int = -1
 
@@ -184,9 +184,13 @@ def get_transform(config: FeatureExtractConfig) -> Any:
     )
 
 
-def load_model(config: FeatureExtractConfig) -> Any:
+def load_model(config: FeatureExtractConfig, patch_final_layer: bool = True) -> Any:
     module = get_model_module(config)
-    return module.load_model(config.inference_config, config.model_config)
+    return module.load_model(
+        config.inference_config,
+        config.model_config,
+        patch_final_layer=patch_final_layer,
+    )
 
 
 @hydra.main(config_path="configs", config_name=None)

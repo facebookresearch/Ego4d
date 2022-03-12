@@ -36,6 +36,21 @@ This will benchmark the code to allow you to estimate/configure the scheduling
 parameters. Don't provide `schedule_config.run_locally=1` if you want to
 schedule it on the cluster.
 
+
+#### Inference
+
+MViT on Kinetics-400 example:
+```sh
+python3 ego4d/features/inference.py --config-name mvit_k400 schedule_config.run_locally=1 \
+    +dataset_type="k400" \
+    +dataset_dir="/datasets01/Kinetics400_Frames/videos/" \
+    +set_to_use="val" \
+    +seed=1337 \
+    +top_k=2\
+    +num_examples=4
+```
+
+
 ### Schedule The Extraction
 
 ```sh
@@ -58,6 +73,7 @@ Pre-configured YAML files are in the subdirectory `ego4d/features/configs/`.
 
 There exists the following model configurations:
 1. SlowFast 8x8 ResNet101 pre-trained on Kinetics 400 (see [`slowfast_r101_8x8.yaml`](ego4d/features/configs/slowfast_r101_8x8.yaml))
+2. MViT 32x8 pre-trained on Kinetics 400 (see [`mvit_k400.yaml`](ego4d/features/configs/mvit_k400.yaml))
 
 #### How to Run with a different config (model)
 

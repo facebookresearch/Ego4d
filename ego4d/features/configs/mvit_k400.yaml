@@ -5,7 +5,7 @@ io:
   video_dir_path: /datasets01/ego4d_track2/v1/full_scale/
   uid_list: null
   video_limit: -1
-  out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/test/action_features
+  out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/mvit_k400/
 inference_config:
   device: cuda
   batch_size: 1
@@ -29,11 +29,9 @@ schedule_config:
   time_per_forward_pass: 0.8
   schedule_time_per_node: 10.0
 model_config:
-  model_path: null
-  hub_path: slowfast_r101
-  slowfast_alpha: 4
+  pretrained_dataset: "k400"
   side_size: 256
-  crop_size: 256
+  crop_size: 224
   mean:
   - 0.45
   - 0.45
@@ -42,4 +40,4 @@ model_config:
   - 0.225
   - 0.225
   - 0.225
-model_module_str: ego4d.features.models.slowfast
+model_module_str: ego4d.features.models.mvit
