@@ -8,11 +8,14 @@ from typing import Optional
 
 import av
 import hydra
+import pandas as pd
 import torch
+import torchvision.transforms as T
 from ego4d.features.config import Video, FeatureExtractConfig, load_model
 from ego4d.features.extract_features import (
     extract_features,
 )
+from PIL import Image
 
 
 @dataclass
@@ -48,8 +51,76 @@ def _load_kinetics_class_names():
     return kinetics_id_to_classname
 
 
+def _load_imagenet_label_dir_dict(dataset_dir: str):
+    path = os.path.join(dataset_dir, "labels.txt")
+    df = pd.read_csv(path, names=["dir_name", "class_name"], header=None)
+    return dict(zip(df.dir_name.tolist(), df.class_name.tolist()))
+
+
+def _load_imagenet_class_names():
+    # NOTE
+    # this class mapping is for omnivore
+    # this may or may not be applicable to you
+    # wget https://s3.amazonaws.com/deep-learning-models/image-models/imagenet_class_index.json
+    with open(
+        "/private/home/miguelmartin/ego4d/ego4d_public/imagenet_class_index.json", "r"
+    ) as f:
+        imagenet_classnames = json.load(f)
+
+    # Create an id to label name mapping
+    imagenet_id_to_classname = {}
+    for k, v in imagenet_classnames.items():
+        imagenet_id_to_classname[k] = v[1]
+    return imagenet_id_to_classname
+
+
 def inference_imagenet(config: RunInferenceConfig):
-    raise AssertionError("not implemented")
+    # taken from https://github.com/facebookresearch/omnivore/blob/main/inference_tutorial.ipynb
+    label_mapping = _load_imagenet_class_names()
+    label_dir_dict = _load_imagenet_label_dir_dict(config.dataset_dir)
+
+    image_set_dir = os.path.join(config.dataset_dir, config.set_to_use)
+    labels = os.listdir(image_set_dir)
+
+    for _ in range(config.num_examples):
+        expected_label = random.sample(labels, 1)[0]
+        expected_label_value = label_dir_dict[expected_label]
+
+        images_dir = os.path.join(image_set_dir, expected_label)
+        images_in_dir = os.listdir(images_dir)
+
+        image_path = random.sample(images_in_dir, 1)[0]
+        image_path = f"{images_dir}/{image_path}"
+
+        image = Image.open(image_path).convert("RGB")
+        image_transform = T.Compose(
+            [
+                T.Resize(224),
+                T.CenterCrop(224),
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
+        image = image_transform(image)
+        image = image[None, :, None, ...].to(config.inference_config.device)
+        model = load_model(config, patch_final_layer=False)
+        predictions = model(image)
+
+        pred_classes = torch.nn.Softmax(dim=1)(predictions).squeeze()
+        top_k = pred_classes.topk(k=config.top_k)
+        predictions_strs = [
+            f"- {label_mapping[str(idx.item())]}: {prob.item():.2%}"
+            for prob, idx in zip(top_k.values, top_k.indices)
+        ]
+        predictions_summary = "\n".join(predictions_strs)
+        print(
+            f"""Example: {image_path}
+
+Expected label: {expected_label_value}
+Predicted labels:
+{predictions_summary}
+    """
+        )
 
 
 def inference_k400(config: RunInferenceConfig):
@@ -61,9 +132,6 @@ def inference_k400(config: RunInferenceConfig):
     - <basedir>/val
     - <basedir>/test
     """
-    if config.seed is not None:
-        random.seed(config.seed)
-
     video_set_dir = os.path.join(config.dataset_dir, config.set_to_use)
 
     model = load_model(config, patch_final_layer=False)
@@ -111,6 +179,9 @@ Predicted labels:
 
 @hydra.main(config_path="configs", config_name=None)
 def main(config: RunInferenceConfig):
+    if config.seed is not None:
+        random.seed(config.seed)
+
     assert config.dataset_type in ("k400", "imagenet")
     if config.dataset_type == "k400":
         inference_k400(config)

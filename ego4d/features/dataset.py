@@ -59,7 +59,7 @@ class IndexableVideoDataset(torch.utils.data.Dataset):
 
 
 def get_all_clips(video, video_length, sampler):
-    last_clip_time = 0
+    last_clip_time = None
     annotation = {}
     n_clips = 0
     while True:
