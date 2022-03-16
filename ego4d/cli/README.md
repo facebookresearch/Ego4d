@@ -62,7 +62,7 @@ The following datasets are available (not exhaustive):
 | av_models | Model checkpoints for the AV/Social benchmark. |
 | lta_models | Model checkpoints for the Long Term Anticipation benchmark. |
 | sta_models | Model checkpoints for the Short Term Anticipation benchmark. |
-| vq2s_models | Model checkpoints for the 2D VQ benchmark. |
+| vq2d_models | Model checkpoints for the 2D VQ benchmark. |
 
 
 ### Manifests

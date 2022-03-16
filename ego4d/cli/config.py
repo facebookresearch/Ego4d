@@ -20,10 +20,12 @@ DATASETS_FILE = [
     "annotations",
     "viz",
     "imu",
+    "gaze",
     "3d",
     "3d_scan_keypoints",
     "3d_scans",
     "av_models",
+    "social_test",
     "vq2d_models",
     "sta_models",
     "lta_models",
@@ -192,6 +194,7 @@ def config_from_args(args=None) -> Config:
         "--bypass-existing",
         const=True,
         action="store_const",
+        dest="bypass_version_check",
         help="Bypass existing files without checking file versions/sizes.",
     )
     flag_parser.add_argument(
