@@ -35,7 +35,7 @@ class WrapModel(Module):
         self.input_type = input_type
 
     def forward(self, x) -> torch.Tensor:
-        return self.model(x, input_type=self.input_type)
+        return self.model(x["video"], input_type=self.input_type)
 
 
 def load_model(

@@ -11,6 +11,8 @@ import hydra
 import pandas as pd
 from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
+from torchvision.transforms import Compose, Lambda
+from torchaudio.transforms import Resample
 
 
 @dataclass
@@ -22,6 +24,14 @@ class Video:
     uid: str
     path: str
     frame_count: int
+    has_audio: bool
+
+
+@dataclass
+class NormalizationConfig:
+    normalize_audio: bool = False
+    resample_audio_rate: int = 16000
+    resampling_method: str = "sinc_interpolation"
 
 
 @dataclass
@@ -47,6 +57,8 @@ class InputOutputConfig:
         "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/v1_1/action_features"
     )
 
+    exclude_no_audio: bool = False
+
 
 @dataclass
 class InferenceConfig:
@@ -66,6 +78,7 @@ class InferenceConfig:
     stride: int = 16
     include_audio: bool = False
     include_video: bool = True
+    norm_config: NormalizationConfig = NormalizationConfig()
 
 
 @dataclass
@@ -147,23 +160,40 @@ def _video_paths(config: InputOutputConfig, uids: List[str]) -> List[str]:
     return [_path_for(config, uid) for uid in uids]
 
 
-def _uid_to_info(config: InputOutputConfig) -> Dict[str, Tuple[float, float]]:
+def _uid_to_info(config: InputOutputConfig) -> Dict[str, Tuple[float, bool]]:
     manifest_df = pd.read_csv(f"{config.video_dir_path}/manifest.csv")
-    return {row.video_uid: row.canonical_num_frames for row in manifest_df.itertuples()}
+    return {
+        row.video_uid: (
+            row.canonical_num_frames,
+            # do we have audio?
+            not (
+                pd.isnull(row.canonical_audio_start_sec) and
+                pd.isnull(row.canonical_audio_duration_sec)
+            )
+        )
+        for row in manifest_df.itertuples()
+    }
 
 
 def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
     uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
     info = _uid_to_info(config)
-    return [
+
+    # only keep videos with audio
+    videos = [
         Video(
             uid=uid,
             path=_path_for(config, uid),
-            frame_count=info[uid],
+            frame_count=info[uid][0],
+            has_audio=info[uid][1],
         )
         for uid in uids
         if uid in info
     ]
+    if config.exclude_no_audio:
+        return [v for v in videos if v.has_audio]
+
+    return videos
 
 
 def get_videos(config: FeatureExtractConfig) -> Tuple[List[Video], List[Video]]:
@@ -179,9 +209,22 @@ def get_videos(config: FeatureExtractConfig) -> Tuple[List[Video], List[Video]]:
 
 
 def get_transform(config: FeatureExtractConfig) -> Any:
-    return get_model_module(config).get_transform(
-        config.inference_config, config.model_config
-    )
+    ic = config.inference_config
+    nc = ic.norm_config
+    model_transform = get_model_module(config).get_transform(ic, config.model_config)
+    transforms = []
+    if hasattr(config, "norm_config") and config.norm_config.normalize_audio:
+        print(f"Normalizing with: {config.norm_config}")
+        def resample_audio(x):
+            return Resample(
+                orig_freq=x["audio_sample_rate"],
+                new_freq=nc.resample_audio_rate,
+                resampling_method=nc.resampling_method,
+            )
+        transforms += Lambda(resample_audio),
+
+    transforms += [model_transform]
+    return Compose(transforms)
 
 
 def load_model(config: FeatureExtractConfig, patch_final_layer: bool = True) -> Any:

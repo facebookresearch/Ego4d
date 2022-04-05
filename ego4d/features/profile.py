@@ -17,8 +17,11 @@ from ego4d.features.slurm import (
 
 
 def profile_extraction(config: FeatureExtractConfig):
-    videos, _ = get_videos(config)
-    videos = [v for v in videos if v.frame_count > 1000 and v.frame_count <= 2000]
+    # videos, _ = get_videos(config)
+    _, videos = get_videos(config)
+    videos = [v for v in videos if v.frame_count > 500 and v.frame_count <= 2000]
+    # mfc = (max([v.frame_count for v in videos]))
+    # videos = [v for v in videos if v.frame_count == mfc]
     videos = videos[0:1]
 
     print("Frame count=", videos[0].frame_count)
@@ -27,6 +30,7 @@ def profile_extraction(config: FeatureExtractConfig):
 
     batch_sizes = [1]
     num_workers = [15]
+    # num_workers = [9]
     model = load_model(config)
 
     num_examples = -1
@@ -41,13 +45,14 @@ def profile_extraction(config: FeatureExtractConfig):
         print(batch_size, num_workers)
 
         t1 = time.time()
-        time_stats = extract_features(
+        ef = extract_features(
             videos=videos,
             config=config,
             model=model,
             log_info=False,
             max_examples=num_examples,
-        ).time_stats
+        )
+        time_stats = ef.time_stats
         t2 = time.time()
 
         total_time = t2 - t1

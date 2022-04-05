@@ -6,6 +6,7 @@ io:
   uid_list: null
   video_limit: -1
   out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/mvit_k400/
+  exclude_no_audio: false
 inference_config:
   device: cuda
   batch_size: 1

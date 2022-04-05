@@ -5,20 +5,20 @@ io:
   video_dir_path: /datasets01/ego4d_track2/v1/full_scale/
   uid_list: null
   video_limit: -1
-  out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/mvit_imagenet/
-  exclude_no_audio: false
+  out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/audio_mel_spectrogram
+  exclude_no_audio: true
 inference_config:
-  device: cuda
+  device: cpu
   batch_size: 1
-  num_workers: 9
+  num_workers: 10
   prefetch_factor: 2
   fps: 30
-  frame_window: 1
-  stride: 5
-  include_audio: false
-  include_video: true
+  frame_window: 100000000
+  stride: 100000000
+  include_audio: true
+  include_video: false
   norm_config:
-    normalize_audio: false
+    normalize_audio: true
     resample_audio_rate: 16000
     resampling_method: "sinc_interpolation"
 schedule_config:
@@ -27,22 +27,15 @@ schedule_config:
   timeout_min: 720
   constraint: volta
   slurm_partition: pixar
-  slurm_array_parallelism: 256
+  slurm_array_parallelism: 10
   gpus_per_node: 1
   cpus_per_task: 10
-  overhead: 2.0
-  time_per_forward_pass: 0.8
+  overhead: 1.0
+  time_per_forward_pass: 100
   schedule_time_per_node: 10.0
 model_config:
-  pretrained_dataset: "imagenet"
-  side_size: 256
-  crop_size: 224
-  mean:
-  - 0.485
-  - 0.456
-  - 0.406
-  std:
-  - 0.229
-  - 0.224
-  - 0.225
-model_module_str: ego4d.features.models.mvit
+  n_fft: 1024
+  win_length: null
+  hop_length: 512
+  n_mels: 128
+model_module_str: ego4d.features.models.mel_spectrogram

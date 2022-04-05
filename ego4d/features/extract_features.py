@@ -42,7 +42,9 @@ class FeatureExtractionResult:
 class ExtractedFeature:
     video_uid: str
     clip_index: int
-    feature: torch.Tensor
+    start_time_sec: float
+    end_time_sec: float
+    feature: Union[List[str], torch.Tensor]
     time_to_load: List[float]
     time_transfer_device: List[float]
     time_forward_pass: List[float]
@@ -90,29 +92,39 @@ def _extract_features(
     t1 = time.time()
     for i, x in enumerate(data):
         t2 = time.time()
-
-        inputs = x["video"]
-
         load_time = t2 - t1
 
         t1 = time.time()
-        if isinstance(inputs, list):
-            inputs = [i.to(device) for i in inputs]
-        else:
-            inputs = inputs.to(device)
-        batch_size = inputs[0].shape[0]
+
+        for k in ["video", "audio"]:
+            if k not in x or x[k] is None:
+                continue
+
+            v = x[k]
+            if isinstance(v, list):
+                x[k] = [i.to(device) for i in v]
+                batch_size = v[0].shape[0]
+            else:
+                x[k] = v.to(device)
+                batch_size = v.shape[0]
+
         t2 = time.time()
         transfer_time = t2 - t1
 
         with torch.no_grad():
             t1 = time.time()
-            fv = model(inputs).detach().cpu()
+            fv = model(x)
+            if isinstance(fv, torch.Tensor):
+                fv = fv.detach().cpu()
             t2 = time.time()
+
             forward_pass_time = t2 - t1
 
             yield ExtractedFeature(
                 video_uid=x["video_name"],
                 clip_index=x["clip_index"],
+                start_time_sec=x["clip_start_sec"],
+                end_time_sec=x["clip_end_sec"],
                 feature=fv,
                 time_to_load=load_time,
                 time_transfer_device=transfer_time,
@@ -162,7 +174,6 @@ def extract_features(
     total_num_clips /= max(batch_size, 1)
     total_num_clips = math.ceil(total_num_clips)
 
-    all_vectors = []
     if not silent:
         print(
             f"extracting features - there are {total_num_clips} for {len(videos)} videos",
@@ -177,16 +188,19 @@ def extract_features(
     ):
         if batch_size == 0:
             key = ef.video_uid
-            fvs[key].append((ef.clip_index.item(), ef.feature.squeeze()))
-            all_vectors.append(ef.feature.squeeze())
+            if isinstance(ef.feature, torch.Tensor):
+                ef.feature = ef.feature.cpu().squeeze()
+            fvs[key].append(ef)
         else:
-            assert len(ef.video_uid) == len(ef.feature)
-            assert len(ef.video_uid) == len(ef.clip_index)
+            if ef.feature is not None and isinstance(ef.feature, torch.Tensor):
+                assert len(ef.video_uid) == len(ef.feature)
+                assert len(ef.video_uid) == len(ef.clip_index)
 
             for i in range(len(ef.video_uid)):
                 key = ef.video_uid[i]
-                fvs[key].append((ef.clip_index[i].item(), ef.feature[i].squeeze()))
-                all_vectors.append(ef.feature[i].squeeze())
+                if isinstance(ef.feature, torch.Tensor):
+                    ef.feature[i] = ef.feature[i].cpu().squeeze()
+                fvs[key].append(ef)
 
         time_to_load.append(ef.time_to_load)
         time_transfer_device.append(ef.time_transfer_device)
@@ -195,11 +209,25 @@ def extract_features(
     result = {}
     total_num = 0
     for k, efs in fvs.items():
-        efs.sort(key=lambda x: x[0])
+        efs.sort(key=lambda x: x.start_time_sec)
 
-        result[k] = torch.stack([x[1] for x in efs])
+        fv_amount = len(efs)
+        if isinstance(efs[0].feature, torch.Tensor):
+            if all([e.feature.shape == efs[0].feature.shape for e in efs]):
+                result[k] = torch.stack([x.feature for x in efs]).cpu().detach()
+            else:
+                result[k] = torch.concat([x.feature for x in efs], dim=1).cpu().detach().squeeze()
+        else:
+            result[k] = [
+                {
+                    "start_time_sec": x.start_time_sec,
+                    "end_time_sec": x.end_time_sec,
+                    "feature": x.feature,
+                }
+                for x in efs
+                if x.feature is not None
+            ]
 
-        fv_amount = len(result[k])
         clip = uid_to_video_clips[k]
         expected_fvs = num_fvs(clip, config.inference_config)
         if expected_fvs != fv_amount:
