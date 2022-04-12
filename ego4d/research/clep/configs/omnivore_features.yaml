@@ -1,0 +1,85 @@
+input_config:
+  metadata_path: "/checkpoint/miguelmartin/ego4d_data/ego4d.json"
+  feature_path: "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/omnivore_video_swinL"
+  feature_extract_config_path: "/private/home/miguelmartin/ego4d/ego4d_public/ego4d/features/configs/omnivore_video.yaml"
+  features_per_second: 1.875
+  narration_width_sample_sec: 0.1
+  max_num_feature_vec_video_uids: 30
+  dsets_to_use: [ego4d]
+model_config:
+  nlp_feature_size: 768
+  visual_feature_size: 1536
+  final_proj_size: 1536
+pre_config:
+  mode: "k400"
+  root_dir: "/checkpoint/miguelmartin/clep/"
+  ego_charade:
+    set_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo/CharadesEgo_v1_test.csv"
+    video_root_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo_v1_480/"
+    class_desc_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo/Charades_v1_classes.txt"
+    out_path: "charades.hdf5"
+    out_label_path: "labels.pt"
+    num_vids_per_machine: 50
+  k400:
+    csv_dir: "/datasets01/kinetics/092121/400/lists"
+    dataset_dir: "/datasets01/kinetics/092121/400/val_288px/"
+    set_to_use: "val"
+    root_dir: "k400_hdf5_all"
+    viz_feature_path: "viz.hdf5"
+    metadata_out_path: "meta.pth"
+    num_labels_per_machine: 400
+  ego4d_features:
+    hdf5_path: "features.hdf5"
+  ego4d_narr:
+    narration_json_path: "/datasets01/ego4d_track2/v1/annotations/narration.json"
+    st_model_name: "all-mpnet-base-v2"
+    accelerator: "cuda"
+    metadata_out_path: "narrs_meta.pt"
+    narration_out_dir: "narrs"
+    min_words: 5
+    batch_size: 50
+    num_narrs_per_machine: 100000
+    limit: null
+  cc:
+    in_path: "/checkpoint/miguelmartin/conceptial_captions/Train_GCC-training_output.csv"
+    hdf5_viz_path: "cc_viz.hdf5"
+    hdf5_sent_path: "cc_sent.hdf5"
+    meta_path: "cc.pt"
+    helper_workers: 32
+    batch_size: 200
+    num_workers: 10
+    prefetch_factor: 2
+    imgs_per_gpu: 50000
+    num_narrs_per_machine: 50000
+  slurm_config:
+    slurm_log_folder: "slurm_log"
+    timeout_min: 240
+    constraint: "volta"
+    slurm_partition: "pixar"
+    slurm_array_parallelism: 100
+    gpus_per_node: 1
+    cpus_per_task: 10
+    run_locally: false
+batch_size: 128
+num_workers: 10
+prefetch_factor: 4
+num_epochs: 200
+accelerator: "gpu"
+devices: 1
+tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_public/runs"
+tb_log_name: "clep"
+lr: 0.001
+beta1: 0.9
+beta2: 0.98
+wd: 0.1
+eps: 1.0e-6
+run_locally: false
+eval_per_iter: 500
+eval_init: true
+use_soft_loss: null
+use_bce: false
+norm_logits: false
+soft_loss_threshold: 0.95
+use_logit_scale: true
+checkpoint_dir: "/checkpoint/miguelmartin/clep/checkpoints"
+checkpoint_metric: "Val/Char_1Ego_Labels/mAP"
