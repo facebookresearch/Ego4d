@@ -11,10 +11,8 @@ import hydra
 import pandas as pd
 import torch
 import torchvision.transforms as T
-from ego4d.features.config import Video, FeatureExtractConfig, load_model
-from ego4d.features.extract_features import (
-    extract_features,
-)
+from ego4d.features.config import FeatureExtractConfig, load_model, Video
+from ego4d.features.extract_features import extract_features
 from PIL import Image
 
 

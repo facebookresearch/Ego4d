@@ -7,7 +7,7 @@ from command line flags and a configuration file.
 import argparse
 import json
 from pathlib import Path
-from typing import NamedTuple, List, Set, Union
+from typing import List, NamedTuple, Set, Union
 
 import boto3.session
 from botocore.exceptions import ProfileNotFound

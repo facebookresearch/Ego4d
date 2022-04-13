@@ -12,21 +12,21 @@ from dataclasses import dataclass, fields
 from itertools import compress
 from pathlib import Path
 from typing import (
-    List,
-    Optional,
-    Collection,
-    NamedTuple,
+    Any,
     Callable,
+    Collection,
     Iterable,
+    List,
+    NamedTuple,
+    Optional,
     Tuple,
     Union,
-    Any,
 )
 
 import boto3.session
 import botocore.exceptions
 from ego4d.cli import manifest
-from ego4d.cli.config import DATASET_FILE_EXTENSIONS, ValidatedConfig, DATASETS_VIDEO
+from ego4d.cli.config import DATASET_FILE_EXTENSIONS, DATASETS_VIDEO, ValidatedConfig
 from ego4d.cli.manifest import VideoMetadata
 from tqdm import tqdm
 

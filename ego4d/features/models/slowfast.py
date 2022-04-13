@@ -4,20 +4,17 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import torch
-from ego4d.features.config import InferenceConfig, BaseModelConfig
+from ego4d.features.config import BaseModelConfig, InferenceConfig
 from pytorchvideo.transforms import (
     ApplyTransformToKey,
     ShortSideScale,
     UniformTemporalSubsample,
 )
-from torch.nn import Module, Identity
+from torch.nn import Identity, Module
 from torchvision.transforms import Compose, Lambda
 
 # TODO
-from torchvision.transforms._transforms_video import (
-    CenterCropVideo,
-    NormalizeVideo,
-)
+from torchvision.transforms._transforms_video import CenterCropVideo, NormalizeVideo
 
 
 @dataclass

@@ -3,19 +3,16 @@
 from dataclasses import dataclass
 from typing import Tuple
 
-from ego4d.features.config import InferenceConfig, BaseModelConfig
-from pytorchvideo.models.hub.vision_transformers import mvit_base_32x3, mvit_base_16
+from ego4d.features.config import BaseModelConfig, InferenceConfig
+from pytorchvideo.models.hub.vision_transformers import mvit_base_16, mvit_base_32x3
 from pytorchvideo.transforms import (
     ApplyTransformToKey,
     ShortSideScale,
     UniformTemporalSubsample,
 )
-from torch.nn import Module, Identity
+from torch.nn import Identity, Module
 from torchvision.transforms import Compose, Lambda
-from torchvision.transforms._transforms_video import (
-    CenterCropVideo,
-    NormalizeVideo,
-)
+from torchvision.transforms._transforms_video import CenterCropVideo, NormalizeVideo
 
 
 @dataclass

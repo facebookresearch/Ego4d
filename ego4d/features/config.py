@@ -5,7 +5,7 @@ import os
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
 import pandas as pd

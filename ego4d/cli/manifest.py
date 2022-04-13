@@ -10,7 +10,7 @@ import os
 import re
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Set, Iterable
+from typing import Dict, Iterable, Set
 
 from ego4d.cli.s3path import bucket_and_key_from_path
 from ego4d.cli.universities import BUCKET_TO_UNIV

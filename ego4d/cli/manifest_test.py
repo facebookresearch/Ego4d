@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from .manifest import VideoMetadata, list_videos_in_manifest
+from .manifest import list_videos_in_manifest, VideoMetadata
 from .universities import BUCKET_TO_UNIV
 
 

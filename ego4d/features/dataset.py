@@ -1,10 +1,10 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 from fractions import Fraction
-from typing import List, Any
+from typing import Any, List
 
 import torch
-from ego4d.features.config import Video, FeatureExtractConfig, get_transform
+from ego4d.features.config import FeatureExtractConfig, get_transform, Video
 from pytorchvideo.data import UniformClipSampler
 from pytorchvideo.data.encoded_video import EncodedVideo
 from torch.utils.data import DataLoader

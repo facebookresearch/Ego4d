@@ -14,15 +14,12 @@ import hydra
 import submitit
 import torch
 from ego4d.features.config import (
-    Video,
-    ScheduleConfig,
     FeatureExtractConfig,
     get_videos,
+    ScheduleConfig,
+    Video,
 )
-from ego4d.features.extract_features import (
-    perform_feature_extraction,
-    num_fvs,
-)
+from ego4d.features.extract_features import num_fvs, perform_feature_extraction
 from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from tqdm import tqdm

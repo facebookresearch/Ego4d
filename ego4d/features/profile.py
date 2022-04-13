@@ -6,14 +6,9 @@ from typing import List, Optional, Tuple
 
 import hydra
 import torch
-from ego4d.features.config import Video, FeatureExtractConfig, get_videos, load_model
-from ego4d.features.extract_features import (
-    extract_features,
-    num_fvs,
-)
-from ego4d.features.slurm import (
-    create_executor,
-)
+from ego4d.features.config import FeatureExtractConfig, get_videos, load_model, Video
+from ego4d.features.extract_features import extract_features, num_fvs
+from ego4d.features.slurm import create_executor
 
 
 def profile_extraction(config: FeatureExtractConfig):
