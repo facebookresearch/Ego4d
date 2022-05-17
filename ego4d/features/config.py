@@ -1,6 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 import importlib
+import json
 import os
 import random
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ class Video:
     uid: str
     path: str
     frame_count: int
+    is_stereo: bool = False
 
 
 @dataclass
@@ -39,6 +41,7 @@ class InputOutputConfig:
     # input
     filter_completed: bool = True
     video_dir_path: str = "/datasets01/ego4d_track2/v1/full_scale/"
+    ego4d_download_dir: str = "/checkpoint/miguelmartin/ego4d/"
     uid_list: Optional[List[str]] = None
     video_limit: int = -1
 
@@ -147,22 +150,29 @@ def _video_paths(config: InputOutputConfig, uids: List[str]) -> List[str]:
     return [_path_for(config, uid) for uid in uids]
 
 
-def _uid_to_info(config: InputOutputConfig) -> Dict[str, Tuple[float, float]]:
+def _uid_to_num_frames(config: InputOutputConfig) -> Dict[str, int]:
     manifest_df = pd.read_csv(f"{config.video_dir_path}/manifest.csv")
     return {row.video_uid: row.canonical_num_frames for row in manifest_df.itertuples()}
 
 
+def _uid_to_is_stereo(config: InputOutputConfig) -> Dict[str, bool]:
+    data_json = json.load(open(f"{config.ego4d_download_dir}/ego4d.json"))
+    return {v["video_uid"]: v["is_stereo"] for v in data_json["videos"]}
+
+
 def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
     uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
-    info = _uid_to_info(config)
+    uid_to_num_frames = _uid_to_num_frames(config)
+    uids_to_is_stereo = _uid_to_is_stereo(config)
     return [
         Video(
             uid=uid,
             path=_path_for(config, uid),
-            frame_count=info[uid],
+            frame_count=uid_to_num_frames[uid],
+            is_stereo=uids_to_is_stereo[uid],
         )
         for uid in uids
-        if uid in info
+        if uid in uid_to_num_frames
     ]
 
 
@@ -180,7 +190,8 @@ def get_videos(config: FeatureExtractConfig) -> Tuple[List[Video], List[Video]]:
 
 def get_transform(config: FeatureExtractConfig) -> Any:
     return get_model_module(config).get_transform(
-        config.inference_config, config.model_config
+        config.inference_config,
+        config.model_config,
     )
 
 

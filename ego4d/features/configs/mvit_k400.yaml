@@ -3,6 +3,7 @@ force_yes: false
 io:
   filter_completed: true
   video_dir_path: /datasets01/ego4d_track2/v1/full_scale/
+  ego4d_download_dir: /checkpoint/miguelmartin/ego4d/
   uid_list: null
   video_limit: -1
   out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/mvit_k400/
