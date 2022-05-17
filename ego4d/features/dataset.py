@@ -8,6 +8,7 @@ from ego4d.features.config import FeatureExtractConfig, get_transform, Video
 from pytorchvideo.data import UniformClipSampler
 from pytorchvideo.data.encoded_video import EncodedVideo
 from torch.utils.data import DataLoader
+from torchvision.transforms import Compose
 
 
 class IndexableVideoDataset(torch.utils.data.Dataset):
@@ -50,12 +51,36 @@ class IndexableVideoDataset(torch.utils.data.Dataset):
             "video_index": idx,
             "clip_index": clip_index,
             "aug_index": aug_index,
+            "is_stereo": video.is_stereo,
             # TODO
             # **info_dict,
             # **({"audio": audio_samples} if audio_samples is not None else {})
         }
         sample_dict = self.transform(sample_dict)
         return sample_dict
+
+
+class CropIfStereo:
+    def __init__(self):
+        pass
+
+    def __call__(self, x):
+        if x["is_stereo"]:
+            v = x["video"]
+            assert len(v.shape) == 4
+            x["video"] = v[:, :, :, 0 : v.shape[-1] // 2]
+
+            # edge case where some videos are incorrectly
+            # encoded from source and weren't corrected
+            if v.shape[-1] < v.shape[-2]:
+                x["video"] = torch.nn.functional.interpolate(
+                    x["video"],
+                    size=(x["video"].shape[-1], x["video"].shape[-2] // 2),
+                    mode="bilinear",
+                )
+            # for debugging
+            # torchvision.utils.save_image(x["video"].permute(1, 0, 2, 3)[0] / 255.0, fp="/tmp/test.jpg")  # noqa
+        return x
 
 
 def get_all_clips(video, video_length, sampler):
@@ -90,7 +115,12 @@ def create_dset(
         backpad_last=True,
     )
 
-    transform = get_transform(config)
+    transform = Compose(
+        [
+            CropIfStereo(),
+            get_transform(config),
+        ]
+    )
     return IndexableVideoDataset(videos, clip_sampler, transform)
 
 

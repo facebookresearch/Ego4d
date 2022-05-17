@@ -62,7 +62,11 @@ def get_transform(inference_config: InferenceConfig, config: ModelConfig):
     if config.pretrained_dataset == "imagenet":
         # NOTE untested due to MViT imagenet not not available on torch hub
         transforms += [Lambda(lambda x: x.squeeze_(2))]
-    return ApplyTransformToKey(
-        key="video",
-        transform=Compose(transforms),
+    return Compose(
+        [
+            ApplyTransformToKey(
+                key="video",
+                transform=Compose(transforms),
+            )
+        ]
     )
