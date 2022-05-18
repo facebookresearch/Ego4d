@@ -1,3 +1,5 @@
+**Please note VQ test annotations (for the challenge) were recently released. If needed, please download the annotations dataset again, e.g. `python -m ego4d.cli.cli --output_directory="~/ego4d_data" --datasets annotations`**
+
 # Ego4D Dataset Download CLI
 
 This tool provides a command line interface to the publicly available Ego4D datasets.
