@@ -16,23 +16,23 @@ from typing import List
 
 import boto3
 from ego4d.cli.config import (
-    DATASETS_VIDEO,
-    DATASET_PRIMARY,
-    config_from_args,
     Config,
+    config_from_args,
+    DATASET_PRIMARY,
+    DATASETS_VIDEO,
     validate_config,
 )
 from ego4d.cli.download import (
-    create_output_directory,
-    list_videos_for_download,
     create_download_directory,
+    create_output_directory,
     download_all,
     FileToDownload,
     filter_already_downloaded,
+    list_corrupt_files,
+    list_videos_for_download,
     load_version_file,
     save_version_file,
     upsert_version,
-    list_corrupt_files,
 )
 from ego4d.cli.manifest import download_manifest_for_version, download_metadata
 from ego4d.cli.progressbar import DownloadProgressBar

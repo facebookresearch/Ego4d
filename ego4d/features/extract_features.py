@@ -8,14 +8,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Tuple, Union, Optional, List, Dict, Iterator
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
 from ego4d.features.config import (
-    Video,
     FeatureExtractConfig,
-    load_model,
     InferenceConfig,
+    load_model,
+    Video,
 )
 from ego4d.features.dataset import create_data_loader_or_dset
 from torch.nn import Module
