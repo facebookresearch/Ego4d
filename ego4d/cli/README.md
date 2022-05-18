@@ -1,3 +1,5 @@
+**Please note VQ test annotations (for the challenge) were recently released. If needed, please download the annotations dataset again, e.g. `python -m ego4d.cli.cli --output_directory="~/ego4d_data" --datasets annotations`**
+
 # Ego4D Dataset Download CLI
 
 This tool provides a command line interface to the publicly available Ego4D datasets.
@@ -61,6 +63,8 @@ The following datasets are available (not exhaustive):
 | fut_loc | Images and annotations for the future locomotion benchmark. |
 | av_models | Model checkpoints for the AV/Social benchmark. |
 | lta_models | Model checkpoints for the Long Term Anticipation benchmark. |
+| moments_models | Model checkpoints for the Moments benchmark. |
+| nlq_models | Model checkpoints for the NLQ benchmark. |
 | sta_models | Model checkpoints for the Short Term Anticipation benchmark. |
 | vq2d_models | Model checkpoints for the 2D VQ benchmark. |
 
