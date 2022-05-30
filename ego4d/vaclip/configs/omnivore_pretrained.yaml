@@ -1,6 +1,8 @@
 input_config:
   narration_json_path: "/datasets01/ego4d_track2/v1/annotations/narration.json"
   video_dir_path: "/datasets01/ego4d_track2/v1/full_scale/"
+  feature_path: "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/omnivore_video"
+  features_per_second: 1.875
 transform_config:
   side_size: 256
   crop_size: 224
@@ -13,14 +15,12 @@ transform_config:
   - 0.224
   - 0.225
 model_config:
-  pretrained_text: true
-  pretrained_visual: true
-  sample_windows: 2
-  window_size: 32
   nlp_feature_size: 1024
-  visual_feature_size: 768
-batch_size: 2
-num_workers: 5
+  visual_feature_size: 1024
+  proj_dims: [1024, 1024]
+  final_proj_size: 256
+batch_size: 64
+num_workers: 10
 prefetch_factor: 1
 num_epochs: 1
 accelerator: "gpu"

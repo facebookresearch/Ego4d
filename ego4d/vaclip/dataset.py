@@ -1,8 +1,10 @@
 import json
+import os
 from typing import List
-import pandas as pd
+from collections import OrderedDict
 
 import torch
+import numpy as np
 from pytorchvideo.data.encoded_video import EncodedVideo
 from torch.utils.data import DataLoader
 from ego4d.features.dataset import CropIfStereo
@@ -12,82 +14,93 @@ from torchvision.transforms._transforms_video import (
     CenterCropVideo,
     NormalizeVideo,
 )
-from pytorchvideo.transforms import (
-    ApplyTransformToKey,
-    ShortSideScale,
-    UniformTemporalSubsample,
-)
 
-from ego4d.vaclip.config import TrainConfig, InputConfig, TransformConfig
+from collections import defaultdict
+from ego4d.vaclip.config import TrainConfig, InputConfig
+
+
+class LRUCache:
+    def __init__(self, max_size=5):
+        self.max_size = max_size
+
+        # OrderedDict is a FILO container
+        self.cache = dict()
+        self.cache_keys = OrderedDict()
+
+    def isin(self, key):
+        return key in self.cache_keys
+    
+    def get(self, key):
+        self.refresh_item(key)
+        return self.cache[key]
+
+    def refresh_item(self, key):
+        self.cache_keys.move_to_end(key)
+
+    def put(self, key, bs):
+        self.cache[key] = bs
+        self.cache_keys[key] = key
+        if len(self.cache) > self.max_size:
+            key = self.cache_keys.popitem(last=False)
+            del self.cache[key]
+
+
+class FeatureRetrieval:
+    def __init__(self, feature_path: str, feature_per_sec: float):
+        self.feature_per_sec = feature_per_sec
+        self.features = torch.load(feature_path)
+
+    def get_clip(self, t1, t2):
+        x1 = max(0, int(np.round(t1 * self.feature_per_sec)))
+        x2 = int(np.round(t2 * self.feature_per_sec))
+        # if both are in the last feature bucket
+        if x2 >= self.features.shape[0] - 1 and x1 >= self.features.shape[0] - 1:
+            x2 = self.features.shape[0]
+            x1 = x2 - 1
+        elif x2 >= self.features.shape[0] - 1:
+            x2 = self.features.shape[0] - 1
+        return self.features[x1:x2+1]
 
 
 class Ego4DVaClip(torch.utils.data.Dataset):
-    # TODO
-    # refactor into seperate heads such that we can load features instead of
-    # raw inputs for models
     def __init__(
         self,
-        uid_subset: List[str],
-        config: InputConfig,
-        transform,
+        config: TrainConfig,
     ):
-        self.narration_json = json.load(open(config.narration_json_path))
-        uid_subset = set(uid_subset)
-
-        # TODO: unified way to do this on FAIR Cluster and FB Infra
-        self.manifest = pd.read_csv(f"{config.video_dir_path}/manifest.csv")
-        self.encoded_videos = {
-            uid: EncodedVideo.from_path(
-                f"{config.video_dir_path}/{uid}.mp4",
-                decode_video=True,
-                decode_audio=False,  # TODO: decode_audio set to True
-                perform_seek=True,
-            )
-            for uid in uid_subset
-        }
-        self.is_uid_stereo = {
-            v["video_uid"]: v["is_stereo"]
-            for v in json.load(open("/checkpoint/miguelmartin/ego4d/top_level.json"))["videos"]
-        }
-
-        self.narrations = [
-            (uid, data["narration_text"], data["timestamp_sec"])
-            for uid in uid_subset
-            for data in self.narration_json[uid].get("narration_pass_2", {"narrations": []})["narrations"]
-        ]
-        self.narrations += [
-            (uid, data["narration_text"], data["timestamp_sec"])
-            for uid in uid_subset
-            for data in self.narration_json[uid].get("narration_pass_2", {"narrations": []})["narrations"]
-        ]
-        self.transform = transform
+        self.vid_features = LRUCache(max_size=3000)  # TODO: configure
+        self.narr_meta_path = os.path.join(config.pre_config.pre_root_dir, config.pre_config.metadata_out_path)
+        self.narr_meta = torch.load(self.narr_meta_path)
+        self.config = config
+        self.narr_feature_dir = os.path.join(config.pre_config.pre_root_dir, config.pre_config.narration_out_path)
 
     def __len__(self):
-        return len(self.narrations)
+        return len(self.narr_meta)
 
     def __getitem__(self, idx):
-        # TODO: how to do better negative sampling?
-        uid, narration_text, timestamp_sec = self.narrations[idx]
+        meta = self.narr_meta[idx]
+        uid = meta["uid"]
+        ts = meta["ts"]
+        narr_idx = meta["idx"]
 
-        # get a random clip -4 to +4s
-        # TODO: how to support bs > 1?
-        # offset = (torch.rand(1) * 4).item()
-        # TODO fix OOM?
-        offset = 32 / 2 / 30
+        # get txt feature
+        txt_feature_path = os.path.join(self.narr_feature_dir, uid, f"{narr_idx}.pt")
+        txt_feat = torch.load(txt_feature_path)
 
-        t1 = timestamp_sec - offset
-        t2 = timestamp_sec + offset
-        video_clip = self.encoded_videos[uid].get_clip(t1, t2)
+        offset = (torch.rand(1) * self.config.input_config.narration_width_sample_sec).item()
+        t1 = ts - offset
+        t2 = ts + offset
+        if not self.vid_features.isin(uid):
+            path = os.path.join(self.config.input_config.feature_path, f"{uid}.pt")
+            feature_ret = FeatureRetrieval(path, self.config.input_config.features_per_second)
+            self.vid_features.put(uid, feature_ret)
 
-        # TODO: audio as well
-        frames = video_clip["video"]
+        features = self.vid_features.get(uid).get_clip(t1, t2)
+        v_feat = features.mean(0)  # aggregate
 
-        sample_dict = {
-            "video": frames,
-            "text": narration_text,
-            "is_stereo": self.is_uid_stereo[uid],
+        return {
+            "video": v_feat,
+            "text": txt_feat,
         }
-        return self.transform(sample_dict)
 
 
 def create_data_loader(dset, config: TrainConfig):
@@ -96,41 +109,5 @@ def create_data_loader(dset, config: TrainConfig):
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         prefetch_factor=config.prefetch_factor,
+        shuffle=True,
     )
-
-
-def omni_transform(config: TransformConfig):
-    return ApplyTransformToKey(
-        key="video",
-        transform=Compose([
-            Lambda(lambda x: x / 255.0),
-            NormalizeVideo(config.mean, config.std),
-            ShortSideScale(size=config.side_size),
-            CenterCropVideo(config.crop_size),
-            UniformTemporalSubsample(32),  # TODO pad
-        ]),
-    )
-
-
-def text_transform(config: TransformConfig):
-    def sub_tagged_tokens(text: str) -> str:
-        text = text.replace("#C", "Camera wearer")
-        text = text.replace("#O", "Other person")
-        text = text.replace("#unsure", "Something")
-        return text
-
-    return ApplyTransformToKey(
-        key="text",
-        transform=Lambda(lambda x: sub_tagged_tokens(x)),
-    )
-
-
-# TODO: image dataloader as a zip of above + open_clip?
-def get_transform(config: TransformConfig):
-    omni_t = omni_transform(config)
-    txt_t = text_transform(config)
-    return Compose([
-        CropIfStereo(),
-        txt_t,
-        omni_t,
-    ])

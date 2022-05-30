@@ -1,36 +1,37 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 
 @dataclass
 class InputConfig:
-    narration_json_path: str = "/datasets01/ego4d_track2/v1/annotations/narration.json"
-    video_dir_path: str = "/datasets01/ego4d_track2/v1/full_scale/"
-
-
-@dataclass
-class TransformConfig:
-    mean: Tuple[float, float, float]
-    std: Tuple[float, float, float]
-    side_size: int
-    crop_size: int
+    feature_path: str
+    features_per_second: float
 
 
 @dataclass
 class ModelConfig:
     # TODO: use features, etc.
-    pretrained_text: bool
-    pretrained_visual: bool
-    sample_windows: int
-    window_size: int
     nlp_feature_size: int
     visual_feature_size: int
+    proj_dims: List[int]
+
+
+@dataclass
+class PreprocessConfig:
+    narration_json_path: str
+    num_workers: int
+    st_model_name: str
+    accelerator: str
+    pre_root_dir: str
+    metadata_out_path: str
+    narration_out_path: str
 
 
 @dataclass
 class TrainConfig:
     input_config: InputConfig
     model_config: ModelConfig
+    pre_config: PreprocessConfig
 
     batch_size: int
     num_workers: int
@@ -39,3 +40,7 @@ class TrainConfig:
     num_epochs: int
     accelerator: str
     devices: int
+
+    tb_log_dir: str
+    tb_log_name: str
+    slurm_log_folder: str
