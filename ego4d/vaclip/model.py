@@ -26,8 +26,8 @@ class EgoLangaugeAssociation(nn.Module):
         self.config = config
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         # TODO
-        self.text_proj = nn.Linear(self.config.nlp_feature_size, 100)
-        self.visual_proj = nn.Linear(self.config.visual_feature_size, 100)
+        self.text_proj = nn.Linear(self.config.nlp_feature_size, 512)
+        self.visual_proj = nn.Linear(self.config.visual_feature_size, 512)
 
     def forward(self, x):
         ve = self.visual_proj(x["video"])

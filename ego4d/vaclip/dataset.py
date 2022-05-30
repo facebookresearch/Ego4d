@@ -41,7 +41,7 @@ class LRUCache:
         self.cache[key] = bs
         self.cache_keys[key] = key
         if len(self.cache) > self.max_size:
-            key = self.cache_keys.popitem(last=False)
+            key = self.cache_keys.popitem(last=False)[0]
             del self.cache[key]
 
 
@@ -51,6 +51,7 @@ class FeatureRetrieval:
         self.features = torch.load(feature_path)
 
     def get_clip(self, t1, t2):
+        # TODO: checkme
         x1 = max(0, int(np.round(t1 * self.feature_per_sec)))
         x2 = int(np.round(t2 * self.feature_per_sec))
         # if both are in the last feature bucket
@@ -67,11 +68,11 @@ class Ego4DVaClip(torch.utils.data.Dataset):
         self,
         config: TrainConfig,
     ):
-        self.vid_features = LRUCache(max_size=3000)  # TODO: configure
-        self.narr_meta_path = os.path.join(config.pre_config.pre_root_dir, config.pre_config.metadata_out_path)
+        self.vid_features = LRUCache(max_size=config.input_config.max_num_feature_vec_video_uids)
+        self.narr_meta_path = os.path.join(config.ego_pre_config.pre_root_dir, config.ego_pre_config.metadata_out_path)
         self.narr_meta = torch.load(self.narr_meta_path)
         self.config = config
-        self.narr_feature_dir = os.path.join(config.pre_config.pre_root_dir, config.pre_config.narration_out_path)
+        self.narr_feature_dir = os.path.join(config.ego_pre_config.pre_root_dir, config.ego_pre_config.narration_out_path)
 
     def __len__(self):
         return len(self.narr_meta)
