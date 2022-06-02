@@ -3,6 +3,7 @@ import json
 import functools
 import math
 import submitit
+import logging
 from typing import List, Any
 from multiprocessing import Pool
 
@@ -134,12 +135,52 @@ def preprocess_ego_narrations(config: TrainConfig):
     torch.save(metas, m_op)
 
 
+def _preprocess_k400_data(labels, feature_extract_config, video_set_dir, viz_dir):
+    model = load_model(feature_extract_config, patch_final_layer=True)
+
+    # videos
+    for label_idx, label_name in tqdm(enumerate(labels), total=len(labels)):
+        label_dir = os.path.join(video_set_dir, label_name)
+
+        video_paths = [
+            os.path.join(video_set_dir, f"{label_name}/{path}")
+            for path in os.listdir(label_dir)
+        ]
+
+        videos = [Video(video_path, video_path, video_info(video_path)["num_frames"]) for video_path in video_paths]
+
+        orig_len = len(videos)
+        videos = [v for v in videos if v.frame_count is not None]
+        logging.info(f"{orig_len} -> {len(videos)}")
+        if len(videos) == 0:
+            logging.warn("skipping {label_name}")
+            continue
+
+        # TODO
+        # videos are not guaranteed to be 30fps - need to normalize this
+        predictions = extract_features(
+            videos=videos,
+            config=feature_extract_config,
+            model=model,
+            log_info=False,
+            silent=True,
+            assert_feature_size=False,
+        )
+
+        by_video = []
+        for k, v in predictions.result.items():
+            by_video.append({"video_path": k, "feature": v.mean(0)})
+
+        path = os.path.join(viz_dir, f"{label_name}.pt")
+        torch.save(by_video, path)
+
+
 def preprocess_k400_data(config: TrainConfig):
-    pre_dir = config.k400_pre_config.pre_root_dir
-    viz_out = os.path.join(pre_dir, config.k400_pre_config.viz_feature_dir)
+    pre_dir = os.path.join(config.k400_pre_config.pre_root_dir, config.k400_pre_config.set_to_use)
+    viz_dir = os.path.join(pre_dir, config.k400_pre_config.viz_feature_dir)
 
     os.makedirs(pre_dir, exist_ok=True)
-    os.makedirs(viz_out, exist_ok=True)
+    os.makedirs(viz_dir, exist_ok=True)
 
     video_set_dir = os.path.join(config.k400_pre_config.dataset_dir, config.k400_pre_config.set_to_use)
     labels = os.listdir(video_set_dir)
@@ -155,43 +196,30 @@ def preprocess_k400_data(config: TrainConfig):
         for label in labels
     ]
     feature_extract_config = OmegaConf.load(config.k400_pre_config.feature_extract_config_path)
-    model = load_model(feature_extract_config, patch_final_layer=True)
+    map_fn = functools.partial(
+        _preprocess_k400_data,
+        feature_extract_config=feature_extract_config,
+        video_set_dir=video_set_dir,
+        viz_dir=viz_dir
+    )
+    batches = batch_it(labels, batch_size=config.k400_pre_config.num_labels_per_machine)
+    executor = create_executor(config.k400_pre_config, len(batches))
+    jobs = executor.map_array(map_fn, batches)
 
-    # videos
-    for label_idx, label_name in tqdm(enumerate(labels), total=len(labels)):
-        label_dir = os.path.join(video_set_dir, label_name)
-
-        video_paths = [
-            os.path.join(video_set_dir, f"{label_name}/{path}")
-            for path in os.listdir(label_dir)
-        ]
-
-        for video_path in tqdm(video_paths):
-            input_id = "logit"
-
-            info = video_info(video_path)
-            videos = [Video(input_id, video_path, info["num_frames"])]
-
-            predictions = extract_features(
-                videos=videos,
-                config=feature_extract_config,
-                model=model,
-                log_info=False,
-                silent=True,
-                assert_feature_size=False,
-            ).result[input_id]
-            breakpoint()
-    # torch.save(meta, out_meta)
+    # wait for the results
+    for job in tqdm(jobs):
+        _ = job.result()
 
     # sentences
     print("Processing labels as sentences", flush=True)
-    meta = {"label_text": [], "label_fv": []}
+    meta = {"label_text": [], "label_fv": [], "label_dirs": labels}
     model = SentenceTransformer(config.ego_pre_config.st_model_name)
     for sent in tqdm(sentences):
         meta["label_text"].append(sent)
         meta["label_fv"].append(model.encode(sent, show_progress_bar=False))
 
-    # out_meta = os.path.join(pre_dir, config.k400_pre_config.metadata_out_path)
+    out_meta_path = os.path.join(pre_dir, config.k400_pre_config.metadata_out_path)
+    torch.save(meta, out_meta_path)
 
 
 @hydra.main(config_path="configs", config_name=None)
@@ -204,4 +232,3 @@ def preprocess(config: TrainConfig):
 
 if __name__ == "__main__":
     preprocess()  # pyre-ignore
-

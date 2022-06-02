@@ -28,6 +28,11 @@ class RunInferenceConfig(FeatureExtractConfig):
 
 def _video_info(path: str):
     with av.open(path) as container:
+        if len(container.streams.video) == 0:
+            return {
+                "num_frames": None,
+                "fps": None,
+            }
         return {
             "num_frames": container.streams.video[0].frames,
             "fps": container.streams.video[0].average_rate,

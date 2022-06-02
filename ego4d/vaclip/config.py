@@ -26,6 +26,14 @@ class K400PreprocessConfig:
     viz_feature_dir: str
     metadata_out_path: str
     feature_extract_config_path: str
+    num_labels_per_machine: int
+    slurm_log_folder: str
+    timeout_min: int
+    constraint: str
+    slurm_partition: str
+    slurm_array_parallelism: int
+    gpus_per_node: int
+    cpus_per_task: int
 
 
 @dataclass
