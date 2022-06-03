@@ -2,7 +2,7 @@ input_config:
   feature_path: "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/omnivore_video"
   features_per_second: 1.875
   narration_width_sample_sec: 2
-  max_num_feature_vec_video_uids: 40
+  max_num_feature_vec_video_uids: 30
 model_config:
   nlp_feature_size: 768
   visual_feature_size: 1024
@@ -40,14 +40,14 @@ ego_pre_config:
   gpus_per_node: 1
   cpus_per_task: 10
   num_narrs_per_machine: 250000
-batch_size: 40
+batch_size: 20
 num_workers: 10
-prefetch_factor: 4
+prefetch_factor: 3
 num_epochs: 1
 accelerator: "gpu"
 devices: 1
 tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_public/runs/"
-tb_log_name: "vaclip_adam_nl"
+tb_log_name: "vaclip_adam_nl_bs20"
 slurm_log_folder: "slurm"
 lr: 0.0005
 beta1: 0.9
