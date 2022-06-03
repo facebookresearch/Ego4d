@@ -63,11 +63,43 @@ class FeatureRetrieval:
         return self.features[x1:x2+1]
 
 
+class KineticsDset(torch.utils.data.Dataset):
+    def __init__(self, config: TrainConfig):
+        super().__init__()
+        self.config = config
+
+        root = os.path.join(config.k400_pre_config.pre_root_dir, config.k400_pre_config.set_to_use)
+        sent_meta_path = os.path.join(root, config.k400_pre_config.metadata_out_path)
+        viz_dir = os.path.join(root, config.k400_pre_config.viz_feature_dir)
+        self.viz_features = [
+            (label_pt.split(".pt")[0], row["feature"], row["video_path"])
+            for label_pt in os.listdir(viz_dir)
+            for row in torch.load(os.path.join(viz_dir, label_pt))
+        ]
+        self.sent_features = torch.load(sent_meta_path)
+        self.sent_ordered = torch.stack([torch.tensor(feat) for feat in self.sent_features["label_fv"]])
+        self.label_name_to_idx = {
+            label_name: idx
+            for idx, label_name in enumerate(self.sent_features["label_dirs"])
+        }
+
+    def __len__(self):
+        return len(self.viz_features)
+
+    def __getitem__(self, idx):
+        label_name, feat, _ = self.viz_features[idx]
+        # one_hot = torch.zeros(len(self.sent_ordered))
+        # one_hot[self.label_name_to_idx[label_name]] = 1.0
+        return feat, self.label_name_to_idx[label_name]
+
+
 class Ego4DVaClip(torch.utils.data.Dataset):
     def __init__(
         self,
         config: TrainConfig,
     ):
+        super().__init__()
+
         self.vid_features = LRUCache(max_size=config.input_config.max_num_feature_vec_video_uids)
         self.narr_meta_path = os.path.join(config.ego_pre_config.pre_root_dir, config.ego_pre_config.metadata_out_path)
         self.narr_meta = torch.load(self.narr_meta_path)

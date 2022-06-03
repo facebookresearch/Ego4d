@@ -80,4 +80,6 @@ class TrainConfig:
     wd: float
     eps: float
 
+    eval_per_iter: int
+
     preprocess_mode: str

@@ -6,7 +6,7 @@ import hydra
 import submitit
 
 from ego4d.vaclip.config import TrainConfig
-from ego4d.vaclip.dataset import Ego4DVaClip, create_data_loader
+from ego4d.vaclip.dataset import Ego4DVaClip, KineticsDset, create_data_loader
 from ego4d.vaclip.model import EgoLangaugeAssociation
 
 from pytorch_lightning.lite import LightningLite
@@ -17,6 +17,7 @@ import torch.distributed.nn
 from torch import distributed as dist, nn as nn
 from torch.nn import functional as F
 from open_clip.loss import ClipLoss
+import torch.nn.functional as F
 # from open_clip.training.scheduler import scheduler
 
 from tqdm.auto import tqdm
@@ -24,50 +25,56 @@ from tqdm.auto import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 
+# taken from: https://github.com/mlfoundations/open_clip/blob/main/src/training/zero_shot.py#L29
+def accuracy(output, target, topk=(1,)):
+    pred = output.topk(max(topk), 1, True, True)[1].t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+    return [float(correct[:k].reshape(-1).float().sum(0, keepdim=True).cpu().numpy()) for k in topk]
+
 
 class Lite(LightningLite):
-    def run(self, config: TrainConfig):
-        print("Config=")
-        print(config, flush=True)
+    def my_setup(self, config: TrainConfig):
+        self.model = EgoLangaugeAssociation(config.model_config)
+        self.config = config
 
-        model = EgoLangaugeAssociation(config.model_config)
-        # optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-        named_parameters = list(model.named_parameters())
+    def run(self):
+        named_parameters = list(self.model.named_parameters())
 
         # https://github.com/mlfoundations/open_clip/blob/main/src/training/main.py#L163
         exclude = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n
         include = lambda n, p: not exclude(n, p)
         gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
         rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
-
-        optimizer = torch.optim.AdamW(
+        self.optimizer = torch.optim.AdamW(
               [
                   {"params": gain_or_bias_params, "weight_decay": 0.},
-                  {"params": rest_params, "weight_decay": config.wd},
+                  {"params": rest_params, "weight_decay": self.config.wd},
               ],
-              lr=config.lr,
-              betas=(config.beta1, config.beta2),
-              eps=config.eps,
+              lr=self.config.lr,
+              betas=(self.config.beta1, self.config.beta2),
+              eps=self.config.eps,
         )
+        model, optimizer = self.setup(self.model, self.optimizer)
 
-        model, optimizer = self.setup(model, optimizer)
+        print("Config=")
+        print(self.config, flush=True)
 
-        dset = Ego4DVaClip(config=config)
-        dataloader = create_data_loader(dset, config)
+        dset = Ego4DVaClip(config=self.config)
+        dataloader = create_data_loader(dset, self.config)
         dataloader = self.setup_dataloaders(dataloader)
         clip_loss = ClipLoss()
 
-        log_dir = os.path.join(config.tb_log_dir, config.tb_log_name)
+        log_dir = os.path.join(self.config.tb_log_dir, self.config.tb_log_name)
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir=log_dir)
 
         model.train()
         step = 0
-        for epoch in range(config.num_epochs):
+        for epoch in range(self.config.num_epochs):
             print("Epoch:", epoch)
             for batch in tqdm(dataloader, total=len(dataloader)):
                 optimizer.zero_grad()
-                v_f, t_f, logit_scale = model(batch)
+                v_f, t_f, logit_scale = self.model(batch)
                 loss = clip_loss(v_f, t_f, logit_scale)
 
                 self.backward(loss)  # instead of loss.backward()
@@ -81,16 +88,53 @@ class Lite(LightningLite):
                 writer.add_scalar("logit_scale", model.module.logit_scale.detach().cpu(), step)
                 writer.add_scalar("lr", optimizer.param_groups[0]['lr'], step)
                 writer.flush()
-                step += 1
 
                 if step % 100 == 0:
                     gc.collect()
 
+                if step % self.config.eval_per_iter == 0:
+                    print(f"Eval {step} - {self.config.eval_per_iter}", flush=True)
+                    acc1, acc5 = self.run_eval()
+                    print(f"acc1={acc1}, acc5={acc5}")
+                    writer.add_scalar("Val/Acc 1", acc1)
+                    writer.add_scalar("Val/Acc 5", acc5)
+
+                step += 1
+
+
+    def run_eval(self):
+        self.model.eval()
+
+        dset = KineticsDset(self.config)
+        val_loader = create_data_loader(dset, self.config)
+        val_loader = self.setup_dataloaders(val_loader)
+
+        classifier = F.normalize(
+            self.model.text_proj(dset.sent_ordered.to(self.device)).t(),
+            dim=-1,
+        )
+
+        with torch.no_grad():
+            acc1, acc5, n = 0.0, 0.0, 0
+            for x, target in tqdm(val_loader):
+                v = self.model.visual_proj(x)
+                v = F.normalize(v, dim=-1)
+
+                # https://github.com/mlfoundations/open_clip/blob/main/src/training/zero_shot.py#L49
+                logits = v @ classifier
+                acc1, acc5 = accuracy(logits, target, topk=(1, 5))
+                n += x.shape[0]
+
+        acc1 /= n
+        acc5 /= n
+        self.model.train()
+        return 100.0 * acc1, 100.0 * acc5
 
 
 def run_train(config: TrainConfig):
     lite = Lite(accelerator=config.accelerator, devices=config.devices)
-    lite.run(config)
+    lite.my_setup(config)
+    lite.run()
 
 
 @hydra.main(config_path="configs", config_name=None)
