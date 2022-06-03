@@ -6,8 +6,8 @@ input_config:
 model_config:
   nlp_feature_size: 768
   visual_feature_size: 1024
-  proj_dims: [1024, 1024]
-  final_proj_size: 256
+  proj_dims: [512, 512]
+  final_proj_size: 512
 k400_pre_config:
   dataset_dir: "/datasets01/Kinetics400_Frames/videos/"
   set_to_use: "val"
@@ -40,14 +40,14 @@ ego_pre_config:
   gpus_per_node: 1
   cpus_per_task: 10
   num_narrs_per_machine: 250000
-batch_size: 20
+batch_size: 40
 num_workers: 10
-prefetch_factor: 2
+prefetch_factor: 4
 num_epochs: 1
 accelerator: "gpu"
 devices: 1
 tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_public/runs/"
-tb_log_name: "vaclip_adam"
+tb_log_name: "vaclip_adam_nl"
 slurm_log_folder: "slurm"
 lr: 0.0005
 beta1: 0.9
@@ -56,4 +56,4 @@ wd: 0.2
 eps: 1.0e-6
 run_locally: false
 preprocess_mode: "k400"
-eval_per_iter: 2000
+eval_per_iter: 1000

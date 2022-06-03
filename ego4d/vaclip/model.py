@@ -19,17 +19,47 @@ class ResBlock(nn.Module):
         return x_prime + x
 
 
+def _get_layers(initial_dim, config):
+    if len(config.proj_dims) == 1:
+        return [nn.ReLU(True), nn.Linear(initial_dim, config.final_proj_size)]
+
+    assert (np.array(config.proj_dims) == config.proj_dims[0]).all()
+    result = [
+        nn.Linear(initial_dim, config.proj_dims[0]),
+    ]
+    for prev, nxt in zip(config.proj_dims[0:-1], config.proj_dims[:-1]):
+        result += [
+            nn.ReLU(True),
+            ResBlock(prev, nxt),
+        ]
+    result += [
+        nn.ReLU(True),
+        nn.Linear(config.proj_dims[-1], config.final_proj_size)
+    ]
+    return result
+
+
 class EgoLangaugeAssociation(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
 
         self.config = config
+        txt_layers = _get_layers(config.nlp_feature_size, config)
+        viz_layers = _get_layers(config.visual_feature_size, config)
+        self.text_proj = nn.Sequential(*tuple(txt_layers))
+        self.visual_proj = nn.Sequential(*tuple(viz_layers))
+
+        self.apply(self.init_weights)
+
+        # don't want to init this with 0
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-        # TODO
-        self.text_proj = nn.Linear(self.config.nlp_feature_size, 512)
-        self.visual_proj = nn.Linear(self.config.visual_feature_size, 512)
 
     def forward(self, x):
         ve = self.visual_proj(x["video"])
         te = self.text_proj(x["text"])
         return ve, te, self.logit_scale
+    
+    def init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.xavier_uniform_(module.weight.data, gain=torch.nn.init.calculate_gain('relu'))
+            module.bias.data.zero_()

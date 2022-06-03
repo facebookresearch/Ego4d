@@ -45,6 +45,7 @@ class Lite(LightningLite):
         include = lambda n, p: not exclude(n, p)
         gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
         rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
+
         self.optimizer = torch.optim.AdamW(
               [
                   {"params": gain_or_bias_params, "weight_decay": 0.},
@@ -93,11 +94,12 @@ class Lite(LightningLite):
                     gc.collect()
 
                 if step % self.config.eval_per_iter == 0:
+                    print("Loss=", loss, flush=True)
                     print(f"Eval {step} - {self.config.eval_per_iter}", flush=True)
                     acc1, acc5 = self.run_eval()
                     print(f"acc1={acc1}, acc5={acc5}")
-                    writer.add_scalar("Val/Acc 1", acc1)
-                    writer.add_scalar("Val/Acc 5", acc5)
+                    writer.add_scalar("Val/Acc 1", acc1, step)
+                    writer.add_scalar("Val/Acc 5", acc5, step)
 
                 step += 1
 
@@ -122,7 +124,9 @@ class Lite(LightningLite):
 
                 # https://github.com/mlfoundations/open_clip/blob/main/src/training/zero_shot.py#L49
                 logits = v @ classifier
-                acc1, acc5 = accuracy(logits, target, topk=(1, 5))
+                a1, a5 = accuracy(logits, target, topk=(1, 5))
+                acc1 += a1
+                acc5 += a5
                 n += x.shape[0]
 
         acc1 /= n
