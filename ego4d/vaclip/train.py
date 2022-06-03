@@ -5,6 +5,7 @@ import math
 import hydra
 import submitit
 
+from ego4d.vaclip.val import eval_classification
 from ego4d.vaclip.config import TrainConfig
 from ego4d.vaclip.dataset import Ego4DVaClip, KineticsDset, create_data_loader
 from ego4d.vaclip.model import EgoLangaugeAssociation
@@ -24,12 +25,6 @@ from tqdm.auto import tqdm
 
 from torch.utils.tensorboard import SummaryWriter
 
-
-# taken from: https://github.com/mlfoundations/open_clip/blob/main/src/training/zero_shot.py#L29
-def accuracy(output, target, topk=(1,)):
-    pred = output.topk(max(topk), 1, True, True)[1].t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-    return [float(correct[:k].reshape(-1).float().sum(0, keepdim=True).cpu().numpy()) for k in topk]
 
 
 class Lite(LightningLite):
@@ -115,24 +110,10 @@ class Lite(LightningLite):
             self.model.text_proj(dset.sent_ordered.to(self.device)).t(),
             dim=-1,
         )
+        res = eval_classification(self.model.visual_proj, classifier, val_loader)
 
-        with torch.no_grad():
-            acc1, acc5, n = 0.0, 0.0, 0
-            for x, target in tqdm(val_loader):
-                v = self.model.visual_proj(x)
-                v = F.normalize(v, dim=-1)
-
-                # https://github.com/mlfoundations/open_clip/blob/main/src/training/zero_shot.py#L49
-                logits = v @ classifier
-                a1, a5 = accuracy(logits, target, topk=(1, 5))
-                acc1 += a1
-                acc5 += a5
-                n += x.shape[0]
-
-        acc1 /= n
-        acc5 /= n
         self.model.train()
-        return 100.0 * acc1, 100.0 * acc5
+        return res["acc1"], res["acc5"]
 
 
 def run_train(config: TrainConfig):

@@ -1,3 +1,4 @@
+import sys
 import os
 import json
 import functools
@@ -6,11 +7,14 @@ import submitit
 import logging
 from typing import List, Any
 from multiprocessing import Pool
+from pathlib import Path
 
+import pandas as pd
 import torch
 import hydra
 from sentence_transformers import SentenceTransformer
 from ego4d.vaclip.config import EgoPreprocessConfig, TrainConfig
+from ego4d.features.inference import _load_kinetics_class_names
 from tqdm.auto import tqdm
 from hydra import compose, initialize
 from omegaconf import OmegaConf
@@ -135,31 +139,17 @@ def preprocess_ego_narrations(config: TrainConfig):
     torch.save(metas, m_op)
 
 
-def _preprocess_k400_data(labels, feature_extract_config, video_set_dir, viz_dir):
+def _preprocess_k400_data(video_path_label_pairs, feature_extract_config, viz_dir):
     model = load_model(feature_extract_config, patch_final_layer=True)
 
-    # videos
-    for label_idx, label_name in tqdm(enumerate(labels), total=len(labels)):
-        label_dir = os.path.join(video_set_dir, label_name)
-
-        video_paths = [
-            os.path.join(video_set_dir, f"{label_name}/{path}")
-            for path in os.listdir(label_dir)
-        ]
-
-        videos = [Video(video_path, video_path, video_info(video_path)["num_frames"]) for video_path in video_paths]
-
-        orig_len = len(videos)
-        videos = [v for v in videos if v.frame_count is not None]
-        logging.info(f"{orig_len} -> {len(videos)}")
-        if len(videos) == 0:
-            logging.warn("skipping {label_name}")
+    for path, label in tqdm(video_path_label_pairs):
+        name = Path(path).stem
+        vid = Video(path, path, video_info(path)["num_frames"], w=None, h=None)
+        if vid.frame_count is None:
             continue
 
-        # TODO
-        # videos are not guaranteed to be 30fps - need to normalize this
         predictions = extract_features(
-            videos=videos,
+            videos=[vid],
             config=feature_extract_config,
             model=model,
             log_info=False,
@@ -167,12 +157,13 @@ def _preprocess_k400_data(labels, feature_extract_config, video_set_dir, viz_dir
             assert_feature_size=False,
         )
 
-        by_video = []
-        for k, v in predictions.result.items():
-            by_video.append({"video_path": k, "feature": v.mean(0)})
-
-        path = os.path.join(viz_dir, f"{label_name}.pt")
-        torch.save(by_video, path)
+        out_path = os.path.join(viz_dir, f"{name}.pt")
+        to_save = {
+            "feature": predictions.result[path].mean(0),
+            "label": label,
+            "all_features": predictions.result[path],
+        }
+        torch.save(to_save, out_path)
 
 
 def preprocess_k400_data(config: TrainConfig):
@@ -182,8 +173,10 @@ def preprocess_k400_data(config: TrainConfig):
     os.makedirs(pre_dir, exist_ok=True)
     os.makedirs(viz_dir, exist_ok=True)
 
-    video_set_dir = os.path.join(config.k400_pre_config.dataset_dir, config.k400_pre_config.set_to_use)
-    labels = os.listdir(video_set_dir)
+    # TODO: configure
+    val_set = pd.read_csv("/datasets01/kinetics/092121/400/lists/val.csv")
+    idx_to_label = _load_kinetics_class_names()
+    label_to_idx = {v: k for k, v in idx_to_label.items()}
 
     def process_label(label):
         ret = label.replace('"', '')
@@ -191,30 +184,57 @@ def preprocess_k400_data(config: TrainConfig):
         ret = ret.replace("_", ' ')
         return ret
 
+    label_names = list(set(val_set.label))
     sentences = [
-        f"The person in this video is doing or a {process_label(label)}"
-        for label in labels
+        f"The person in this video is doing {process_label(label)}"
+        for label in label_names
     ]
     feature_extract_config = OmegaConf.load(config.k400_pre_config.feature_extract_config_path)
+    video_path_label_pairs = [
+        (
+            f"/datasets01/kinetics/092121/400/val_288px/{row.youtube_id}_{row.time_start:06d}_{row.time_end:06d}.mp4", 
+            row.label,
+        )
+        for row in val_set.itertuples()
+    ]
+
+    old_len = len(video_path_label_pairs)
+    video_path_label_pairs = [val for val in video_path_label_pairs if os.path.exists(val[0])]
+    print(f"{old_len} -> {len(video_path_label_pairs)} examples", flush=True)
+
     map_fn = functools.partial(
         _preprocess_k400_data,
         feature_extract_config=feature_extract_config,
-        video_set_dir=video_set_dir,
         viz_dir=viz_dir
     )
-    batches = batch_it(labels, batch_size=config.k400_pre_config.num_labels_per_machine)
-    executor = create_executor(config.k400_pre_config, len(batches))
-    jobs = executor.map_array(map_fn, batches)
+    batches = batch_it(video_path_label_pairs, batch_size=config.k400_pre_config.num_labels_per_machine)
 
-    # wait for the results
-    for job in tqdm(jobs):
-        _ = job.result()
+    if config.run_locally:
+        for batch in batches:
+            map_fn(batch)
+    else:
+        print(f"To schedule {len(batches)} batches across {config.k400_pre_config.slurm_array_parallelism} machines")
+        cont = input("Continue? [y/N]: ")
+        if cont != "y":
+            print("Exiting...")
+            sys.exit(0)
+        executor = create_executor(config.k400_pre_config, len(batches))
+        jobs = executor.map_array(map_fn, batches)
+
+        # wait for the results
+        for job in tqdm(jobs):
+            _ = job.result()
 
     # sentences
     print("Processing labels as sentences", flush=True)
-    meta = {"label_text": [], "label_fv": [], "label_dirs": labels}
+    meta = {
+        "label_text": [],
+        "label_fv": [],
+        "label_name_to_idx": label_to_idx,
+        "idx_to_label_name": idx_to_label,
+    }
     model = SentenceTransformer(config.ego_pre_config.st_model_name)
-    for sent in tqdm(sentences):
+    for sent, label_name in tqdm(zip(sentences, label_names), total=len(sentences)):
         meta["label_text"].append(sent)
         meta["label_fv"].append(model.encode(sent, show_progress_bar=False))
 

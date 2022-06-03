@@ -1,5 +1,5 @@
 input_config:
-  feature_path: "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/omnivore_video"
+  feature_path: "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/omnivore_video_swinL"
   features_per_second: 1.875
   narration_width_sample_sec: 2
   max_num_feature_vec_video_uids: 30
@@ -14,13 +14,23 @@ k400_pre_config:
   pre_root_dir: "/checkpoint/miguelmartin/vaclip/k400/"
   viz_feature_dir: "viz"
   metadata_out_path: "meta.pth"
-  feature_extract_config_path: "/private/home/miguelmartin/ego4d/ego4d_public/ego4d/features/configs/omnivore_video.yaml"
-  num_labels_per_machine: 10
+  feature_extract_config_path: "/private/home/miguelmartin/ego4d/ego4d_vaclip/ego4d/features/configs/omnivore_video.yaml"
+  num_labels_per_machine: 400
+  slurm_log_folder: "slurm_log"
+  timeout_min: 60
+  constraint: "volta"
+  slurm_partition: "pixar"
+  slurm_array_parallelism: 50
+  gpus_per_node: 1
+  cpus_per_task: 10
+ego_pre_feature_config:
+  pre_root_dir: "/checkpoint/miguelmartin/vaclip/features/"
+  num_features_per_file: 8
   slurm_log_folder: "slurm_log"
   timeout_min: 240
   constraint: "volta"
   slurm_partition: "pixar"
-  slurm_array_parallelism: 40
+  slurm_array_parallelism: 25
   gpus_per_node: 1
   cpus_per_task: 10
 ego_pre_config:
@@ -40,14 +50,14 @@ ego_pre_config:
   gpus_per_node: 1
   cpus_per_task: 10
   num_narrs_per_machine: 250000
-batch_size: 20
+batch_size: 50
 num_workers: 10
 prefetch_factor: 3
 num_epochs: 1
 accelerator: "gpu"
 devices: 1
 tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_public/runs/"
-tb_log_name: "vaclip_adam_nl_bs20"
+tb_log_name: "vaclip_adam_nl_bs50"
 slurm_log_folder: "slurm"
 lr: 0.0005
 beta1: 0.9

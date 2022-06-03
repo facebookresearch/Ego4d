@@ -1,10 +1,13 @@
 import json
 import os
+import math
 from typing import List
 from collections import OrderedDict
+from pathlib import Path
 
 import torch
 import numpy as np
+import pandas as pd
 from pytorchvideo.data.encoded_video import EncodedVideo
 from torch.utils.data import DataLoader
 from ego4d.features.dataset import CropIfStereo
@@ -51,9 +54,8 @@ class FeatureRetrieval:
         self.features = torch.load(feature_path)
 
     def get_clip(self, t1, t2):
-        # TODO: checkme
         x1 = max(0, int(np.round(t1 * self.feature_per_sec)))
-        x2 = int(np.round(t2 * self.feature_per_sec))
+        x2 = math.ceil(np.round(t2 * self.feature_per_sec))
         # if both are in the last feature bucket
         if x2 >= self.features.shape[0] - 1 and x1 >= self.features.shape[0] - 1:
             x2 = self.features.shape[0]
@@ -69,27 +71,26 @@ class KineticsDset(torch.utils.data.Dataset):
         self.config = config
 
         root = os.path.join(config.k400_pre_config.pre_root_dir, config.k400_pre_config.set_to_use)
-        sent_meta_path = os.path.join(root, config.k400_pre_config.metadata_out_path)
         viz_dir = os.path.join(root, config.k400_pre_config.viz_feature_dir)
-        self.viz_features = [
-            (label_pt.split(".pt")[0], row["feature"], row["video_path"])
-            for label_pt in os.listdir(viz_dir)
-            for row in torch.load(os.path.join(viz_dir, label_pt))
-        ]
+
+        sent_meta_path = os.path.join(root, config.k400_pre_config.metadata_out_path)
         self.sent_features = torch.load(sent_meta_path)
-        self.sent_ordered = torch.stack([torch.tensor(feat) for feat in self.sent_features["label_fv"]])
-        self.label_name_to_idx = {
-            label_name: idx
-            for idx, label_name in enumerate(self.sent_features["label_dirs"])
-        }
+
+        self.videos = [
+            os.path.join(viz_dir, data_path)
+            for data_path in os.listdir(viz_dir)
+            if data_path.endswith(".pt")
+        ]
+        self.label_name_to_idx = self.sent_features["label_name_to_idx"]
+        self.sent_ordered = torch.stack([torch.tensor(fv) for fv in self.sent_features["label_fv"]])
 
     def __len__(self):
-        return len(self.viz_features)
+        return len(self.videos)
 
     def __getitem__(self, idx):
-        label_name, feat, _ = self.viz_features[idx]
-        # one_hot = torch.zeros(len(self.sent_ordered))
-        # one_hot[self.label_name_to_idx[label_name]] = 1.0
+        vf = torch.load(self.videos[idx])
+        label_name = vf["label"]
+        feat = vf["feature"]
         return feat, self.label_name_to_idx[label_name]
 
 
@@ -119,7 +120,8 @@ class Ego4DVaClip(torch.utils.data.Dataset):
         txt_feature_path = os.path.join(self.narr_feature_dir, uid, f"{narr_idx}.pt")
         txt_feat = torch.load(txt_feature_path)
 
-        offset = (torch.rand(1) * self.config.input_config.narration_width_sample_sec).item()
+        # offset = (torch.rand(1) * self.config.input_config.narration_width_sample_sec).item()
+        offset = self.config.input_config.narration_width_sample_sec
         t1 = ts - offset
         t2 = ts + offset
         if not self.vid_features.isin(uid):
