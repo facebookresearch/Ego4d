@@ -2,10 +2,10 @@ input_config:
   feature_path: "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/omnivore_video_swinL"
   features_per_second: 1.875
   narration_width_sample_sec: 2
-  max_num_feature_vec_video_uids: 30
+  max_num_feature_vec_video_uids: 50
 model_config:
   nlp_feature_size: 768
-  visual_feature_size: 1024
+  visual_feature_size: 1536
   proj_dims: [512, 512]
   final_proj_size: 512
 k400_pre_config:
@@ -37,7 +37,7 @@ ego_pre_config:
   narration_json_path: "/datasets01/ego4d_track2/v1/annotations/narration.json"
   st_model_name: "all-mpnet-base-v2"
   accelerator: "cuda"
-  pre_root_dir: "/checkpoint/miguelmartin/vaclip"
+  pre_root_dir: "/checkpoint/miguelmartin/vaclip_test"
   metadata_out_path: "narrs_meta.pt"
   narration_out_path: "narrs"
   batch_size: 20
@@ -51,19 +51,19 @@ ego_pre_config:
   cpus_per_task: 10
   num_narrs_per_machine: 250000
 batch_size: 50
-num_workers: 10
+num_workers: 15
 prefetch_factor: 3
-num_epochs: 1
+num_epochs: 3
 accelerator: "gpu"
 devices: 1
-tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_public/runs/"
+tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_vaclip/runs"
 tb_log_name: "vaclip_adam_nl_bs50"
 slurm_log_folder: "slurm"
-lr: 0.0005
+lr: 0.001
 beta1: 0.9
 beta2: 0.98
-wd: 0.2
+wd: 0.1
 eps: 1.0e-6
 run_locally: false
-preprocess_mode: "k400"
+preprocess_mode: "ego"
 eval_per_iter: 1000

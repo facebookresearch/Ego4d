@@ -30,24 +30,19 @@ def eval_classification(model, classifier, loader, device=None):
                 x = x.to(device)
                 target = target.to(device)
 
-            # v = model(x.squeeze(0))
             v = model(x)
 
             # https://github.com/mlfoundations/open_clip/blob/main/src/training/zero_shot.py#L49
             if isinstance(classifier, torch.Tensor):
-                # TODO: changeme
-                logits = v @ classifier
                 v = F.normalize(v, dim=-1)
+                logits = v @ classifier
             else:
                 logits = classifier(v)
-                # logits = classifier(v.squeeze(0)).mean(0).unsqueeze(0)
 
-            # a1, a5 = accuracy(logits, target, topk=(1, 5))
             a1, a5 = accuracy(logits, target, topk=(1, 5))
 
-            # # test correctness
+            # This is to test correctness
             # hot1 = torch.zeros(x.shape[0], 400)
-            # # TODO: vectorize
             # for i in range(x.shape[0]):
             #     hot1[i, target[i]] = 1.0
             # a1, a5 = accuracy(hot1.to(self.device), target, topk=(1, 5))
@@ -68,7 +63,6 @@ def eval_k400_on_features(config: TrainConfig, feature_extract_config: FeatureEx
     # NOTE: only works for omnivore right now
     dset = KineticsDset(config)
     config = copy.deepcopy(config)
-    config.batch_size = 1
     val_loader = create_data_loader(dset, config)
 
     omni_model = load_model(feature_extract_config, patch_final_layer=False)

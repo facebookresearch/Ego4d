@@ -19,7 +19,6 @@ from torch import distributed as dist, nn as nn
 from torch.nn import functional as F
 from open_clip.loss import ClipLoss
 import torch.nn.functional as F
-# from open_clip.training.scheduler import scheduler
 
 from tqdm.auto import tqdm
 
@@ -50,6 +49,8 @@ class Lite(LightningLite):
               betas=(self.config.beta1, self.config.beta2),
               eps=self.config.eps,
         )
+
+
         model, optimizer = self.setup(self.model, self.optimizer)
 
         print("Config=")
@@ -66,6 +67,11 @@ class Lite(LightningLite):
 
         model.train()
         step = 0
+        num_examples = 0
+
+        max_steps = len(dataloader) * self.config.num_epochs
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=1e-7, last_epoch=-1)
+
         for epoch in range(self.config.num_epochs):
             print("Epoch:", epoch)
             for batch in tqdm(dataloader, total=len(dataloader)):
@@ -75,14 +81,17 @@ class Lite(LightningLite):
 
                 self.backward(loss)  # instead of loss.backward()
                 optimizer.step()
+                scheduler.step()
 
                 # https://github.com/mlfoundations/open_clip/blob/main/src/training/train.py#L100
                 with torch.no_grad():
                     model.module.logit_scale.clamp_(0, math.log(100))
 
-                writer.add_scalar("Loss/train", loss.detach().cpu(), step)
-                writer.add_scalar("logit_scale", model.module.logit_scale.detach().cpu(), step)
-                writer.add_scalar("lr", optimizer.param_groups[0]['lr'], step)
+                num_examples += batch["video"].shape[0]
+
+                writer.add_scalar("Loss/train", loss.detach().cpu(), num_examples)
+                writer.add_scalar("logit_scale", model.module.logit_scale.detach().cpu(), num_examples)
+                writer.add_scalar("lr", optimizer.param_groups[0]['lr'], num_examples)
                 writer.flush()
 
                 if step % 100 == 0:
@@ -93,8 +102,8 @@ class Lite(LightningLite):
                     print(f"Eval {step} - {self.config.eval_per_iter}", flush=True)
                     acc1, acc5 = self.run_eval()
                     print(f"acc1={acc1}, acc5={acc5}")
-                    writer.add_scalar("Val/Acc 1", acc1, step)
-                    writer.add_scalar("Val/Acc 5", acc5, step)
+                    writer.add_scalar("Val/Acc 1", acc1, num_examples)
+                    writer.add_scalar("Val/Acc 5", acc5, num_examples)
 
                 step += 1
 
