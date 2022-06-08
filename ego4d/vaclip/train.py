@@ -3,6 +3,7 @@ import gc
 import torch
 import math
 import hydra
+import time
 import submitit
 
 from ego4d.vaclip.val import eval_classification
@@ -50,7 +51,6 @@ class Lite(LightningLite):
               eps=self.config.eps,
         )
 
-
         model, optimizer = self.setup(self.model, self.optimizer)
 
         print("Config=")
@@ -77,6 +77,23 @@ class Lite(LightningLite):
             for batch in tqdm(dataloader, total=len(dataloader)):
                 optimizer.zero_grad()
                 v_f, t_f, logit_scale = self.model(batch)
+
+                # coin flip loss
+                # if True:
+                #     with torch.no_grad():
+                #         txt = batch["text"]
+                #         device = txt.device
+                #         simm = txt @ txt.t()
+                #         coin_flip = torch.rand(simm.shape[0], simm.shape[0], device=device)
+                #         # pos_ex = (simm >= coin_flip) & (simm >= 0.7)
+                #         pos_ex = (simm >= coin_flip) & (simm > 0.5)
+                #         new_label = torch.ones_like(coin_flip, device=device) * pos_ex
+                #         pos_ex_prop = new_label.sum() / (new_label.shape[0]*new_label.shape[0])
+
+                #         # assign clip loss
+                #         without_simm = clip_loss(v_f, t_f, logit_scale)
+                #         clip_loss.labels[device] = new_label
+
                 loss = clip_loss(v_f, t_f, logit_scale)
 
                 self.backward(loss)  # instead of loss.backward()
@@ -92,6 +109,8 @@ class Lite(LightningLite):
                 writer.add_scalar("Loss/train", loss.detach().cpu(), num_examples)
                 writer.add_scalar("logit_scale", model.module.logit_scale.detach().cpu(), num_examples)
                 writer.add_scalar("lr", optimizer.param_groups[0]['lr'], num_examples)
+                # writer.add_scalar("pos_ex_prop", pos_ex_prop, num_examples)
+                # writer.add_scalar("without_simm", without_simm, num_examples)
                 writer.flush()
 
                 if step % 100 == 0:
@@ -136,7 +155,7 @@ def train_model(config: TrainConfig):
     if not config.run_locally:
         executor = submitit.AutoExecutor(folder=config.slurm_log_folder)
         executor.update_parameters(
-            timeout_min=720,
+            timeout_min=1200,
             constraint="volta",
             slurm_partition="pixar",
             gpus_per_node=1,
@@ -144,7 +163,7 @@ def train_model(config: TrainConfig):
         )
         job_id = executor.submit(run_train, config)
         print(job_id.job_id)
-        _ = job_id.result()
+        # _ = job_id.result()
     else:
         run_train(config)
 

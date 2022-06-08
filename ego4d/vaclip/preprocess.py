@@ -56,7 +56,6 @@ def filter_narrations(narrations):
         for vid in meta["videos"]
         if len({vid["split_em"], vid["split_fho"], vid["split_av"]} & {"val", "test"}) > 0
     ]
-    breakpoint()
 
     num_val_filtered = 0
     num_txt_filtered = 0
@@ -75,7 +74,6 @@ def filter_narrations(narrations):
     Txt Filtered = {num_txt_filtered} = {num_txt_filtered/len(narrations):.2%}
 
     """)
-    breakpoint()
     return ret
 
 
@@ -134,9 +132,84 @@ def create_executor(config, num_batches: int):
     return executor
 
 
+def _save_batch(val, to_save_root):
+    idx, batch = val
+    to_save_path = os.path.join(to_save_root, f"{idx}.pt")
+    torch.save(batch, to_save_path)
+    return idx, len(batch), to_save_path
+
+
+def _segment_ego_features(video_uids, config: TrainConfig):
+    ret = {}
+    with Pool(512) as pool:
+        for uid in tqdm(video_uids, desc="video_uid", leave=True):
+            feature_path = os.path.join(config.input_config.feature_path, f"{uid}.pt")
+            fv = torch.load(feature_path)
+            nf = fv.shape[0]
+
+            res = []
+            batches = list(enumerate(batch_it(fv, config.ego_pre_feature_config.num_features_per_file)))
+
+            to_save_root = os.path.join(config.ego_pre_feature_config.pre_root_dir, f"{uid}")
+            os.makedirs(to_save_root, exist_ok=True)
+
+            map_fn = functools.partial(_save_batch, to_save_root=to_save_root)
+            cum_nf = 0
+            # for idx, batch_len, to_save_path in tqdm(pool.imap(map_fn, batches), total=len(batches)):
+            for idx, batch_len, to_save_path in pool.imap(map_fn, batches):
+                res.append((idx, to_save_path))
+                cum_nf += batch_len
+            res.sort(key=lambda x: x[0])
+            assert cum_nf == nf
+
+            ret[uid] = {
+                "idx_path_pairs": res,
+                "num_features": nf,
+            }
+
+    return ret
+
+
 def preprocess_ego_features(config: TrainConfig):
-    # TODO: partition by time
-    pass
+    narr_meta_path = os.path.join(config.ego_pre_config.pre_root_dir, config.ego_pre_config.metadata_out_path)
+    narr_meta = torch.load(narr_meta_path)
+    video_uids = {x["uid"] for x in narr_meta}
+    video_uids = list(video_uids)
+    video_uids = video_uids[0:100]
+    random.shuffle(video_uids)
+
+    print("===")
+    print(config.ego_pre_feature_config.pre_root_dir, flush=True)
+    print()
+    print()
+    print()
+
+    all_feature_paths = {}
+    map_fn = functools.partial(_segment_ego_features, config=config)
+
+    all_feature_paths = {}
+    if config.run_locally:
+        all_feature_paths = map_fn(video_uids)
+    else:
+        batches = batch_it(video_uids, 350)
+        print(f"To schedule {len(batches)} batches across {config.ego_pre_feature_config.slurm_array_parallelism} machines")
+        cont = input("Continue? [y/N]: ")
+        if cont != "y":
+            print("Exiting...")
+            sys.exit(0)
+
+        executor = create_executor(config.ego_pre_feature_config, len(batches))
+        jobs = executor.map_array(
+            functools.partial(map_fn, config=config),
+            batches,
+        )
+        for job in tqdm(jobs):
+            val = job.result()
+            for k, v in val.items():
+                all_feature_paths[k] = v
+
+    meta_path = os.path.join(config.ego_pre_feature_config.pre_root_dir, config.ego_pre_feature_config.meta_path)
+    torch.save(all_feature_paths, meta_path)
 
 
 def preprocess_ego_narrations(config: TrainConfig):
@@ -230,7 +303,7 @@ def preprocess_k400_data(config: TrainConfig):
     ]
     video_path_label_pairs = [
         (
-            f"/datasets01/kinetics/092121/400/val_288px/{row.youtube_id}_{row.time_start:06d}_{row.time_end:06d}.mp4", 
+            f"/datasets01/kinetics/092121/400/val_288px/{row.youtube_id}_{row.time_start:06d}_{row.time_end:06d}.mp4",
             row.label,
         )
         for row in val_set.itertuples()
@@ -240,29 +313,29 @@ def preprocess_k400_data(config: TrainConfig):
     video_path_label_pairs = [val for val in video_path_label_pairs if os.path.exists(val[0])]
     print(f"{old_len} -> {len(video_path_label_pairs)} examples", flush=True)
 
-    # feature_extract_config = OmegaConf.load(config.k400_pre_config.feature_extract_config_path)
-    # map_fn = functools.partial(
-    #     _preprocess_k400_data,
-    #     feature_extract_config=feature_extract_config,
-    #     viz_dir=viz_dir
-    # )
-    # batches = batch_it(video_path_label_pairs, batch_size=config.k400_pre_config.num_labels_per_machine)
+    feature_extract_config = OmegaConf.load(config.k400_pre_config.feature_extract_config_path)
+    map_fn = functools.partial(
+        _preprocess_k400_data,
+        feature_extract_config=feature_extract_config,
+        viz_dir=viz_dir
+    )
+    batches = batch_it(video_path_label_pairs, batch_size=config.k400_pre_config.num_labels_per_machine)
 
-    # if config.run_locally:
-    #     for batch in batches:
-    #         map_fn(batch)
-    # else:
-    #     print(f"To schedule {len(batches)} batches across {config.k400_pre_config.slurm_array_parallelism} machines")
-    #     cont = input("Continue? [y/N]: ")
-    #     if cont != "y":
-    #         print("Exiting...")
-    #         sys.exit(0)
-    #     executor = create_executor(config.k400_pre_config, len(batches))
-    #     jobs = executor.map_array(map_fn, batches)
+    if config.run_locally:
+        for batch in batches:
+            map_fn(batch)
+    else:
+        print(f"To schedule {len(batches)} batches across {config.k400_pre_config.slurm_array_parallelism} machines")
+        cont = input("Continue? [y/N]: ")
+        if cont != "y":
+            print("Exiting...")
+            sys.exit(0)
+        executor = create_executor(config.k400_pre_config, len(batches))
+        jobs = executor.map_array(map_fn, batches)
 
-    #     # wait for the results
-    #     for job in tqdm(jobs):
-    #         _ = job.result()
+        # wait for the results
+        for job in tqdm(jobs):
+            _ = job.result()
 
     # sentences
     print("Processing labels as sentences", flush=True)
@@ -274,10 +347,7 @@ def preprocess_k400_data(config: TrainConfig):
     }
     model = SentenceTransformer(config.ego_pre_config.st_model_name)
     for idx, (sent, label_name) in tqdm(enumerate(zip(sentences, label_names)), total=len(sentences)):
-        try:
-            assert label_to_idx[label_name] == idx
-        except:
-            breakpoint()
+        assert label_to_idx[label_name] == idx
         fv = model.encode(sent, show_progress_bar=False)
         meta["label_text"].append(sent)
         meta["label_fv"].append(fv)
@@ -286,10 +356,23 @@ def preprocess_k400_data(config: TrainConfig):
     torch.save(meta, out_meta_path)
 
 
+def preprocess_cc(config: TrainConfig):
+    pass
+
+
+def preprocess_imagenet(config: TrainConfig):
+    pass
+
+
 @hydra.main(config_path="configs", config_name=None)
 def preprocess(config: TrainConfig):
+    # import IPython
+    # IPython.embed()
+
     if config.preprocess_mode == "ego":
         preprocess_ego_narrations(config)
+    elif config.preprocess_mode == "ego_features":
+        preprocess_ego_features(config)
     elif config.preprocess_mode == "k400":
         preprocess_k400_data(config)
 

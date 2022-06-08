@@ -37,6 +37,20 @@ class K400PreprocessConfig:
 
 
 @dataclass
+class EgoPreprocessFeatureConfig:
+    pre_root_dir: str
+    meta_path: str
+    num_features_per_file: int
+    slurm_log_folder: str
+    timeout_min: float
+    constraint: str
+    slurm_partition: str
+    slurm_array_parallelism: int
+    gpus_per_node: int
+    cpus_per_task: int
+
+
+@dataclass
 class EgoPreprocessConfig:
     narration_json_path: str
     num_workers: int
@@ -59,6 +73,7 @@ class TrainConfig:
     input_config: InputConfig
     model_config: ModelConfig
     ego_pre_config: EgoPreprocessConfig
+    ego_pre_feature_config: EgoPreprocessFeatureConfig
     k400_pre_config: K400PreprocessConfig
 
     batch_size: int
