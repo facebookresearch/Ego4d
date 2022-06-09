@@ -38,16 +38,7 @@ class K400PreprocessConfig:
 
 @dataclass
 class EgoPreprocessFeatureConfig:
-    pre_root_dir: str
-    meta_path: str
-    num_features_per_file: int
-    slurm_log_folder: str
-    timeout_min: float
-    constraint: str
-    slurm_partition: str
-    slurm_array_parallelism: int
-    gpus_per_node: int
-    cpus_per_task: int
+    hdf5_path: str
 
 
 @dataclass

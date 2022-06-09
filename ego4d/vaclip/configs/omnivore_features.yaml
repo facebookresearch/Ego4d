@@ -24,17 +24,7 @@ k400_pre_config:
   gpus_per_node: 1
   cpus_per_task: 10
 ego_pre_feature_config:
-  pre_root_dir: "/checkpoint/miguelmartin/vaclip/features/"
-  meta_path: "meta.pt"
-  features_per_machine: 200
-  num_features_per_file: 50
-  slurm_log_folder: "slurm_log"
-  timeout_min: 120
-  constraint: "volta"
-  slurm_partition: "learnfair"
-  slurm_array_parallelism: 25
-  gpus_per_node: 1
-  cpus_per_task: 10
+  hdf5_path: "/checkpoint/miguelmartin/vaclip/features.hdf5"
 ego_pre_config:
   narration_json_path: "/datasets01/ego4d_track2/v1/annotations/narration.json"
   st_model_name: "all-mpnet-base-v2"

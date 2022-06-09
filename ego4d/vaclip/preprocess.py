@@ -10,6 +10,7 @@ from typing import List, Any
 from multiprocessing import Pool
 from pathlib import Path
 
+import h5py
 import pandas as pd
 import torch
 import hydra
@@ -132,40 +133,8 @@ def create_executor(config, num_batches: int):
     return executor
 
 
-def _save_batch(val, to_save_root):
-    idx, batch = val
-    to_save_path = os.path.join(to_save_root, f"{idx}.pt")
-    torch.save(batch, to_save_path)
-    return idx, len(batch), to_save_path
-
-
 def _segment_ego_features(video_uids, config: TrainConfig):
     ret = {}
-    with Pool(512) as pool:
-        for uid in tqdm(video_uids, desc="video_uid", leave=True):
-            feature_path = os.path.join(config.input_config.feature_path, f"{uid}.pt")
-            fv = torch.load(feature_path)
-            nf = fv.shape[0]
-
-            res = []
-            batches = list(enumerate(batch_it(fv, config.ego_pre_feature_config.num_features_per_file)))
-
-            to_save_root = os.path.join(config.ego_pre_feature_config.pre_root_dir, f"{uid}")
-            os.makedirs(to_save_root, exist_ok=True)
-
-            map_fn = functools.partial(_save_batch, to_save_root=to_save_root)
-            cum_nf = 0
-            # for idx, batch_len, to_save_path in tqdm(pool.imap(map_fn, batches), total=len(batches)):
-            for idx, batch_len, to_save_path in pool.imap(map_fn, batches):
-                res.append((idx, to_save_path))
-                cum_nf += batch_len
-            res.sort(key=lambda x: x[0])
-            assert cum_nf == nf
-
-            ret[uid] = {
-                "idx_path_pairs": res,
-                "num_features": nf,
-            }
 
     return ret
 
@@ -175,41 +144,15 @@ def preprocess_ego_features(config: TrainConfig):
     narr_meta = torch.load(narr_meta_path)
     video_uids = {x["uid"] for x in narr_meta}
     video_uids = list(video_uids)
-    video_uids = video_uids[0:100]
-    random.shuffle(video_uids)
 
-    print("===")
-    print(config.ego_pre_feature_config.pre_root_dir, flush=True)
-    print()
-    print()
-    print()
-
-    all_feature_paths = {}
-    map_fn = functools.partial(_segment_ego_features, config=config)
-
-    all_feature_paths = {}
-    if config.run_locally:
-        all_feature_paths = map_fn(video_uids)
-    else:
-        batches = batch_it(video_uids, 350)
-        print(f"To schedule {len(batches)} batches across {config.ego_pre_feature_config.slurm_array_parallelism} machines")
-        cont = input("Continue? [y/N]: ")
-        if cont != "y":
-            print("Exiting...")
-            sys.exit(0)
-
-        executor = create_executor(config.ego_pre_feature_config, len(batches))
-        jobs = executor.map_array(
-            functools.partial(map_fn, config=config),
-            batches,
-        )
-        for job in tqdm(jobs):
-            val = job.result()
-            for k, v in val.items():
-                all_feature_paths[k] = v
-
-    meta_path = os.path.join(config.ego_pre_feature_config.pre_root_dir, config.ego_pre_feature_config.meta_path)
-    torch.save(all_feature_paths, meta_path)
+    # out_path = os.path.join(config.ego_pre_feature_config.pre_root_dir, config.ego_pre_feature_config.meta_path)
+    out_path = config.ego_pre_feature_config.hdf5_path
+    print("=>", out_path, flush=True)
+    with h5py.File(out_path, "w") as out_f:
+        for uid in tqdm(video_uids, desc="video_uid", leave=True):
+            feature_path = os.path.join(config.input_config.feature_path, f"{uid}.pt")
+            fv = torch.load(feature_path)
+            out_f.create_dataset(uid, data=fv.numpy())
 
 
 def preprocess_ego_narrations(config: TrainConfig):
