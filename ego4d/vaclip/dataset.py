@@ -2,7 +2,7 @@ import time
 import json
 import os
 import math
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from collections import OrderedDict
 from pathlib import Path
 
@@ -39,15 +39,68 @@ def get_start_end_idx(t1, t2, feature_per_sec, nf):
     return x1, x2 + 1
 
 
+# TODO: convert to hdf5
+class EgoCharadesDset(torch.utils.data.Dataset):
+    def __init__(self,
+        config: TrainConfig,
+        use_ego_sent: Optional[bool],
+        ego_only: Optional[bool],
+    ):
+        super().__init__()
+
+        # TODO: configure
+        self.ego_only = ego_only
+        val_set_path = "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo/CharadesEgo_v1_test.csv"
+        val_df = pd.read_csv(val_set_path)
+
+        if self.ego_only is not None:
+            if self.ego_only:
+                val_df = val_df[val_df.egocentric == "Yes"]
+            else:
+                val_df = val_df[val_df.egocentric == "No"]
+
+        val_df = val_df[~pd.isnull(val_df.actions)]
+
+        data_path = config.pre_config.ego_charade.out_path
+        self.data = h5py.File(data_path)
+        self.id_classes_pairs = []
+        for row in val_df.itertuples():
+            clazzes = []
+            for x in row.actions.split(";"):
+                clazzes.append(int(x.split(" ")[0].split("c")[1]))
+            self.id_classes_pairs.append((row.id, clazzes))
+
+        assert len(self.id_classes_pairs) == len(val_df)
+        self.sent = torch.load(config.pre_config.ego_charade.out_label_path)
+        if use_ego_sent is not None:
+            key = "sent_ego_fv" if use_ego_sent else "sent_non_ego_fv"
+        else:
+            key = "labels"
+        self.sent_ordered = torch.stack([torch.tensor(fv) for fv in self.sent[key]])
+        self.num_clazzes = len(self.sent_ordered)
+
+    def __len__(self):
+        return len(self.id_classes_pairs)
+
+    def __getitem__(self, idx):
+        uid, classes = self.id_classes_pairs[idx]
+        feat = torch.tensor(self.data[uid][0:])
+        gt = torch.zeros(self.num_clazzes)
+        gt[classes] = 1
+        return feat, gt
+
+
+# TODO: convert to hdf5
 class KineticsDset(torch.utils.data.Dataset):
     def __init__(self, config: TrainConfig):
         super().__init__()
         self.config = config
 
-        root = os.path.join(config.k400_pre_config.pre_root_dir, config.k400_pre_config.set_to_use)
-        viz_dir = os.path.join(root, config.k400_pre_config.viz_feature_dir)
+        k400_config = config.pre_config.k400
+        root = os.path.join(k400_config.pre_root_dir, k400_config.set_to_use)
+        viz_dir = os.path.join(root, k400_config.viz_feature_dir)
 
-        sent_meta_path = os.path.join(root, config.k400_pre_config.metadata_out_path)
+        sent_meta_path = os.path.join(root, k400_config.metadata_out_path)
         self.sent_features = torch.load(sent_meta_path)
 
         self.videos = [
@@ -64,7 +117,7 @@ class KineticsDset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         vf = torch.load(self.videos[idx])
         label_name = vf["label"]
-        feat = vf["feature"]
+        feat = vf["all_features"]
         return feat, self.label_name_to_idx[label_name]
 
 
@@ -76,16 +129,16 @@ class Ego4DVaClip(torch.utils.data.Dataset):
         super().__init__()
 
         self.narr_meta_path = os.path.join(
-            config.ego_pre_config.pre_root_dir,
-            config.ego_pre_config.metadata_out_path
+            config.pre_config.ego4d_narr.pre_root_dir,
+            config.pre_config.ego4d_narr.metadata_out_path
         )
         self.narr_meta = torch.load(self.narr_meta_path)
         self.config = config
         self.narr_feature_dir = os.path.join(
-            config.ego_pre_config.pre_root_dir,
-            config.ego_pre_config.narration_out_path
+            config.pre_config.ego4d_narr.pre_root_dir,
+            config.pre_config.ego4d_narr.narration_out_path
         )
-        self.features = h5py.File(config.ego_pre_feature_config.hdf5_path)
+        self.features = h5py.File(config.pre_config.ego4d_features.hdf5_path)
         uids = set(meta["uid"] for meta in self.narr_meta)
         assert len(uids - set(self.features.keys())) == 0, "not all features cached"
         self.narr_meta = [meta for meta in self.narr_meta if meta["uid"] in uids]
@@ -119,7 +172,8 @@ class Ego4DVaClip(torch.utils.data.Dataset):
 
         return {
             "video": v_feat,
-            "text": txt_feat,
+            "text": txt_feat["fv"],
+            "text_no_tag": txt_feat["fv_no_tag"],
             "raw_text": meta["post_txt"],
         }
 

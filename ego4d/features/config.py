@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
+import numpy as np
 import pandas as pd
 from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf

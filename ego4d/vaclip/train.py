@@ -1,14 +1,23 @@
 import os
 import gc
+import copy
 import torch
 import math
 import hydra
 import time
 import submitit
 
-from ego4d.vaclip.val import eval_classification
+from ego4d.vaclip.val import (
+    eval_classification,
+    eval_multi_class_classification,
+)
 from ego4d.vaclip.config import TrainConfig
-from ego4d.vaclip.dataset import Ego4DVaClip, KineticsDset, create_data_loader
+from ego4d.vaclip.dataset import (
+    Ego4DVaClip,
+    KineticsDset,
+    EgoCharadesDset,
+    create_data_loader,
+)
 from ego4d.vaclip.model import EgoLangaugeAssociation
 
 from pytorch_lightning.lite import LightningLite
@@ -25,12 +34,26 @@ from tqdm.auto import tqdm
 
 from torch.utils.tensorboard import SummaryWriter
 
+def my_nce_loss(x, gt):
+    x = vid2txt
+    gt = normal_labels
+    # num = torch.exp(x[gt == 1])
+    # denom = torch.exp(x)
+    # denom = torch.sum(denom, dim=-1)
+    torch.log(F.softmax(x))
+    # (num / denom).shape
+    # (num / denom)[0].sum()
+    torch.log(num / denom).mean()
+    return torch.mean(torch.log(num / denom))
+
 
 
 class Lite(LightningLite):
     def my_setup(self, config: TrainConfig):
         self.model = EgoLangaugeAssociation(config.model_config)
         self.config = config
+        self.val_config = copy.deepcopy(config)
+        self.val_config.batch_size = 1
 
     def run(self):
         named_parameters = list(self.model.named_parameters())
@@ -59,7 +82,7 @@ class Lite(LightningLite):
         dset = Ego4DVaClip(config=self.config)
         dataloader = create_data_loader(dset, self.config)
         dataloader = self.setup_dataloaders(dataloader)
-        clip_loss = ClipLoss()
+        # clip_loss = ClipLoss()
 
         log_dir = os.path.join(self.config.tb_log_dir, self.config.tb_log_name)
         os.makedirs(log_dir, exist_ok=True)
@@ -69,8 +92,8 @@ class Lite(LightningLite):
         step = 0
         num_examples = 0
 
-        max_steps = len(dataloader) * self.config.num_epochs
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=1e-7, last_epoch=-1)
+        max_steps = len(dataloader) // 4
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=0, last_epoch=-1)
 
         for epoch in range(self.config.num_epochs):
             print("Epoch:", epoch)
@@ -78,23 +101,27 @@ class Lite(LightningLite):
                 optimizer.zero_grad()
                 v_f, t_f, logit_scale = self.model(batch)
 
-                # coin flip loss
-                # if True:
-                #     with torch.no_grad():
-                #         txt = batch["text"]
-                #         device = txt.device
-                #         simm = txt @ txt.t()
-                #         coin_flip = torch.rand(simm.shape[0], simm.shape[0], device=device)
-                #         # pos_ex = (simm >= coin_flip) & (simm >= 0.7)
-                #         pos_ex = (simm >= coin_flip) & (simm > 0.5)
-                #         new_label = torch.ones_like(coin_flip, device=device) * pos_ex
-                #         pos_ex_prop = new_label.sum() / (new_label.shape[0]*new_label.shape[0])
+                txt = batch["text_no_tag"]
 
-                #         # assign clip loss
-                #         without_simm = clip_loss(v_f, t_f, logit_scale)
-                #         clip_loss.labels[device] = new_label
+                device = txt.device
+                with torch.no_grad():
+                    if config.use_soft_loss:
+                        simm = txt @ txt.t()
+                        simm = (simm + 1) / 2
+                        # TODO: parameterize the threshold?
+                        label = torch.ones_like(simm, dtype=torch.float)
+                        label[simm < 0.80] = 0.0
+                        pos_ex_prop = label.sum() / (label.shape[0]*label.shape[0])
+                    else:
+                        label = torch.arange(txt.shape[0], device=device)
 
-                loss = clip_loss(v_f, t_f, logit_scale)
+                vid2txt = logit_scale * v_f @ t_f.T
+                txt2vid = logit_scale * t_f @ v_f.T
+
+                loss = (
+                    F.cross_entropy(vid2txt, label) +
+                    F.cross_entropy(txt2vid, label)
+                ) / 2.0
 
                 self.backward(loss)  # instead of loss.backward()
                 optimizer.step()
@@ -109,8 +136,7 @@ class Lite(LightningLite):
                 writer.add_scalar("Loss/train", loss.detach().cpu(), num_examples)
                 writer.add_scalar("logit_scale", model.module.logit_scale.detach().cpu(), num_examples)
                 writer.add_scalar("lr", optimizer.param_groups[0]['lr'], num_examples)
-                # writer.add_scalar("pos_ex_prop", pos_ex_prop, num_examples)
-                # writer.add_scalar("without_simm", without_simm, num_examples)
+                writer.add_scalar("pos_ex_prop", pos_ex_prop, num_examples)
                 writer.flush()
 
                 if step % 100 == 0:
@@ -119,19 +145,32 @@ class Lite(LightningLite):
                 if step % self.config.eval_per_iter == 0:
                     print("Loss=", loss, flush=True)
                     print(f"Eval {step} - {self.config.eval_per_iter}", flush=True)
-                    acc1, acc5 = self.run_eval()
-                    print(f"acc1={acc1}, acc5={acc5}")
-                    writer.add_scalar("Val/Acc 1", acc1, num_examples)
-                    writer.add_scalar("Val/Acc 5", acc5, num_examples)
+                    kv_pairs = self.run_eval()
+                    print(kv_pairs)
+                    for k, v in kv_pairs.items():
+                        writer.add_scalar(k, v, num_examples)
 
                 step += 1
 
+    def _run_ego_charades(self, ego_only=True, use_ego_sent=True):
+        dset = EgoCharadesDset(self.config, use_ego_sent=use_ego_sent, ego_only=ego_only)
+        val_loader = create_data_loader(dset, self.val_config)
+        val_loader = self.setup_dataloaders(val_loader)
 
-    def run_eval(self):
-        self.model.eval()
+        classifier = F.normalize(
+            self.model.text_proj(dset.sent_ordered.to(self.device)).t(),
+            dim=-1,
+        )
+        res = eval_multi_class_classification(self.model.visual_proj, classifier, val_loader)
+        ret = {}
+        for k, v in res.items():
+            char_name = f"Char_{ego_only:d}Ego_{use_ego_sent:d}EgoSent"
+            ret[f"Val/{char_name}/{k}"] = v
+        return ret
 
+    def _run_eval_kinetics(self):
         dset = KineticsDset(self.config)
-        val_loader = create_data_loader(dset, self.config)
+        val_loader = create_data_loader(dset, self.val_config)
         val_loader = self.setup_dataloaders(val_loader)
 
         classifier = F.normalize(
@@ -139,9 +178,18 @@ class Lite(LightningLite):
             dim=-1,
         )
         res = eval_classification(self.model.visual_proj, classifier, val_loader)
+        return {
+            "Val/Kinetics/acc1": res["acc1"],
+            "Val/Kinetics/acc5": res["acc5"],
+        }
 
+    def run_eval(self):
+        self.model.eval()
+        result = {}
+        result.update(self._run_ego_charades())
+        result.update(self._run_eval_kinetics())
         self.model.train()
-        return res["acc1"], res["acc5"]
+        return result
 
 
 def run_train(config: TrainConfig):

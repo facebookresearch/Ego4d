@@ -42,7 +42,7 @@ class EgoPreprocessFeatureConfig:
 
 
 @dataclass
-class EgoPreprocessConfig:
+class EgoPreprocessNarrConfig:
     narration_json_path: str
     num_workers: int
     st_model_name: str
@@ -51,6 +51,7 @@ class EgoPreprocessConfig:
     metadata_out_path: str
     narration_out_path: str
 
+    slurm_log_folder: str
     timeout_min: int
     constraint: str
     slurm_partition: str
@@ -60,12 +61,34 @@ class EgoPreprocessConfig:
 
 
 @dataclass
+class EgoCharadePreprocessConfig:
+    out_path: str
+    out_label_path: str
+
+    slurm_log_folder: str
+    timeout_min: int
+    constraint: str
+    slurm_partition: str
+    slurm_array_parallelism: int
+    gpus_per_node: int
+    cpus_per_task: int
+
+    num_vids_per_machine: int
+
+
+@dataclass
+class PreprocessConfig:
+    ego4d_narr: EgoPreprocessNarrConfig
+    ego4d_features: EgoPreprocessFeatureConfig
+    k400: K400PreprocessConfig
+    ego_charade: EgoCharadePreprocessConfig
+
+
+@dataclass
 class TrainConfig:
     input_config: InputConfig
     model_config: ModelConfig
-    ego_pre_config: EgoPreprocessConfig
-    ego_pre_feature_config: EgoPreprocessFeatureConfig
-    k400_pre_config: K400PreprocessConfig
+    pre_config: PreprocessConfig
 
     batch_size: int
     num_workers: int
@@ -89,3 +112,5 @@ class TrainConfig:
     eval_per_iter: int
 
     preprocess_mode: str
+
+    use_soft_loss: bool
