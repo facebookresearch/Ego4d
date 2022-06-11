@@ -18,25 +18,28 @@ class ResBlock(nn.Module):
         x_prime = self.x2(x_prime)
         return x_prime + x
 
+def _get_layers_proj_dims(initial_dim, proj_dims, final_proj_size):
+    assert (np.array(proj_dims) == proj_dims[0]).all()
+    result = [
+        nn.Linear(initial_dim, proj_dims[0]),
+    ]
+    for prev, nxt in zip(proj_dims[0:-1], proj_dims[:-1]):
+        result += [
+            nn.ReLU(True),
+            ResBlock(prev, nxt),
+            # nn.Dropout(0.25),
+        ]
+    result += [
+        nn.ReLU(True),
+        nn.Linear(proj_dims[-1], final_proj_size)
+    ]
+    return result
+
 
 def _get_layers(initial_dim, config):
     if len(config.proj_dims) == 1:
         return [nn.ReLU(True), nn.Linear(initial_dim, config.final_proj_size)]
-
-    assert (np.array(config.proj_dims) == config.proj_dims[0]).all()
-    result = [
-        nn.Linear(initial_dim, config.proj_dims[0]),
-    ]
-    for prev, nxt in zip(config.proj_dims[0:-1], config.proj_dims[:-1]):
-        result += [
-            nn.ReLU(True),
-            ResBlock(prev, nxt),
-        ]
-    result += [
-        nn.ReLU(True),
-        nn.Linear(config.proj_dims[-1], config.final_proj_size)
-    ]
-    return result
+    return _get_layers_proj_dims(initial_dim, config.proj_dims, config.final_proj_size)
 
 
 class EgoLangaugeAssociation(nn.Module):

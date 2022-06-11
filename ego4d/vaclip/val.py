@@ -55,11 +55,12 @@ def eval_multi_class_classification(model, classifier, loader, device=None):
     }
 
 
-def eval_classification(model, classifier, loader, device=None):
+def eval_classification(model, classifier, loader, device=None, avg_logits=False):
     with torch.no_grad():
         acc1, acc5, n = 0.0, 0.0, 0
         for x, target in tqdm(loader):
-            assert x.shape[0] == 1
+            if avg_logits:
+                assert x.shape[0] == 1
 
             if device is not None:
                 x = x.to(device)
@@ -74,7 +75,10 @@ def eval_classification(model, classifier, loader, device=None):
             else:
                 logits = classifier(v)
 
-            a1, a5 = accuracy(logits.mean(1), target, topk=(1, 5))
+            if avg_logits:
+                a1, a5 = accuracy(logits.mean(1), target, topk=(1, 5))
+            else:
+                a1, a5 = accuracy(logits, target, topk=(1, 5))
 
             # This is to test correctness
             # hot1 = torch.zeros(x.shape[0], 400)

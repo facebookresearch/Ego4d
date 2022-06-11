@@ -1,0 +1,15 @@
+run_locally: true
+batch_size: 1024
+prefetch_factor: 2
+num_epochs: 200
+num_workers: 10
+wd: 0.002
+lr: 0.001
+beta1: 0.9
+beta2: 0.98
+eps: 1.0e-6
+feature_path: /checkpoint/miguelmartin/vaclip/features.hdf5
+accelerator: "gpu"
+devices: 1
+tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_vaclip/runs"
+tb_log_name: "feature_pred"

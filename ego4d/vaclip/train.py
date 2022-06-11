@@ -34,19 +34,6 @@ from tqdm.auto import tqdm
 
 from torch.utils.tensorboard import SummaryWriter
 
-def my_nce_loss(x, gt):
-    x = vid2txt
-    gt = normal_labels
-    # num = torch.exp(x[gt == 1])
-    # denom = torch.exp(x)
-    # denom = torch.sum(denom, dim=-1)
-    torch.log(F.softmax(x))
-    # (num / denom).shape
-    # (num / denom)[0].sum()
-    torch.log(num / denom).mean()
-    return torch.mean(torch.log(num / denom))
-
-
 
 class Lite(LightningLite):
     def my_setup(self, config: TrainConfig):
@@ -54,6 +41,9 @@ class Lite(LightningLite):
         self.config = config
         self.val_config = copy.deepcopy(config)
         self.val_config.batch_size = 1
+
+        self.val_bs_config = copy.deepcopy(config)
+        self.val_bs_config.batch_size = 128
 
     def run(self):
         named_parameters = list(self.model.named_parameters())
@@ -91,7 +81,7 @@ class Lite(LightningLite):
         step = 0
         num_examples = 0
 
-        max_steps = len(dataloader) // 4
+        max_steps = 2*len(dataloader)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=0, last_epoch=-1)
 
         # clip_loss = ClipLoss()
@@ -203,14 +193,14 @@ class Lite(LightningLite):
 
     def _run_eval_kinetics(self):
         dset = KineticsDset(self.config)
-        val_loader = create_data_loader(dset, self.val_config)
+        val_loader = create_data_loader(dset, self.val_bs_config)
         val_loader = self.setup_dataloaders(val_loader)
 
         classifier = F.normalize(
             self.model.text_proj(dset.sent_ordered.to(self.device)).t(),
             dim=-1,
         )
-        res = eval_classification(self.model.visual_proj, classifier, val_loader)
+        res = eval_classification(self.model.visual_proj, classifier, val_loader, avg_logits=False)
         return {
             "Val/Kinetics/acc1": res["acc1"],
             "Val/Kinetics/acc5": res["acc5"],

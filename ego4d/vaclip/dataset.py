@@ -117,7 +117,7 @@ class KineticsDset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         vf = torch.load(self.videos[idx])
         label_name = vf["label"]
-        feat = vf["all_features"]
+        feat = vf["all_features"].mean(0)
         return feat, self.label_name_to_idx[label_name]
 
 
@@ -143,6 +143,21 @@ class Ego4DVaClip(torch.utils.data.Dataset):
         assert len(uids - set(self.features.keys())) == 0, "not all features cached"
         self.narr_meta = [meta for meta in self.narr_meta if meta["uid"] in uids]
 
+        t_by_uid = defaultdict(list)
+        for x in self.narr_meta:
+            t_by_uid[x["uid"]].append(x["ts"])
+
+        self.betas = {
+            uid: torch.mean(torch.tensor(v)[1:] - torch.tensor(v)[0:-1])
+            for uid, v in t_by_uid.items()
+        }
+        self.alpha = torch.mean(torch.stack(list(self.betas.values())))
+
+        old_len = len(self.narr_meta)
+        self.narr_meta = [x for x in self.narr_meta if self.betas[x["uid"]] >= 1e-1]
+        print(f"{old_len} -> {len(self.narr_meta)}")
+
+
     def __len__(self):
         return len(self.narr_meta)
 
@@ -156,7 +171,8 @@ class Ego4DVaClip(torch.utils.data.Dataset):
         txt_feature_path = os.path.join(self.narr_feature_dir, uid, f"{narr_idx}.pt")
         txt_feat = torch.load(txt_feature_path)
 
-        offset = self.config.input_config.narration_width_sample_sec
+        # offset = self.config.input_config.narration_width_sample_sec
+        offset = self.betas[uid] / (2*self.alpha)
         t1 = ts - offset
         t2 = ts + offset
 
@@ -184,6 +200,6 @@ def create_data_loader(dset, config: TrainConfig):
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         prefetch_factor=config.prefetch_factor,
-        shuffle=False,
-        # shuffle=True,
+        # shuffle=False,
+        shuffle=True,
     )

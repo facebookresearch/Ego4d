@@ -70,8 +70,8 @@ wd: 0.1
 eps: 1.0e-6
 run_locally: false
 preprocess_mode: "ego_charade"
-eval_per_iter: 2000
-eval_init: false
+eval_per_iter: 500
+eval_init: true
 use_soft_loss: false
 use_bce: false
 norm_logits: false
