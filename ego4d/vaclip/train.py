@@ -82,7 +82,6 @@ class Lite(LightningLite):
         dset = Ego4DVaClip(config=self.config)
         dataloader = create_data_loader(dset, self.config)
         dataloader = self.setup_dataloaders(dataloader)
-        # clip_loss = ClipLoss()
 
         log_dir = os.path.join(self.config.tb_log_dir, self.config.tb_log_name)
         os.makedirs(log_dir, exist_ok=True)
@@ -95,9 +94,23 @@ class Lite(LightningLite):
         max_steps = len(dataloader) // 4
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=0, last_epoch=-1)
 
+        # clip_loss = ClipLoss()
+        bce_loss = torch.nn.BCEWithLogitsLoss()
+
         for epoch in range(self.config.num_epochs):
             print("Epoch:", epoch)
             for batch in tqdm(dataloader, total=len(dataloader)):
+                if step % self.config.eval_per_iter == 0 and (step > 0 or self.config.eval_init):
+                    print()
+                    if step > 0:
+                        print("Loss=", loss.cpu().item(), flush=True)
+                    print(f"Eval {step} - {self.config.eval_per_iter}", flush=True)
+                    kv_pairs = self.run_eval()
+                    for k, v in kv_pairs.items():
+                        print(k, v)
+                        writer.add_scalar(k, v, num_examples)
+                    print()
+
                 optimizer.zero_grad()
                 v_f, t_f, logit_scale = self.model(batch)
 
@@ -105,23 +118,41 @@ class Lite(LightningLite):
 
                 device = txt.device
                 with torch.no_grad():
-                    if config.use_soft_loss:
+                    if self.config.use_soft_loss is not None:
                         simm = txt @ txt.t()
                         simm = (simm + 1) / 2
-                        # TODO: parameterize the threshold?
-                        label = torch.ones_like(simm, dtype=torch.float)
-                        label[simm < 0.80] = 0.0
+                        if self.config.use_soft_loss:
+                            label = simm
+                        else:
+                            label = torch.ones_like(simm, dtype=torch.float)
+                        # TODO: nn.Parameter for the threshold?
+                        label[simm < self.config.soft_loss_threshold] = 0.0
                         pos_ex_prop = label.sum() / (label.shape[0]*label.shape[0])
                     else:
                         label = torch.arange(txt.shape[0], device=device)
+                        pos_ex_prop = None
 
-                vid2txt = logit_scale * v_f @ t_f.T
-                txt2vid = logit_scale * t_f @ v_f.T
+                if self.config.norm_logits:
+                    v_f = F.normalize(v_f, dim=-1)
+                    t_f = F.normalize(t_f, dim=-1)
 
-                loss = (
-                    F.cross_entropy(vid2txt, label) +
-                    F.cross_entropy(txt2vid, label)
-                ) / 2.0
+                if self.config.use_logit_scale:
+                    vid2txt = logit_scale * v_f @ t_f.T
+                    txt2vid = logit_scale * t_f @ v_f.T
+                else:
+                    vid2txt = v_f @ t_f.T
+                    txt2vid = t_f @ v_f.T
+
+                if self.config.use_bce:
+                    loss = (
+                        bce_loss(vid2txt, label) +
+                        bce_loss(txt2vid, label)
+                    ) / 2.0
+                else:
+                    loss = (
+                        F.cross_entropy(vid2txt, label) +
+                        F.cross_entropy(txt2vid, label)
+                    ) / 2.0
 
                 self.backward(loss)  # instead of loss.backward()
                 optimizer.step()
@@ -136,19 +167,12 @@ class Lite(LightningLite):
                 writer.add_scalar("Loss/train", loss.detach().cpu(), num_examples)
                 writer.add_scalar("logit_scale", model.module.logit_scale.detach().cpu(), num_examples)
                 writer.add_scalar("lr", optimizer.param_groups[0]['lr'], num_examples)
-                writer.add_scalar("pos_ex_prop", pos_ex_prop, num_examples)
+                if pos_ex_prop is not None:
+                    writer.add_scalar("pos_ex_prop", pos_ex_prop, num_examples)
                 writer.flush()
 
                 if step % 100 == 0:
                     gc.collect()
-
-                if step % self.config.eval_per_iter == 0:
-                    print("Loss=", loss, flush=True)
-                    print(f"Eval {step} - {self.config.eval_per_iter}", flush=True)
-                    kv_pairs = self.run_eval()
-                    print(kv_pairs)
-                    for k, v in kv_pairs.items():
-                        writer.add_scalar(k, v, num_examples)
 
                 step += 1
 
@@ -164,7 +188,16 @@ class Lite(LightningLite):
         res = eval_multi_class_classification(self.model.visual_proj, classifier, val_loader)
         ret = {}
         for k, v in res.items():
-            char_name = f"Char_{ego_only:d}Ego_{use_ego_sent:d}EgoSent"
+            char_name = "Char_"
+            if ego_only is not None:
+                char_name += f"{ego_only:d}Ego_"
+            else:
+                char_name += "All_"
+
+            if use_ego_sent is not None:
+                char_name += f"{use_ego_sent:d}EgoSent"
+            else:
+                char_name += "Labels"
             ret[f"Val/{char_name}/{k}"] = v
         return ret
 
@@ -186,7 +219,12 @@ class Lite(LightningLite):
     def run_eval(self):
         self.model.eval()
         result = {}
-        result.update(self._run_ego_charades())
+        result.update(self._run_ego_charades(ego_only=None, use_ego_sent=None))
+        result.update(self._run_ego_charades(ego_only=None, use_ego_sent=True))
+        result.update(self._run_ego_charades(ego_only=False, use_ego_sent=None))
+        result.update(self._run_ego_charades(ego_only=True, use_ego_sent=None))
+        result.update(self._run_ego_charades(ego_only=True, use_ego_sent=False))
+        result.update(self._run_ego_charades(ego_only=True, use_ego_sent=True))
         result.update(self._run_eval_kinetics())
         self.model.train()
         return result
@@ -200,6 +238,7 @@ def run_train(config: TrainConfig):
 
 @hydra.main(config_path="configs", config_name=None)
 def train_model(config: TrainConfig):
+    print(config)
     if not config.run_locally:
         executor = submitit.AutoExecutor(folder=config.slurm_log_folder)
         executor.update_parameters(

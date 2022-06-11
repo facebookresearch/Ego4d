@@ -13,7 +13,7 @@ from ego4d.features.config import (
     load_model,
 )
 from ego4d.vaclip.dataset import KineticsDset, create_data_loader
-from ego4d.vaclip.utils import mAP 
+from ego4d.vaclip.utils import charades_map
 
 
 # taken from: https://github.com/mlfoundations/open_clip/blob/main/src/training/zero_shot.py#L29
@@ -48,10 +48,10 @@ def eval_multi_class_classification(model, classifier, loader, device=None):
             pred_arr.append(pred.squeeze().cpu())
             gt_arr.append(target.squeeze().cpu())
 
-    res = mAP(torch.stack(pred_arr).numpy(), torch.stack(gt_arr).numpy())
+    # res = mAP(torch.stack(pred_arr).numpy(), torch.stack(gt_arr).numpy())
+    res = charades_map(torch.stack(pred_arr).numpy(), torch.stack(gt_arr).numpy())
     return {
         "mAP": res[0] * 100,
-        "mAP_100": res[0],
     }
 
 

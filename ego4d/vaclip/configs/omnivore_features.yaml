@@ -56,12 +56,12 @@ pre_config:
     num_narrs_per_machine: 50000
 batch_size: 128
 num_workers: 10
-prefetch_factor: 3
-num_epochs: 10
+prefetch_factor: 4
+num_epochs: 200
 accelerator: "gpu"
 devices: 1
 tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_vaclip/runs"
-tb_log_name: "test_ego_charade"
+tb_log_name: "clip_loss"
 slurm_log_folder: "slurm"
 lr: 0.001
 beta1: 0.9
@@ -70,4 +70,10 @@ wd: 0.1
 eps: 1.0e-6
 run_locally: false
 preprocess_mode: "ego_charade"
-eval_per_iter: 1000
+eval_per_iter: 2000
+eval_init: false
+use_soft_loss: false
+use_bce: false
+norm_logits: false
+soft_loss_threshold: 0.8
+use_logit_scale: true

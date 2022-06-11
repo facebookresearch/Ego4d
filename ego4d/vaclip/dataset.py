@@ -184,5 +184,6 @@ def create_data_loader(dset, config: TrainConfig):
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         prefetch_factor=config.prefetch_factor,
-        shuffle=True,
+        shuffle=False,
+        # shuffle=True,
     )

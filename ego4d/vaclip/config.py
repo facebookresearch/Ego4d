@@ -110,7 +110,12 @@ class TrainConfig:
     eps: float
 
     eval_per_iter: int
+    eval_init: bool
 
     preprocess_mode: str
 
-    use_soft_loss: bool
+    use_soft_loss: Optional[bool]
+    soft_loss_threshold: float
+    use_bce: bool
+    use_logit_scale: bool
+    norm_logits: bool
