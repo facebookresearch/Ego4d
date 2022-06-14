@@ -77,6 +77,24 @@ class EgoCharadePreprocessConfig:
 
 
 @dataclass
+class CCPreprocessConfig:
+    hdf5_viz_path: str
+    hdf5_sent_path: str
+    batch_size: int
+    num_workers: int
+    prefetch_factor: int
+    imgs_per_gpu: int
+
+    slurm_log_folder: str
+    timeout_min: int
+    constraint: str
+    slurm_partition: str
+    slurm_array_parallelism: int
+    gpus_per_node: int
+    cpus_per_task: int
+
+
+@dataclass
 class PreprocessConfig:
     ego4d_narr: EgoPreprocessNarrConfig
     ego4d_features: EgoPreprocessFeatureConfig

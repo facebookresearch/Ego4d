@@ -27,7 +27,6 @@ def _get_layers_proj_dims(initial_dim, proj_dims, final_proj_size):
         result += [
             nn.ReLU(True),
             ResBlock(prev, nxt),
-            # nn.Dropout(0.25),
         ]
     result += [
         nn.ReLU(True),

@@ -17,10 +17,17 @@ import pandas as pd
 import torch
 import hydra
 import numpy as np
+import torchvision.transforms as T
+from PIL import Image
+
 from sentence_transformers import SentenceTransformer
+from ego4d.vaclip.dataset import (
+    create_data_loader,
+)
 from ego4d.vaclip.config import (
     EgoPreprocessFeatureConfig,
     TrainConfig,
+    CCPreprocessConfig,
     PreprocessConfig,
     EgoPreprocessNarrConfig,
     K400PreprocessConfig,
@@ -301,13 +308,13 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
         feature_extract_config=feature_extract_config,
         viz_dir=viz_dir
     )
-    batches = batch_it(video_path_label_pairs, batch_size=config.k400_pre_config.num_labels_per_machine)
+    batches = batch_it(video_path_label_pairs, batch_size=k_config.num_labels_per_machine)
 
     if config.run_locally:
         for batch in batches:
             map_fn(batch)
     else:
-        print(f"To schedule {len(batches)} batches across {config.k400_pre_config.slurm_array_parallelism} machines")
+        print(f"To schedule {len(batches)} batches across {k_config.slurm_array_parallelism} machines")
         cont = input("Continue? [y/N]: ")
         if cont != "y":
             print("Exiting...")
@@ -337,9 +344,6 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
     out_meta_path = os.path.join(pre_dir, k_config.metadata_out_path)
     torch.save(meta, out_meta_path)
 
-
-def preprocess_cc(config: TrainConfig):
-    pass
 
 
 def _preprocess_ego_charade(video_path_ids, feature_extract_config):
@@ -424,16 +428,125 @@ def preprocess_ego_charade(config: TrainConfig, char_config: EgoCharadePreproces
     #             out_f.create_dataset(uid, data=ret["all_fvs"].numpy())
 
 
+class ImagePathDset(torch.utils.data.Dataset):
+    def __init__(self, paths, transform):
+        super().__init__()
+        self.paths = paths
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return len(self.paths)
+    
+    def __getitem__(self, idx):
+        path = self.paths[idx]
+        img = Image.open(path).convert("RGB")
+        img = self.transform(img)
+        return {
+            "img": img,
+            "path": path,
+        }
+
+
+def _map_cc_batch(batch, cc: PreprocessConfig, feature_extract_config: FeatureExtractConfig):
+    paths = [x for x, _ in batch]
+    viz_model = load_model(feature_extract_config, patch_final_layer=True)
+
+    image_transform = T.Compose(
+        [
+            T.Resize(224),
+            T.CenterCrop(224),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            T.Lambda(lambda x: x.unsqueeze(0).permute(1, 0, 2, 3))
+        ]
+    )
+
+    dset = ImagePathDset(paths, image_transform)
+    dloader = create_data_loader(dset, cc, shuffle=False)
+    viz_model.eval()
+
+    ret = {}
+    with torch.no_grad():
+        for xx in tqdm(dloader, total=len(dloader)):
+            fv = viz_model(xx["img"].cuda())
+            for p, f in zip(xx["path"], fv.cpu().numpy()):
+                ret[p] = f
+    return ret
+
+
+def _map_cc_sent_batch(batch, config: TrainConfig, cc: PreprocessConfig):
+    paths = [x for x, _ in batch]
+    cap = [x for _, x in batch]
+
+    sent_model = SentenceTransformer(config.pre_config.ego4d_narr.st_model_name)
+    fvs = sent_model.encode(cap, device="cuda", show_progress_bar=True)
+    ret = {}
+    for p, f in zip(paths, fvs):
+        ret[p] = f
+    return ret
+
+def _get_fs(x):
+    return x, os.path.getsize(x)
+
+def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
+    in_path = "/checkpoint/miguelmartin/conceptial_captions/Train_GCC-training_output.csv"
+    train_df = pd.read_csv(in_path, sep='\t')
+
+    examples = dict(zip(train_df.filepath, train_df.title))
+    invalid_keys = []
+    with Pool(20) as pool:
+        for path, x in tqdm(pool.imap(_get_fs, examples), total=len(examples)):
+            if x == 0:
+                invalid_keys.append(path)
+    invalid_keys = set(invalid_keys)
+    print(len(invalid_keys))
+    examples = {k: v for k, v in examples.items() if k not in invalid_keys}
+
+    feature_extract_config = OmegaConf.load(config.input_config.feature_extract_config_path)
+    feature_extract_config.model_config.input_type = "image"  # not actually needed
+
+    all_ex = list(examples.items())
+    batches = batch_it(all_ex, cc.imgs_per_gpu)
+
+    executor = create_executor(cc, len(batches))
+    jobs = executor.map_array(
+        functools.partial(_map_cc_batch, cc=cc, feature_extract_config=feature_extract_config),
+        batches,
+    )
+
+    with h5py.File(cc.hdf5_viz_path, "w") as out_f:
+        for job in tqdm(jobs):
+            print(job)
+            res = job.result()
+            for k, v in res.items():
+                out_f.create_dataset(k, data=v)
+
+    print("converting captions")
+    jobs = executor.map_array(
+        functools.partial(_map_cc_sent_batch, config=config, cc=cc),
+        batches,
+    )
+    with h5py.File(cc.hdf5_sent_path, "w") as out_f:
+        for job in tqdm(jobs):
+            print(job)
+            res = job.result()
+            for k, v in res.items():
+                out_f.create_dataset(k, data=v)
+
+
 @hydra.main(config_path="configs", config_name=None)
 def preprocess(config: TrainConfig):
+    # TODO: refactor
     if config.preprocess_mode == "ego":
         preprocess_ego_narrations(config.pre_config.ego4d_narr)
     elif config.preprocess_mode == "ego_features":
         preprocess_ego_features(config.input_config.feature_path, config.pre_config, config.pre_config.ego4d_features)
     elif config.preprocess_mode == "k400":
-        preprocess_k400_data(config, config.pre_config.k400_pre_config)
+        preprocess_k400_data(config, config.pre_config.k400)
     elif config.preprocess_mode == "ego_charade":
         preprocess_ego_charade(config, config.pre_config.ego_charade)
+    elif config.preprocess_mode == "cc":
+        preprocess_cc(config, config.pre_config.cc)
     else:
         raise AssertionError("{config.preprocess_mode} not supported")
 

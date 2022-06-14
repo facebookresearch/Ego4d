@@ -84,7 +84,6 @@ class Lite(LightningLite):
         max_steps = 2*len(dataloader)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=0, last_epoch=-1)
 
-        # clip_loss = ClipLoss()
         bce_loss = torch.nn.BCEWithLogitsLoss()
 
         for epoch in range(self.config.num_epochs):
@@ -134,6 +133,7 @@ class Lite(LightningLite):
                     txt2vid = t_f @ v_f.T
 
                 if self.config.use_bce:
+                    assert self.config.use_bce != False  # noqa
                     loss = (
                         bce_loss(vid2txt, label) +
                         bce_loss(txt2vid, label)

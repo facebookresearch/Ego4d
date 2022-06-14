@@ -194,12 +194,11 @@ class Ego4DVaClip(torch.utils.data.Dataset):
         }
 
 
-def create_data_loader(dset, config: TrainConfig):
+def create_data_loader(dset, config: TrainConfig, shuffle=True):
     return DataLoader(
         dset,
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         prefetch_factor=config.prefetch_factor,
-        # shuffle=False,
-        shuffle=True,
+        shuffle=shuffle,
     )
