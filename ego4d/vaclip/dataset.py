@@ -10,6 +10,8 @@ import h5py
 import torch
 import numpy as np
 import pandas as pd
+from multiprocessing import Pool
+from tqdm.auto import tqdm
 from pytorchvideo.data.encoded_video import EncodedVideo
 from torch.utils.data import DataLoader
 from ego4d.features.dataset import CropIfStereo
@@ -121,6 +123,35 @@ class KineticsDset(torch.utils.data.Dataset):
         return feat, self.label_name_to_idx[label_name]
 
 
+class CCDset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        config: TrainConfig,
+    ):
+        super().__init__()
+        self.config = config
+        self.viz_feature_path = config.pre_config.cc.hdf5_viz_path
+        self.sent_feature_path = config.pre_config.cc.hdf5_sent_path
+        self.viz_dset = h5py.File(self.viz_feature_path)
+        self.sent_dset = h5py.File(self.sent_feature_path)
+
+        self.keys = torch.load(config.pre_config.cc.meta_path)
+
+    def __len__(self):
+        return len(self.keys)
+
+    def __getitem__(self, idx):
+        k = self.keys[idx]
+        v = self.viz_dset[k][0:]
+        s = self.sent_dset[k][0:]
+        return {
+            "video": v,
+            "text": s,
+            "text_no_tag": s,
+        }
+        
+
+
 class Ego4DVaClip(torch.utils.data.Dataset):
     def __init__(
         self,
@@ -190,7 +221,7 @@ class Ego4DVaClip(torch.utils.data.Dataset):
             "video": v_feat,
             "text": txt_feat["fv"],
             "text_no_tag": txt_feat["fv_no_tag"],
-            "raw_text": meta["post_txt"],
+            # "raw_text": meta["post_txt"],
         }
 
 

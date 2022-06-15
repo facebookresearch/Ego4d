@@ -14,6 +14,7 @@ from ego4d.vaclip.val import (
 from ego4d.vaclip.config import TrainConfig
 from ego4d.vaclip.dataset import (
     Ego4DVaClip,
+    CCDset,
     KineticsDset,
     EgoCharadesDset,
     create_data_loader,
@@ -69,7 +70,12 @@ class Lite(LightningLite):
         print("Config=")
         print(self.config, flush=True)
 
-        dset = Ego4DVaClip(config=self.config)
+        # dset1 = Ego4DVaClip(config=self.config)
+        # dset2 = CCDset(config=self.config)
+        # # TODO: configure
+        # dset = torch.utils.data.ConcatDataset([dset1, dset2])
+        dset = CCDset(config=self.config)
+
         dataloader = create_data_loader(dset, self.config)
         dataloader = self.setup_dataloaders(dataloader)
 
@@ -81,7 +87,8 @@ class Lite(LightningLite):
         step = 0
         num_examples = 0
 
-        max_steps = 2*len(dataloader)
+        # max_steps = len(dataloader) * self.config.num_epochs // 2
+        max_steps = 2 * len(dataloader)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=0, last_epoch=-1)
 
         bce_loss = torch.nn.BCEWithLogitsLoss()

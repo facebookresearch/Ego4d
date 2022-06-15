@@ -55,12 +55,13 @@ pre_config:
     cpus_per_task: 10
     num_narrs_per_machine: 50000
   cc:
-    hdf5_viz_path: "/checkpoint/miguelmartin/vaclip/cc.hdf5"
-    hdf5_sent_path: "/checkpoint/miguelmartin/vaclip/cc.hdf5"
+    hdf5_viz_path: "/checkpoint/miguelmartin/vaclip/cc_viz.hdf5"
+    hdf5_sent_path: "/checkpoint/miguelmartin/vaclip/cc_sent.hdf5"
+    meta_path: "/checkpoint/miguelmartin/vaclip/cc.pt"
     batch_size: 200
     num_workers: 10
     prefetch_factor: 2
-    imgs_per_gpu: 50000
+    imgs_per_gpu: 25000
     slurm_log_folder: "slurm_log"
     timeout_min: 60
     constraint: "volta"
@@ -68,7 +69,7 @@ pre_config:
     slurm_array_parallelism: 100
     gpus_per_node: 1
     cpus_per_task: 10
-    num_narrs_per_machine: 50000
+    num_narrs_per_machine: 25000
 batch_size: 128
 num_workers: 10
 prefetch_factor: 4
@@ -76,7 +77,7 @@ num_epochs: 200
 accelerator: "gpu"
 devices: 1
 tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_vaclip/runs"
-tb_log_name: "clip_loss"
+tb_log_name: "cc_only_infonce_lr_half"
 slurm_log_folder: "slurm"
 lr: 0.001
 beta1: 0.9
@@ -87,8 +88,8 @@ run_locally: false
 preprocess_mode: "cc"
 eval_per_iter: 500
 eval_init: true
-use_soft_loss: false
+use_soft_loss: null
 use_bce: false
 norm_logits: false
-soft_loss_threshold: 0.8
+soft_loss_threshold: 0.95
 use_logit_scale: true

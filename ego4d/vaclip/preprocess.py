@@ -447,7 +447,13 @@ class ImagePathDset(torch.utils.data.Dataset):
         }
 
 
-def _map_cc_batch(batch, cc: PreprocessConfig, feature_extract_config: FeatureExtractConfig):
+def _get_key(p, idx):
+    pn = p.replace("/", "_")
+    return f"{idx}/{pn}"
+
+
+def _map_cc_batch(batch_idx, cc: PreprocessConfig, feature_extract_config: FeatureExtractConfig):
+    idx, batch = batch_idx
     paths = [x for x, _ in batch]
     viz_model = load_model(feature_extract_config, patch_final_layer=True)
 
@@ -470,11 +476,12 @@ def _map_cc_batch(batch, cc: PreprocessConfig, feature_extract_config: FeatureEx
         for xx in tqdm(dloader, total=len(dloader)):
             fv = viz_model(xx["img"].cuda())
             for p, f in zip(xx["path"], fv.cpu().numpy()):
-                ret[p] = f
+                ret[_get_key(p, idx)] = f
     return ret
 
 
-def _map_cc_sent_batch(batch, config: TrainConfig, cc: PreprocessConfig):
+def _map_cc_sent_batch(batch_idx, config: TrainConfig, cc: PreprocessConfig):
+    idx, batch = batch_idx
     paths = [x for x, _ in batch]
     cap = [x for _, x in batch]
 
@@ -482,11 +489,13 @@ def _map_cc_sent_batch(batch, config: TrainConfig, cc: PreprocessConfig):
     fvs = sent_model.encode(cap, device="cuda", show_progress_bar=True)
     ret = {}
     for p, f in zip(paths, fvs):
-        ret[p] = f
+        ret[_get_key(p, idx)] = f
     return ret
+
 
 def _get_fs(x):
     return x, os.path.getsize(x)
+
 
 def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
     in_path = "/checkpoint/miguelmartin/conceptial_captions/Train_GCC-training_output.csv"
@@ -494,7 +503,7 @@ def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
 
     examples = dict(zip(train_df.filepath, train_df.title))
     invalid_keys = []
-    with Pool(20) as pool:
+    with Pool(32) as pool:
         for path, x in tqdm(pool.imap(_get_fs, examples), total=len(examples)):
             if x == 0:
                 invalid_keys.append(path)
@@ -507,6 +516,10 @@ def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
 
     all_ex = list(examples.items())
     batches = batch_it(all_ex, cc.imgs_per_gpu)
+    batches = [(idx, batch) for idx, batch in enumerate(batches)]
+
+    # save off the keys to the dataset
+    torch.save([_get_key(p, idx) for idx, batch in batches for p, _ in batch], cc.meta_path)
 
     executor = create_executor(cc, len(batches))
     jobs = executor.map_array(
@@ -516,7 +529,6 @@ def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
 
     with h5py.File(cc.hdf5_viz_path, "w") as out_f:
         for job in tqdm(jobs):
-            print(job)
             res = job.result()
             for k, v in res.items():
                 out_f.create_dataset(k, data=v)
@@ -528,7 +540,6 @@ def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
     )
     with h5py.File(cc.hdf5_sent_path, "w") as out_f:
         for job in tqdm(jobs):
-            print(job)
             res = job.result()
             for k, v in res.items():
                 out_f.create_dataset(k, data=v)

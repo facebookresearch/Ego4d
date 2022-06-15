@@ -80,6 +80,7 @@ class EgoCharadePreprocessConfig:
 class CCPreprocessConfig:
     hdf5_viz_path: str
     hdf5_sent_path: str
+    meta_path: str
     batch_size: int
     num_workers: int
     prefetch_factor: int
@@ -100,6 +101,7 @@ class PreprocessConfig:
     ego4d_features: EgoPreprocessFeatureConfig
     k400: K400PreprocessConfig
     ego_charade: EgoCharadePreprocessConfig
+    cc: CCPreprocessConfig
 
 
 @dataclass
