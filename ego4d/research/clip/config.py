@@ -8,14 +8,14 @@ class InputConfig:
     features_per_second: float
     narration_width_sample_sec: float
     max_num_feature_vec_video_uids: int
+    dsets_to_use: List[str]
 
 
 @dataclass
 class ModelConfig:
-    # TODO: use features, etc.
     nlp_feature_size: int
     visual_feature_size: int
-    proj_dims: List[int]
+    final_proj_size: int
 
 
 @dataclass
@@ -23,7 +23,7 @@ class K400PreprocessConfig:
     dataset_dir: str
     set_to_use: str
     pre_root_dir: str
-    viz_feature_dir: str
+    viz_feature_path: str
     metadata_out_path: str
     feature_extract_config_path: str
     num_labels_per_machine: int
@@ -110,6 +110,8 @@ class TrainConfig:
     model_config: ModelConfig
     pre_config: PreprocessConfig
 
+    checkpoint_dir: str
+    checkpoint_metric: str
     batch_size: int
     num_workers: int
     prefetch_factor: int

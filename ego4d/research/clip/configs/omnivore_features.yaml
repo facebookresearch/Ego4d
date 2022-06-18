@@ -4,11 +4,11 @@ input_config:
   features_per_second: 1.875
   narration_width_sample_sec: 2
   max_num_feature_vec_video_uids: 30
+  dsets_to_use: [ego4d]
 model_config:
   nlp_feature_size: 768
   visual_feature_size: 1536
-  proj_dims: [512, 512]
-  final_proj_size: 512
+  final_proj_size: 1536
 pre_config:
   ego_charade:
     out_path: "/checkpoint/miguelmartin/vaclip/charades.hdf5"
@@ -24,14 +24,14 @@ pre_config:
   k400:
     dataset_dir: "/datasets01/Kinetics400_Frames/videos/"
     set_to_use: "val"
-    pre_root_dir: "/checkpoint/miguelmartin/vaclip/k400/"
-    viz_feature_dir: "viz"
+    pre_root_dir: "/checkpoint/miguelmartin/vaclip/k400_hdf5_all/"
+    viz_feature_path: "viz.hdf5"
     metadata_out_path: "meta.pth"
     num_labels_per_machine: 400
     slurm_log_folder: "slurm_log"
     timeout_min: 60
     constraint: "volta"
-    slurm_partition: "learnfair"
+    slurm_partition: "pixar"
     slurm_array_parallelism: 50
     gpus_per_node: 1
     cpus_per_task: 10
@@ -77,7 +77,7 @@ num_epochs: 200
 accelerator: "gpu"
 devices: 1
 tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_vaclip/runs"
-tb_log_name: "cc_only_infonce_lr_half"
+tb_log_name: "ego4d_infonce"
 slurm_log_folder: "slurm"
 lr: 0.001
 beta1: 0.9
@@ -85,7 +85,7 @@ beta2: 0.98
 wd: 0.1
 eps: 1.0e-6
 run_locally: false
-preprocess_mode: "cc"
+preprocess_mode: "k400"
 eval_per_iter: 500
 eval_init: true
 use_soft_loss: null
@@ -93,3 +93,5 @@ use_bce: false
 norm_logits: false
 soft_loss_threshold: 0.95
 use_logit_scale: true
+checkpoint_dir: "/checkpoint/miguelmartin/vaclip/checkpoints"
+checkpoint_metric: "Val/Char_1Ego_Labels/mAP"
