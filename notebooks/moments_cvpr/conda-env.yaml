@@ -1,0 +1,14 @@
+name: py38
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - pytorch::pytorch=1.11.0
+  - pytorch::torchvision=0.12
+  - pytorch::torchaudio=0.11
+  - conda-forge::ffmpeg
+  - ipython
+  - ipykernel
+  - pip:
+    - git+https://github.com/facebookresearch/pytorchvideo.git
