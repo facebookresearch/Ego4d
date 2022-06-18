@@ -21,10 +21,10 @@ import torchvision.transforms as T
 from PIL import Image
 
 from sentence_transformers import SentenceTransformer
-from ego4d.vaclip.dataset import (
+from ego4d.research.clip.dataset import (
     create_data_loader,
 )
-from ego4d.vaclip.config import (
+from ego4d.research.clip.config import (
     EgoPreprocessFeatureConfig,
     TrainConfig,
     CCPreprocessConfig,
@@ -242,32 +242,27 @@ def _extract_features(path, model, feature_extract_config):
     )
 
 
-def _preprocess_k400_data(video_path_label_pairs, feature_extract_config, viz_dir):
+def _preprocess_k400_data(video_path_label_pairs, feature_extract_config):
     model = load_model(feature_extract_config, patch_final_layer=True)
 
+    ret = {}
     for path, label in tqdm(video_path_label_pairs):
         predictions = _extract_features(path, model, feature_extract_config)
         if predictions is None:
             continue
 
-        name = Path(path).stem
-        out_path = os.path.join(viz_dir, f"{name}.pt")
-        to_save = {
-            "feature": predictions.result[path].mean(0),
+        ret[path] = {
+            "features": predictions.result[path],
             "label": label,
-            "all_features": predictions.result[path],
         }
-        torch.save(to_save, out_path)
+    return ret
 
 
 def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
     random.seed(1337)
 
     pre_dir = os.path.join(k_config.pre_root_dir, k_config.set_to_use)
-    viz_dir = os.path.join(pre_dir, k_config.viz_feature_dir)
-
     os.makedirs(pre_dir, exist_ok=True)
-    os.makedirs(viz_dir, exist_ok=True)
 
     # TODO: configure
     val_set = pd.read_csv("/datasets01/kinetics/092121/400/lists/val.csv")
@@ -306,13 +301,12 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
     map_fn = functools.partial(
         _preprocess_k400_data,
         feature_extract_config=feature_extract_config,
-        viz_dir=viz_dir
     )
     batches = batch_it(video_path_label_pairs, batch_size=k_config.num_labels_per_machine)
 
+    label_name_pairs = []
     if config.run_locally:
-        for batch in batches:
-            map_fn(batch)
+        raise AssertionError("not supported yet")
     else:
         print(f"To schedule {len(batches)} batches across {k_config.slurm_array_parallelism} machines")
         cont = input("Continue? [y/N]: ")
@@ -323,12 +317,20 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
         jobs = executor.map_array(map_fn, batches)
 
         # wait for the results
-        for job in tqdm(jobs):
-            _ = job.result()
+        out_path = os.path.join(k_config.pre_root_dir, k_config.viz_feature_path)
+        with h5py.File(out_path, "w") as out_f:
+            for job in tqdm(jobs):
+                vs = job.result()
+                for k, v in vs.items():
+                    label_name_pairs.append((k, v["label"]))
+                    out_f.create_dataset(k, data=v["features"].numpy())
+
+
 
     # sentences
     print("Processing labels as sentences", flush=True)
     meta = {
+        "labels": label_name_pairs,
         "label_text": [],
         "label_fv": [],
         "label_name_to_idx": label_to_idx,
@@ -354,8 +356,7 @@ def _preprocess_ego_charade(video_path_ids, feature_extract_config):
         predictions = _extract_features(path, model, feature_extract_config)
         assert predictions is not None
         ret[uid] = {
-            "fv": predictions.result[path].mean(0),
-            "all_fvs": predictions.result[path],
+            "features": predictions.result[path],
         }
     return ret
 
@@ -408,24 +409,23 @@ def preprocess_ego_charade(config: TrainConfig, char_config: EgoCharadePreproces
         "sent_ego_fv": sent_ego_fv,
         "sent_non_ego_fv": sent_non_ego,
     }, char_config.out_label_path)
-    # TODO: add back
-    # video_path_ids = [(os.path.join(root_path, f"{row.id}.mp4"), row.id) for row in val_df.itertuples()]
-    # video_path_ids = [vp for vp in video_path_ids if os.path.exists(vp[0])]
+    video_path_ids = [(os.path.join(root_path, f"{row.id}.mp4"), row.id) for row in val_df.itertuples()]
+    video_path_ids = [vp for vp in video_path_ids if os.path.exists(vp[0])]
 
-    # batches = batch_it(video_path_ids, char_config.num_vids_per_machine)
-    # executor = create_executor(char_config, len(batches))
-    # map_fn = functools.partial(
-    #     _preprocess_ego_charade,
-    #     feature_extract_config=feature_extract_config,
-    # )
+    batches = batch_it(video_path_ids, char_config.num_vids_per_machine)
+    executor = create_executor(char_config, len(batches))
+    map_fn = functools.partial(
+        _preprocess_ego_charade,
+        feature_extract_config=feature_extract_config,
+    )
 
-    # jobs = executor.map_array(map_fn, batches)
+    jobs = executor.map_array(map_fn, batches)
 
-    # with h5py.File(out_path, "w") as out_f:
-    #     for j in tqdm(jobs):
-    #         feat = j.result()
-    #         for uid, ret in feat.items():
-    #             out_f.create_dataset(uid, data=ret["all_fvs"].numpy())
+    with h5py.File(out_path, "w") as out_f:
+        for j in tqdm(jobs):
+            feat = j.result()
+            for uid, ret in feat.items():
+                out_f.create_dataset(uid, data=ret["all_fvs"].numpy())
 
 
 class ImagePathDset(torch.utils.data.Dataset):

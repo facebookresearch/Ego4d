@@ -7,19 +7,19 @@ import hydra
 import time
 import submitit
 
-from ego4d.vaclip.val import (
+from ego4d.research.clip.val import (
     eval_classification,
     eval_multi_class_classification,
 )
-from ego4d.vaclip.config import TrainConfig
-from ego4d.vaclip.dataset import (
+from ego4d.research.clip.config import TrainConfig
+from ego4d.research.clip.dataset import (
     Ego4DVaClip,
     CCDset,
     KineticsDset,
     EgoCharadesDset,
     create_data_loader,
 )
-from ego4d.vaclip.model import EgoLangaugeAssociation
+from ego4d.research.clip.model import EgoLangaugeAssociation
 
 from pytorch_lightning.lite import LightningLite
 
@@ -70,11 +70,16 @@ class Lite(LightningLite):
         print("Config=")
         print(self.config, flush=True)
 
-        # dset1 = Ego4DVaClip(config=self.config)
-        # dset2 = CCDset(config=self.config)
-        # # TODO: configure
-        # dset = torch.utils.data.ConcatDataset([dset1, dset2])
-        dset = CCDset(config=self.config)
+        dsets = []
+        for d in self.config.input_config.dsets_to_use:
+            if d == "ego4d":
+                dsets.append(Ego4DVaClip(config=self.config))
+            elif d == "cc":
+                dsets.append(CCDset(config=self.config))
+            else:
+                raise AssertionError(f"invalid dataset {d}")
+
+        dset = torch.utils.data.ConcatDataset(dsets)
 
         dataloader = create_data_loader(dset, self.config)
         dataloader = self.setup_dataloaders(dataloader)
@@ -87,11 +92,12 @@ class Lite(LightningLite):
         step = 0
         num_examples = 0
 
-        # max_steps = len(dataloader) * self.config.num_epochs // 2
-        max_steps = 2 * len(dataloader)
+        max_steps = 2 * len(dataloader)  # TODO configure
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=0, last_epoch=-1)
 
         bce_loss = torch.nn.BCEWithLogitsLoss()
+
+        best_model = None
 
         for epoch in range(self.config.num_epochs):
             print("Epoch:", epoch)
@@ -105,11 +111,27 @@ class Lite(LightningLite):
                     for k, v in kv_pairs.items():
                         print(k, v)
                         writer.add_scalar(k, v, num_examples)
+                    m_value = kv_pairs[self.config.checkpoint_metric]
+                    if best_model is None or best_model[0] < m_value:
+                        prev_metric = f"{best_model[0]:.3f}" if best_model is not None else None
+                        print(f"Saving {prev_metric} -> {m_value:.3f}", flush=True)
+                        path = f"{self.config.tb_log_name}_{m_value:.3f}.pt"
+                        abs_path = os.path.join(self.config.checkpoint_dir, path)
+                        torch.save(model, abs_path)
+                        # self.save(model.state_dict(), abs_path)
+                        if best_model is not None:
+                            os.remove(best_model[1])
+                        best_model = (m_value, abs_path)
                     print()
 
                 optimizer.zero_grad()
                 v_f, t_f, logit_scale = self.model(batch)
 
+                # NOTE:
+                # For ego4d I trim away tags for similarity as these tags can
+                # make up a significant percentage of the text and hence be
+                # quite dramatic since SentenceTransformers perform a pool over
+                # the tokens
                 txt = batch["text_no_tag"]
 
                 device = txt.device
@@ -216,13 +238,13 @@ class Lite(LightningLite):
     def run_eval(self):
         self.model.eval()
         result = {}
+        result.update(self._run_eval_kinetics())
         result.update(self._run_ego_charades(ego_only=None, use_ego_sent=None))
         result.update(self._run_ego_charades(ego_only=None, use_ego_sent=True))
         result.update(self._run_ego_charades(ego_only=False, use_ego_sent=None))
         result.update(self._run_ego_charades(ego_only=True, use_ego_sent=None))
         result.update(self._run_ego_charades(ego_only=True, use_ego_sent=False))
         result.update(self._run_ego_charades(ego_only=True, use_ego_sent=True))
-        result.update(self._run_eval_kinetics())
         self.model.train()
         return result
 

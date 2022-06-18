@@ -1,3 +1,4 @@
+import random
 import time
 import json
 import os
@@ -23,18 +24,18 @@ from torchvision.transforms._transforms_video import (
 )
 
 from collections import defaultdict
-from ego4d.vaclip.config import TrainConfig, InputConfig
+from ego4d.research.clip.config import TrainConfig, InputConfig
 
 
 # TODO: move to utils
 def get_start_end_idx(t1, t2, feature_per_sec, nf):
     assert t2 >= 0
     x1 = min(
-        max(0, int(np.round(t1 * feature_per_sec))),
+        max(0, math.floor(t1 * feature_per_sec)),
         nf - 1,
     )
     x2 = min(
-        math.ceil(np.round(t2 * feature_per_sec)),
+        math.floor(t2 * feature_per_sec),
         nf - 1,
     )
     assert x2 >= x1
@@ -92,7 +93,6 @@ class EgoCharadesDset(torch.utils.data.Dataset):
         return feat, gt
 
 
-# TODO: convert to hdf5
 class KineticsDset(torch.utils.data.Dataset):
     def __init__(self, config: TrainConfig):
         super().__init__()
@@ -100,26 +100,25 @@ class KineticsDset(torch.utils.data.Dataset):
 
         k400_config = config.pre_config.k400
         root = os.path.join(k400_config.pre_root_dir, k400_config.set_to_use)
-        viz_dir = os.path.join(root, k400_config.viz_feature_dir)
 
         sent_meta_path = os.path.join(root, k400_config.metadata_out_path)
         self.sent_features = torch.load(sent_meta_path)
 
-        self.videos = [
-            os.path.join(viz_dir, data_path)
-            for data_path in os.listdir(viz_dir)
-            if data_path.endswith(".pt")
-        ]
+        viz_path = os.path.join(k400_config.pre_root_dir, k400_config.viz_feature_path)
+        self.videos = h5py.File(viz_path)
         self.label_name_to_idx = self.sent_features["label_name_to_idx"]
-        self.sent_ordered = torch.stack([torch.tensor(fv) for fv in self.sent_features["label_fv"]])
+        self.sent_ordered = torch.stack([
+            torch.tensor(fv)
+            for fv in self.sent_features["label_fv"]
+        ])
+        self.labels = self.sent_features["labels"]
 
     def __len__(self):
-        return len(self.videos)
+        return len(self.labels)
 
     def __getitem__(self, idx):
-        vf = torch.load(self.videos[idx])
-        label_name = vf["label"]
-        feat = vf["all_features"].mean(0)
+        path, label_name = self.labels[idx]
+        feat = self.videos[path][0:].mean(0)
         return feat, self.label_name_to_idx[label_name]
 
 
@@ -149,7 +148,6 @@ class CCDset(torch.utils.data.Dataset):
             "text": s,
             "text_no_tag": s,
         }
-        
 
 
 class Ego4DVaClip(torch.utils.data.Dataset):
@@ -186,6 +184,8 @@ class Ego4DVaClip(torch.utils.data.Dataset):
 
         old_len = len(self.narr_meta)
         self.narr_meta = [x for x in self.narr_meta if self.betas[x["uid"]] >= 1e-1]
+        # random.shuffle(self.narr_meta)
+        # self.narr_meta = self.narr_meta[0:150000]
         print(f"{old_len} -> {len(self.narr_meta)}")
 
 
@@ -202,8 +202,8 @@ class Ego4DVaClip(torch.utils.data.Dataset):
         txt_feature_path = os.path.join(self.narr_feature_dir, uid, f"{narr_idx}.pt")
         txt_feat = torch.load(txt_feature_path)
 
-        # offset = self.config.input_config.narration_width_sample_sec
-        offset = self.betas[uid] / (2*self.alpha)
+        offset = self.config.input_config.narration_width_sample_sec
+        # offset = self.betas[uid] / (2*self.alpha)
         t1 = ts - offset
         t2 = ts + offset
 
@@ -221,7 +221,6 @@ class Ego4DVaClip(torch.utils.data.Dataset):
             "video": v_feat,
             "text": txt_feat["fv"],
             "text_no_tag": txt_feat["fv_no_tag"],
-            # "raw_text": meta["post_txt"],
         }
 
 

@@ -1,4 +1,57 @@
-# TODOs
+# Ego4D CLIP
 
-- [ ] change linear model to non-linear
-- [ ] partition features by time to save memory
+NOTE: this is very experimental code. You may have to read and modify the code
+in order to run it on your machine. Dependent on interest, this may change.
+
+This repository contains the code for contrastive learning with Ego4D's
+narrations. This serves as an example of using the features for
+training/prototyping ideas. It includes:
+
+- A dataset for supervised-learning with the features. Refer to `LabelledFeatureDataset`.
+- Pre-processing scripts to convert the features to HDF5, which is a more efficient format for training.
+- Zero-shot on Kinetics, Ego-Charades
+
+## CVPR Presentation
+
+The code in this repository was presented at CVPR 2022 in New Orleans. You can
+find the presentation code in: `notebooks/` under the root directory of this
+repository of this repository.
+
+## Preprocessing Data
+
+To pre-process the data please use the script under
+`ego4d/research/clip/preprocess.py`. Provide `preprocess_mode` to change what
+is being pre-processed.
+
+
+```
+python3 ego4d/vaclip/preprocess.py --config-name omnivore_features run_locally=1 preprocess_mode="ego"
+```
+
+Also add `run_locally=1` to run the preprocessing on a non-slurm cluster.
+
+Valid preprocessing options are:
+- `ego4d_features`
+    - Converts the features to HDF5
+- `ego4d_narr`
+    - Extracts narration embeddings and saves via `torch.save`
+    - TODO: convert to HDF5
+- `k400`
+    - Extracts features from Kinetics and 
+- `ego_charade`
+    - Extracts features from Ego-Charades
+- `cc`
+    - Extracts features from Conceptual Captions
+    - Requires you to download with `open_clip` prior
+
+You will likely have to modify the paths in `configs/omnivore_features`
+
+## Datasets
+
+Please refer to the code `ego4d/research/clip/dataset.py`.  These need to be cleaned up.
+
+## Training
+
+Run training with `ego4d/research/clip/train.py`.
+
+Pass `run_locally=1` if you want to run the training process not on the cluster.
