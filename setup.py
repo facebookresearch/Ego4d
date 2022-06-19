@@ -5,9 +5,11 @@ from setuptools import find_packages, setup
 
 setup(
     name="ego4d",
-    version="1.0",
+    version="1.2",
     author="FAIR",
-    url="https://github.com/facebookresearch/Ego4d",
+    author_email='info@ego4d-data.org',
+    description="Ego4D Dataset CLI",
+    url="https://github.com/facebookresearch/Ego4d/",
     install_requires=[
         "boto3",
         "tqdm",
@@ -24,5 +26,8 @@ setup(
         "pytest",
         "moto",
     ],
-    packages=find_packages(exclude=("configs", "tests")),
+    packages=['ego4d', 'ego4d.cli'],
+    entry_points={
+        'console_scripts': ['ego4d=ego4d.cli.cli:main'],
+    }
 )
