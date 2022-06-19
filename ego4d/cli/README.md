@@ -1,4 +1,4 @@
-**Please note VQ test annotations (for the challenge) were recently released. If needed, please download the annotations dataset again, e.g. `python -m ego4d.cli.cli --output_directory="~/ego4d_data" --datasets annotations`**
+**Please note VQ test annotations (for the challenge) were recently released. If needed, please download the annotations dataset again, e.g. `ego4d --output_directory="~/ego4d_data" --datasets annotations`**
 
 # Ego4D Dataset Download CLI
 
@@ -18,10 +18,19 @@ The CLI requires python >= 3.8.  Please install the prerequisites via `python se
    
 ## Getting Started
 
+### Installation
+Install via pip (conda support coming):
+```
+pip install ego4d
+```
+
 ### Basic Usage
+In your python environment, use the `ego4d` command line directly:
 ```
-python -m ego4d.cli.cli --output_directory="~/ego4d_data" --datasets full_scale annotations --metadata
+ego4d --output_directory="~/ego4d_data" --datasets full_scale annotations --metadata
 ```
+
+(Alternatively, use traditional python module syntax: `python -m ego4d.cli.cli --output_directory="~/ego4d_data" --datasets full_scale annotations --metadata`)
 
 This will download all the full scale Ego4D v1 video files and annotations to a directory on
 your local computer at `~/ego4d_data/v1/full_scale` and `~/ego4d_data/v1/annotations`, as well the master metadata file at `~/ego4d_data/v1/ego4d.json`. 

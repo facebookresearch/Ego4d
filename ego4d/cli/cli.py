@@ -39,7 +39,7 @@ from ego4d.cli.progressbar import DownloadProgressBar
 from tqdm import tqdm
 
 
-def main(cfg: Config) -> None:
+def main_cfg(cfg: Config) -> None:
 
     validated_cfg = validate_config(cfg)
 
@@ -215,6 +215,10 @@ def main(cfg: Config) -> None:
     # folder
 
 
-if __name__ == "__main__":
+def main() -> None:
     config = config_from_args()
-    main(config)
+    main_cfg(config)
+
+
+if __name__ == "__main__":
+    main()
