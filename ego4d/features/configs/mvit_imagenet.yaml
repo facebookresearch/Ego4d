@@ -6,6 +6,7 @@ io:
   uid_list: null
   video_limit: -1
   out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/mvit_imagenet/
+  exclude_no_audio: false
 inference_config:
   device: cuda
   batch_size: 1
@@ -16,6 +17,10 @@ inference_config:
   stride: 5
   include_audio: false
   include_video: true
+  norm_config:
+    normalize_audio: false
+    resample_audio_rate: 16000
+    resampling_method: "sinc_interpolation"
 schedule_config:
   run_locally: false
   log_folder: slurm_log/%j

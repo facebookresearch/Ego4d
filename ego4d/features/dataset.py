@@ -1,32 +1,151 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 from fractions import Fraction
-from typing import Any, List
+from typing import List, Any
+from PIL import Image
 
+import av
 import torch
+import numpy as np
 from ego4d.features.config import FeatureExtractConfig, get_transform, Video
 from pytorchvideo.data import UniformClipSampler
 from pytorchvideo.data.encoded_video import EncodedVideo
+from pytorchvideo.data.utils import thwc_to_cthw
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
+from pytorchvideo.transforms import (
+    ApplyTransformToKey,
+    ShortSideScale,
+)
+
+from tqdm.auto import tqdm
+
+
+def get_frames(container, t1, t2, buffer, max_buffer_size):
+    # [t1, t2]
+    ret = []
+
+    tb = container.streams.video[0].time_base
+
+    def is_in_range(frame):
+        t = frame.pts * tb
+        return t >= t1 and t < t2
+
+    def exceeds_range(frame):
+        return frame.pts * tb >= t2
+
+    for frame in buffer:
+        if is_in_range(frame):
+            ret.append(frame)
+
+    prev_pts = None
+    for frame in container.decode(video=0):
+        if frame.pts is None:
+            raise AssertionError("frame is None")
+        if prev_pts is not None and frame.pts < prev_pts:
+            raise AssertionError("failed assumption pts in order: ")
+        if not isinstance(frame, av.VideoFrame):
+            raise AssertionError("other packets not supported")
+
+        prev_pts = frame.pts
+
+        buffer.append(frame)
+        if len(buffer) > max_buffer_size:
+            del buffer[0]
+
+        if is_in_range(frame):
+            ret.append(frame)
+        elif exceeds_range(frame):
+            break
+    pts_in_ret = [frame.pts for frame in ret]
+    if not (np.diff(pts_in_ret) > 0).all():
+        raise AssertionError("not increasing sequence of frames")
+    return ret
+
+
+class EncodedVideoCached:
+    def __init__(self, path, frame_buffer_size=16):
+        self.path = path
+        self.vid = EncodedVideo.from_path(path, decoder="pyav")
+        self.vid._container.seek(0)
+
+        self.frame_buffer_size = frame_buffer_size
+        self.frame_buffer = []
+        self.last_t = None
+
+    def get_clip(self, t1, t2):
+        if self.last_t is None:
+            self.vid._container.seek(0)
+        if self.last_t is not None and t1 < self.last_t:
+            raise AssertionError("cannot seek backward")
+
+        vstream = self.vid._container.streams.video[0]
+        vs = vstream.start_time * vstream.time_base
+        frames = get_frames(
+            self.vid._container,
+            t1 + vs,
+            t2 + vs,
+            self.frame_buffer,
+            self.frame_buffer_size,
+        )
+        self.last_t = t1
+        return {
+            "video": thwc_to_cthw(torch.stack([
+                torch.from_numpy(frame.to_rgb().to_ndarray())
+                for frame in frames
+            ])).to(torch.float32),
+            "audio": None,
+        }
+
+    @property
+    def duration(self) -> float:
+        vstream = self.vid._container.streams.video[0]
+        return vstream.duration * vstream.time_base
 
 
 class IndexableVideoDataset(torch.utils.data.Dataset):
-    def __init__(self, videos, sampler, transform):
+    def __init__(
+        self,
+        config: FeatureExtractConfig,
+        videos: List[Video],
+        sampler,
+        transform
+    ):
+        assert config.inference_config.include_audio ^ config.inference_config.include_video, """
+        cannot include audio and video at the same time
+        """
+        self.config = config
         self.clips = []
         self.sampler = sampler
         self.transform = transform
 
-        self.encoded_videos = {
-            v.uid: EncodedVideo.from_path(
-                v.path, decode_audio=False, perform_seek=False
-            )
-            for v in videos
-        }
+        if self.config.inference_config.include_video:
+            self.encoded_videos = {
+                v.uid: EncodedVideoCached(v.path)
+                for v in videos
+            }
+        else:
+            assert self.config.inference_config.include_audio
+            self.encoded_videos = {
+                v.uid: EncodedVideo.from_path(
+                    v.path,
+                    decode_audio=True,
+                    decode_video=False,
+                    perform_seek=True,
+                    decoder="pyav",
+                )
+                for v in videos
+            }
 
         for v in videos:
             self.clips.extend(
-                list(get_all_clips(v, self.encoded_videos[v.uid].duration, sampler))
+                list(
+                    get_all_clips(
+                        v,
+                        self.encoded_videos[v.uid].duration,
+                        sampler
+                    )
+                )
             )
 
     def __len__(self):
@@ -43,19 +162,26 @@ class IndexableVideoDataset(torch.utils.data.Dataset):
             is_last_clip,
         ) = clip
 
-        frames = self.encoded_videos[video.uid].get_clip(clip_start, clip_end)["video"]
-
+        encoded_video = self.encoded_videos[video.uid]
+        datum = encoded_video.get_clip(clip_start, clip_end)
+        v_frames = datum["video"]
+        a_frames = datum["audio"]
         sample_dict = {
-            "video": frames,
             "video_name": video.uid,
             "video_index": idx,
             "clip_index": clip_index,
             "aug_index": aug_index,
             "is_stereo": video.is_stereo,
-            # TODO
-            # **info_dict,
-            # **({"audio": audio_samples} if audio_samples is not None else {})
+            "clip_start_sec": float(clip_start),
+            "clip_end_sec": float(clip_end),
         }
+        if v_frames is not None:
+            sample_dict["video"] = v_frames
+        if a_frames is not None:
+            sample_dict["audio"] = a_frames
+        if a_frames is not None:
+            sample_dict["audio_sample_rate"] = encoded_video._container.streams.audio[0].rate
+
         sample_dict = self.transform(sample_dict)
         return sample_dict
 
@@ -115,18 +241,24 @@ def create_dset(
         backpad_last=True,
     )
 
-    transform = Compose(
-        [
+    transforms_to_use = [
+        CropIfStereo(),
+        get_transform(config),
+    ]
+    if config.io.debug_mode:
+        transforms_to_use = [
             CropIfStereo(),
-            get_transform(config),
+            ApplyTransformToKey(key="video", transform=ShortSideScale(size=256)),
         ]
-    )
-    return IndexableVideoDataset(videos, clip_sampler, transform)
+    return IndexableVideoDataset(config, videos, clip_sampler, Compose(transforms_to_use))
 
 
 def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:
     if config.inference_config.batch_size == 0:
         raise AssertionError("not supported")
+
+    if config.inference_config.num_workers == 0:  # for debugging
+        return dset
 
     return DataLoader(
         dset,

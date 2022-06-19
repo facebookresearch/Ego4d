@@ -8,7 +8,6 @@ from ego4d.features.config import BaseModelConfig, InferenceConfig
 from pytorchvideo.transforms import (
     ApplyTransformToKey,
     ShortSideScale,
-    UniformTemporalSubsample,
 )
 from torch.nn import Identity, Module
 from torchvision.transforms import Compose, Lambda
@@ -32,7 +31,7 @@ class WrapModel(Module):
         self.input_type = input_type
 
     def forward(self, x) -> torch.Tensor:
-        return self.model(x, input_type=self.input_type)
+        return self.model(x["video"], input_type=self.input_type)
 
 
 def load_model(
@@ -57,7 +56,6 @@ def load_model(
 def get_transform(inference_config: InferenceConfig, config: ModelConfig):
     if config.input_type == "video":
         transforms = [
-            UniformTemporalSubsample(inference_config.frame_window),
             Lambda(lambda x: x / 255.0),
             NormalizeVideo(config.mean, config.std),
             ShortSideScale(size=config.side_size),
@@ -66,7 +64,6 @@ def get_transform(inference_config: InferenceConfig, config: ModelConfig):
     else:
         assert inference_config.frame_window == 1
         transforms = [
-            UniformTemporalSubsample(inference_config.frame_window),
             NormalizeVideo(config.mean, config.std),
             ShortSideScale(size=config.side_size),
             CenterCropVideo(config.crop_size),

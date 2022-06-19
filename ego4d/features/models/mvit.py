@@ -5,10 +5,12 @@ from typing import Tuple
 
 from ego4d.features.config import BaseModelConfig, InferenceConfig
 from pytorchvideo.models.hub.vision_transformers import mvit_base_16, mvit_base_32x3
+from ego4d.features.config import InferenceConfig, BaseModelConfig
+from ego4d.features.models.common import FeedVideoInput
+from pytorchvideo.models.hub.vision_transformers import mvit_base_32x3, mvit_base_16
 from pytorchvideo.transforms import (
     ApplyTransformToKey,
     ShortSideScale,
-    UniformTemporalSubsample,
 )
 from torch.nn import Identity, Module
 from torchvision.transforms import Compose, Lambda
@@ -45,6 +47,7 @@ def load_model(
         model.head = Identity()
 
     # Set to GPU or CPU
+    model = FeedVideoInput(model)
     model = model.eval()
     model = model.to(inference_config.device)
     return model
@@ -52,7 +55,6 @@ def load_model(
 
 def get_transform(inference_config: InferenceConfig, config: ModelConfig):
     transforms = [
-        UniformTemporalSubsample(inference_config.frame_window),
         Lambda(lambda x: x / 255.0),
         NormalizeVideo(config.mean, config.std),
         ShortSideScale(size=config.side_size),

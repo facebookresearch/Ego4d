@@ -11,7 +11,7 @@ import hydra
 import pandas as pd
 import torch
 import torchvision.transforms as T
-from ego4d.features.config import FeatureExtractConfig, load_model, Video
+from ego4d.features.config import FeatureExtractConfig, load_model, Video, get_transform
 from ego4d.features.extract_features import extract_features
 from PIL import Image
 
@@ -80,6 +80,7 @@ def inference_imagenet(config: RunInferenceConfig):
     image_set_dir = os.path.join(config.dataset_dir, config.set_to_use)
     labels = os.listdir(image_set_dir)
 
+    model = load_model(config, patch_final_layer=False)
     for _ in range(config.num_examples):
         expected_label = random.sample(labels, 1)[0]
         expected_label_value = label_dir_dict[expected_label]
@@ -91,18 +92,13 @@ def inference_imagenet(config: RunInferenceConfig):
         image_path = f"{images_dir}/{image_path}"
 
         image = Image.open(image_path).convert("RGB")
-        image_transform = T.Compose(
-            [
-                T.Resize(224),
-                T.CenterCrop(224),
-                T.ToTensor(),
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            ]
-        )
-        image = image_transform(image)
-        image = image[None, :, None, ...].to(config.inference_config.device)
-        model = load_model(config, patch_final_layer=False)
-        predictions = model(image)
+        image_transform = get_transform(config)
+        image = T.ToTensor()(image)
+        image.unsqueeze_(0)
+        image = image.permute(1, 0, 2, 3)
+        image = image.to(config.inference_config.device)
+        image = image_transform({"video": image})
+        predictions = model(image["video"].unsqueeze(0))
 
         pred_classes = torch.nn.Softmax(dim=1)(predictions).squeeze()
         top_k = pred_classes.topk(k=config.top_k)
