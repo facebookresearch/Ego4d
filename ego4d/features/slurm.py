@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import hydra
+
+import numpy as np
 import submitit
 import torch
 from ego4d.features.config import (
@@ -62,20 +64,20 @@ def greedy_create_batches(
     while i <= j:
         old_i, old_j = i, j
 
-        while j >= i and curr_time + times[j] <= max_time_per_batch:
-            curr.append((videos[j], times[j]))
-            curr_time += times[j]
-            j -= 1
-
         while i <= j and curr_time + times[i] <= max_time_per_batch:
             curr.append((videos[i], times[i]))
             curr_time += times[i]
             i += 1
 
+        while j >= i and curr_time + times[j] <= max_time_per_batch:
+            curr.append((videos[j], times[j]))
+            curr_time += times[j]
+            j -= 1
+
         assert (
             i != old_i or j != old_j
         ), f"""
-        Could not batch it up - 
+        Could not batch it up -
             i = {i}, j = {j}
             old_i = {old_i}, old_j = {old_j}
             time_i = {times[i]}, time_j = {times[j]}
@@ -110,7 +112,12 @@ def batch_videos(
     videos: List[Video], config: FeatureExtractConfig
 ) -> List[List[Video]]:
     # estimate each time to extract per sub-clip
-    num_forward_passes = [num_fvs(v, config.inference_config) for v in videos]
+    num_forward_passes = [
+        np.ceil(
+            num_fvs(v, config.inference_config) / config.inference_config.batch_size
+        )
+        for v in videos
+    ]
     times = [
         config.schedule_config.overhead
         * n

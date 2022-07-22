@@ -44,6 +44,8 @@ class InputOutputConfig:
     ego4d_download_dir: str = "/checkpoint/miguelmartin/ego4d/"
     uid_list: Optional[List[str]] = None
     video_limit: int = -1
+    debug_mode: bool = False
+    debug_path: str = "/checkpoint/miguelmartin/ego4d_track2/v1/debug_frames"
 
     # output
     out_path: str = (

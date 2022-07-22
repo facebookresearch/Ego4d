@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import torch
+import torchvision
 from ego4d.features.config import (
     FeatureExtractConfig,
     InferenceConfig,
@@ -98,15 +99,30 @@ def _extract_features(
         t1 = time.time()
         if isinstance(inputs, list):
             inputs = [i.to(device) for i in inputs]
+            batch_size = inputs[0].shape[0]
         else:
             inputs = inputs.to(device)
-        batch_size = inputs[0].shape[0]
+            batch_size = inputs.shape[0]
         t2 = time.time()
         transfer_time = t2 - t1
 
         with torch.no_grad():
             t1 = time.time()
-            fv = model(inputs).detach().cpu()
+            if not config.io.debug_mode:
+                fv = model(inputs).detach().cpu()
+            else:
+                fv = None
+                for batch_idx, (video_name, clip_index) in enumerate(
+                    zip(x["video_name"], x["clip_index"])
+                ):
+                    to_dir = f"{config.io.debug_path}/{video_name}"
+                    to_path = f"{to_dir}/{clip_index}.jpg"
+                    os.makedirs(to_dir, exist_ok=True)
+                    grid = torchvision.utils.make_grid(
+                        inputs[batch_idx].permute(1, 0, 2, 3),
+                        nrows=inputs.shape[2] // config.inference_config.stride,
+                    )
+                    torchvision.utils.save_image(grid / 255.0, fp=to_path)  # noqa
             t2 = time.time()
             forward_pass_time = t2 - t1
 
@@ -175,6 +191,9 @@ def extract_features(
         ),
         total=total_num_clips,
     ):
+        if config.io.debug_mode:
+            continue
+
         if batch_size == 0:
             key = ef.video_uid
             fvs[key].append((ef.clip_index.item(), ef.feature.squeeze()))
@@ -238,6 +257,9 @@ def perform_feature_extraction(
         overall=0,
         to_save=0,
     )
+
+    # sort by smallest video first
+    videos.sort(key=lambda x: x.frame_count)
 
     o1 = time.time()
     for vid in tqdm(videos, desc="videos"):

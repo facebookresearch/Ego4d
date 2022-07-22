@@ -6,11 +6,13 @@ io:
   ego4d_download_dir: /checkpoint/miguelmartin/ego4d/
   uid_list: null
   video_limit: -1
-  out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/test/action_features
+  out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/slowfast
+  debug_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/action_features_debug
+  debug_mode: false
 inference_config:
   device: cuda
   batch_size: 1
-  num_workers: 9
+  num_workers: 10
   prefetch_factor: 2
   fps: 30
   frame_window: 32
@@ -20,14 +22,14 @@ inference_config:
 schedule_config:
   run_locally: false
   log_folder: slurm_log/%j
-  timeout_min: 720
+  timeout_min: 3200
   constraint: volta
   slurm_partition: pixar
-  slurm_array_parallelism: 256
+  slurm_array_parallelism: 128
   gpus_per_node: 1
   cpus_per_task: 10
-  overhead: 2.0
-  time_per_forward_pass: 0.8
+  overhead: 1.1
+  time_per_forward_pass: 2.4
   schedule_time_per_node: 10.0
 model_config:
   model_path: null
