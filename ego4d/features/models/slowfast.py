@@ -5,11 +5,7 @@ from typing import Optional, Tuple
 
 import torch
 from ego4d.features.config import BaseModelConfig, InferenceConfig
-from pytorchvideo.transforms import (
-    ApplyTransformToKey,
-    ShortSideScale,
-    UniformTemporalSubsample,
-)
+from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.nn import Identity, Module
 from torchvision.transforms import Compose, Lambda
 
@@ -93,7 +89,6 @@ def get_transform(inference_config: InferenceConfig, config: ModelConfig):
         key="video",
         transform=Compose(
             [
-                UniformTemporalSubsample(inference_config.frame_window),
                 Lambda(lambda x: x / 255.0),
                 NormalizeVideo(config.mean, config.std),
                 ShortSideScale(size=config.side_size),
