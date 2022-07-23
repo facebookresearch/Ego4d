@@ -6,3 +6,4 @@ dist/
 lightning_logs/
 venv/
 .vscode/
+.DS_Store
