@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 
 import torch
 from ego4d.features.config import BaseModelConfig, InferenceConfig
+from ego4d.features.models.common import FeedVideoInput
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.nn import Identity, Module
 from torchvision.transforms import Compose, Lambda
@@ -56,6 +57,7 @@ def load_model(
         model.blocks[6] = GetFv()
 
     # Set to GPU or CPU
+    model = FeedVideoInput(model)
     model = model.eval()
     model = model.to(inference_config.device)
     return model

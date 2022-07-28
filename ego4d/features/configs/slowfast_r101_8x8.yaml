@@ -9,6 +9,7 @@ io:
   out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/slowfast
   debug_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/action_features_debug
   debug_mode: false
+  exclude_no_audio: false
 inference_config:
   device: cuda
   batch_size: 1
@@ -19,6 +20,10 @@ inference_config:
   stride: 16
   include_audio: false
   include_video: true
+  norm_config:
+    normalize_audio: false
+    resample_audio_rate: 16000
+    resampling_method: "sinc_interpolation"
 schedule_config:
   run_locally: false
   log_folder: slurm_log/%j
