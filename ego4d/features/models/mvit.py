@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 from ego4d.features.config import BaseModelConfig, InferenceConfig
+from ego4d.features.models.common import FeedVideoInput
 from pytorchvideo.models.hub.vision_transformers import mvit_base_16, mvit_base_32x3
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.nn import Identity, Module
@@ -41,6 +42,7 @@ def load_model(
         model.head = Identity()
 
     # Set to GPU or CPU
+    model = FeedVideoInput(model)
     model = model.eval()
     model = model.to(inference_config.device)
     return model
