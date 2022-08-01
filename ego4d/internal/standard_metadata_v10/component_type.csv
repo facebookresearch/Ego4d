@@ -1,0 +1,8 @@
+component_type_id,name
+1,imu_data
+2,3d_registration
+3,gps
+4,eye_tracking
+5,burned_in_gaze_video
+6,binaural_audio
+7,3rd_person_video
