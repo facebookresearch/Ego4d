@@ -68,7 +68,9 @@ The following datasets are available (not exhaustive):
 | 3d_scans | 3D location scans for the 3D VQ benchmark. |
 | 3d_scan_keypoints | 3D location scan keypoints for the 3D VQ benchmark. |
 | imu | IMU data for the subset of videos available |
-| slowfast8x8_r101_k400 | Precomputed [action features](https://ego4d-data.org/docs/data/features/) for Slowfast 8x8 (R101) model |
+| slowfast8x8_r101_k400 | Precomputed [action features](https://ego4d-data.org/docs/data/features/) for the Slowfast 8x8 (R101) model |
+| omnivore_video_swinl | Precomputed [action features](https://ego4d-data.org/docs/data/features/) for the Omnivore Video model |
+| omnivore_image_swinl | Precomputed [action features](https://ego4d-data.org/docs/data/features/) for the Omnivore Image model |
 | fut_loc | Images and annotations for the future locomotion benchmark. |
 | av_models | Model checkpoints for the AV/Social benchmark. |
 | lta_models | Model checkpoints for the Long Term Anticipation benchmark. |

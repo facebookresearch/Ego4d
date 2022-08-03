@@ -25,6 +25,8 @@ from typing import (
 
 import boto3.session
 import botocore.exceptions
+from botocore.client import Config
+from boto3.s3.transfer import TransferConfig
 from ego4d.cli import manifest
 from ego4d.cli.config import DATASET_FILE_EXTENSIONS, DATASETS_VIDEO, ValidatedConfig
 from ego4d.cli.manifest import VideoMetadata
@@ -266,8 +268,9 @@ def download_all(
     thread_data = threading.local()
 
     def initializer():
+        config = Config(connect_timeout=20, retries={'mode': 'standard'})
         thread_data.s3 = boto3.session.Session(profile_name=aws_profile_name).resource(
-            "s3"
+            "s3", config=config
         )
 
     def download_video(download: FileToDownload):
