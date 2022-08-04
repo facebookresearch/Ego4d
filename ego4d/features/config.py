@@ -242,7 +242,7 @@ def get_transform(config: FeatureExtractConfig) -> Any:
                 resampling_method=nc.resampling_method,
             )
 
-        transforms += (Lambda(resample_audio),)
+        transforms += [Lambda(resample_audio)]
 
     transforms += [model_transform]
     return Compose(transforms)
