@@ -163,7 +163,6 @@ class IndexableVideoDataset(torch.utils.data.Dataset):
             sample_dict["video"] = v_frames
         if a_frames is not None:
             sample_dict["audio"] = a_frames
-        if a_frames is not None:
             sample_dict["audio_sample_rate"] = encoded_video._container.streams.audio[
                 0
             ].rate

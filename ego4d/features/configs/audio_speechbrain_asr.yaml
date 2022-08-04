@@ -1,0 +1,42 @@
+fps: 30
+force_yes: false
+io:
+  filter_completed: true
+  video_dir_path: /datasets01/ego4d_track2/v1/full_scale/
+  uid_list: null
+  video_limit: 1
+  ego4d_download_dir: /checkpoint/miguelmartin/ego4d/
+  out_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/audio_speechbrain_transcriptions
+  debug_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/audio_speechbrain_transcriptions_debug
+  debug_mode: false
+  exclude_no_audio: true
+inference_config:
+  device: cuda
+  batch_size: 1
+  num_workers: 10
+  prefetch_factor: 2
+  fps: 30
+  frame_window: 150
+  stride: 150
+  include_audio: true
+  include_video: false
+  norm_config:
+    normalize_audio: false
+    resample_audio_rate: 16000
+    resampling_method: "sinc_interpolation"
+schedule_config:
+  run_locally: false
+  log_folder: slurm_log/%j
+  timeout_min: 720
+  constraint: volta
+  slurm_partition: pixar
+  slurm_array_parallelism: 10
+  gpus_per_node: 1
+  cpus_per_task: 10
+  overhead: 1.0
+  time_per_forward_pass: 0.1
+  schedule_time_per_node: 10.0
+model_config:
+  source: "speechbrain/asr-crdnn-transformerlm-librispeech"
+  savedir: "pretrained_models/asr-crdnn-transformerlm-librispeech"
+model_module_str: ego4d.features.models.speechbrain_asr

@@ -52,9 +52,9 @@ def profile_extraction(config: FeatureExtractConfig):
     print(
         "prefetch_factor,batch_size,num_workers,total,mean,forward_pass,to_load,transfer_to_device"  # noqa
     )
-    for batch_size, nm, pf in zip(batch_sizes, num_workers, prefetch_factor):
+    for batch_size, nw, pf in zip(batch_sizes, num_workers, prefetch_factor):
         config.inference_config.batch_size = batch_size
-        config.inference_config.num_workers = nm
+        config.inference_config.num_workers = nw
         config.inference_config.prefetch_factor = pf
 
         t1 = time.time()
@@ -86,11 +86,11 @@ def profile_extraction(config: FeatureExtractConfig):
 
         if batch_size == 0:
             print(
-                f"{prefetch_factor},{batch_size},{num_workers},{total_time},{mean_sum},{forward_pass.mean()},{to_load.mean()},{transfer_time.mean()}"  # noqa
+                f"{pf},{batch_size},{nw},{total_time},{mean_sum},{forward_pass.mean()},{to_load.mean()},{transfer_time.mean()}"  # noqa
             )
         else:
             print(
-                f"{prefetch_factor},{batch_size},{num_workers},{total_time},{mean_sum},{forward_pass.mean()/batch_size},{to_load.mean()/batch_size},{transfer_time.mean()/batch_size}"  # noqa
+                f"{pf},{batch_size},{nw},{mean_sum},{forward_pass.mean()/batch_size},{to_load.mean()/batch_size},{transfer_time.mean()/batch_size}"  # noqa
             )
 
 

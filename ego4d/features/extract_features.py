@@ -115,7 +115,9 @@ def _extract_features(
         with torch.no_grad():
             t1 = time.time()
             if not config.io.debug_mode:
-                fv = model(x).detach().cpu()
+                fv = model(x)
+                if isinstance(fv, torch.Tensor):
+                    fv = fv.detach().cpu()
             else:
                 vid_inp = x["video"]
                 fv = None
@@ -131,6 +133,7 @@ def _extract_features(
                     )
                     torchvision.utils.save_image(grid / 255.0, fp=to_path)  # noqa
             t2 = time.time()
+
             forward_pass_time = t2 - t1
 
             yield ExtractedFeature(
@@ -204,15 +207,18 @@ def extract_features(
 
         if batch_size == 0:
             key = ef.video_uid
-            ef.feature = ef.feature.cpu().squeeze()
+            if isinstance(ef.feature, torch.Tensor):
+                ef.feature = ef.feature.cpu().squeeze()
             fvs[key].append(ef)
         else:
-            assert len(ef.video_uid) == len(ef.feature)
-            assert len(ef.video_uid) == len(ef.clip_index)
+            if ef.feature is not None and isinstance(ef.feature, torch.Tensor):
+                assert len(ef.video_uid) == len(ef.feature)
+                assert len(ef.video_uid) == len(ef.clip_index)
 
             for i in range(len(ef.video_uid)):
                 key = ef.video_uid[i]
-                ef.feature = ef.feature.cpu().squeeze()
+                if isinstance(ef.feature, torch.Tensor):
+                    ef.feature[i] = ef.feature[i].cpu().squeeze()
                 fvs[key].append(ef)
 
         time_to_load.append(ef.time_to_load)
@@ -235,6 +241,16 @@ def extract_features(
                     .detach()
                     .squeeze()
                 )
+        else:
+            result[k] = [
+                {
+                    "start_time_sec": x.start_time_sec.item(),
+                    "end_time_sec": x.end_time_sec.item(),
+                    "feature": x.feature,
+                }
+                for x in efs
+                if x.feature is not None
+            ]
 
         clip = uid_to_video_clips[k]
         expected_fvs = num_fvs(clip, config.inference_config)
@@ -278,12 +294,17 @@ def perform_feature_extraction(
     # sort by smallest video first
     videos.sort(key=lambda x: x.frame_count)
 
+    is_audio_model = config.inference_config.include_audio
     o1 = time.time()
     for vid in tqdm(videos, desc="videos"):
         gc.collect()
 
         # TODO: convert this to be a generator
-        feature_extract_result = extract_features([vid], config)
+        feature_extract_result = extract_features(
+            [vid],
+            config,
+            assert_feature_size=not is_audio_model,
+        )
         result = feature_extract_result.result
 
         t1 = time.time()

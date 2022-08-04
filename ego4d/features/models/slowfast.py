@@ -9,8 +9,6 @@ from ego4d.features.models.common import FeedVideoInput
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.nn import Identity, Module
 from torchvision.transforms import Compose, Lambda
-
-# TODO
 from torchvision.transforms._transforms_video import CenterCropVideo, NormalizeVideo
 
 
