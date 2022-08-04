@@ -268,7 +268,7 @@ def download_all(
     thread_data = threading.local()
 
     def initializer():
-        config = Config(connect_timeout=20, retries={'mode': 'standard'})
+        config = Config(connect_timeout=20, retries={'mode': 'standard', 'max_attempts': 10})
         thread_data.s3 = boto3.session.Session(profile_name=aws_profile_name).resource(
             "s3", config=config
         )
