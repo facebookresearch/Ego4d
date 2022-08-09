@@ -183,16 +183,20 @@ def _validate_mp4(
             #check consistent video codec
             if video_info.vcodec != None:
                 total_vcodec.add(video_info.vcodec)
-                
-            
+                          
             #check consistent audio time base
             if video_info.acodec != None:
                 total_acodec.add(video_info.acodec)
-                
-            
+                            
             #check consistent rotation
             if video_info.rotate != None:
                 total_rotate.add(video_info.rotate)
+            else:
+                error_message.append(ErrorMessage(
+                    video_id,
+                    "Warning",
+                    f"component {i} has no rotation information"
+                ))
             
             #check consistent width and height
             if video_info.sample_width != None and video_info.sample_height != None:
@@ -203,7 +207,7 @@ def _validate_mp4(
                         ErrorMessage(
                             video_id,
                             "Error",
-                            f"compoennt {i} has width < height without rotation"
+                            f"component {i} has width < height without rotation"
                         ))
             
             #check consistent video time base
@@ -251,6 +255,13 @@ def _validate_mp4(
                     video_id,
                     "Error",
                     "inconsistent video codec"
+                ))
+        if len(total_acodec) > 1:
+            error_message.append(
+                ErrorMessage(
+                    video_id,
+                    "Error",
+                    "inconsistent audio codec"
                 ))
         if len(total_rotate) > 1:
             error_message.append(
@@ -558,7 +569,6 @@ def validate_all(path, s3):
         standard_metadata_folder
     )
 
-    # helper = s3.Bucket(bucket_name)
     (
         video_metadata_dict,
         video_components_dict,
