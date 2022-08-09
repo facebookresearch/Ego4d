@@ -13,6 +13,37 @@ import boto3.session
 from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
+unis = [
+    "unict",
+    "cmu",
+    "iiith",
+    "minnesota",
+    "utokyo",
+    "kaust",
+    "indiana",
+    "nus",
+    "bristol",
+    "georgiatech",
+    "frl_track_1_public",
+    "cmu_africa",
+    "uniandes",
+]
+meta_path = [
+    "metadata_v5",
+    "metadata_v27",
+    "2021-08-29_august_fixed",
+    "metadata_v10",
+    "metadata_v3",
+    "metadata_v7",
+    "metadata-v4",
+    "metadata_v1.2",
+    "metadata-v3",
+    "metadata_v3",
+    "track1/metadata_v0",
+    "metadata_v3",
+    "metadata_v0",
+]
+
 class ValidatedConfig(NamedTuple):
     """
     Data object that stores validated user-supplied configuration options for a video
@@ -52,7 +83,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         raise RuntimeError(f"Could not find AWS profile '{cfg.aws_profile_name}'.")
 
     return ValidatedConfig(
-        input_directory=Path(cfg.output_directory).expanduser(),
+        input_directory=Path(cfg.input_directory).expanduser(),
         validate_all=bool(cfg.validate_all),
         aws_profile_name=cfg.aws_profile_name,
         universities=set(cfg.universities) if cfg.universities else {},
@@ -92,8 +123,8 @@ def config_from_args(args=None) -> Config:
         "-a",
         "--all",
         default=False,
-        const=True,
         help="validate all files in S3",
+        dest='validate_all'
     )
 
     flag_parser.add_argument(
@@ -110,7 +141,7 @@ def config_from_args(args=None) -> Config:
         "belonging to the listed universities will be downloaded. A full list of "
         "university IDs can be found in the ego4d/cli/universities.py file.",
     )
-]
+
     # Use the values in the config file, but set them as defaults to flag_parser so they
     # can be overridden by command line flags
     if args.config_path:
@@ -119,11 +150,6 @@ def config_from_args(args=None) -> Config:
             flag_parser.set_defaults(**config_contents)
 
     parsed_args = flag_parser.parse_args(remaining)
-    if parsed_args.datasets is None and parsed_args.annotations is None:
-        raise RuntimeError(
-            f"Please specify either datasets, annotations or manifest for a minimal download set."
-        )
-
 
     flags = {k: v for k, v in vars(parsed_args).items() if v is not None}
 
@@ -132,7 +158,6 @@ def config_from_args(args=None) -> Config:
     # leave them unspecified when invoking the CLI.
 
     config = Config(**flags)
-
 
     # We need to check the universities values here since they might have been set
     # through the JSON config file, in which case the argparse checks won't validate

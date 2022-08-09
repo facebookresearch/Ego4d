@@ -13,11 +13,13 @@ import os
 from typing import List
 
 import boto3
-from ego4d.cli.config import (
+from ego4d.cli.universities import UNIV_TO_BUCKET
+
+from ego4d.internal.config import (
+    unis,
+    meta_path,
     Config,
     config_from_args,
-    DATASET_PRIMARY,
-    DATASETS_VIDEO,
     validate_config,
 )
 
@@ -32,6 +34,12 @@ def main_cfg(cfg: Config) -> None:
     #     "s3"
     # )
     s3 = boto3.client('s3')
+    if cfg.validate_all:
+        for u in unis:
+            path = f"s3://{UNIV_TO_BUCKET[u]}/{meta_path[u]}"
+            validate_all(path, s3)
+    else:
+        validate_all(cfg.input_directory, s3)
 
 def main() -> None:
     config = config_from_args()
