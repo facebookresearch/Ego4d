@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Tuple, List
-
+from typing import Optional, List
 
 @dataclass
 class InputConfig:
@@ -27,13 +26,6 @@ class K400PreprocessConfig:
     metadata_out_path: str
     feature_extract_config_path: str
     num_labels_per_machine: int
-    slurm_log_folder: str
-    timeout_min: int
-    constraint: str
-    slurm_partition: str
-    slurm_array_parallelism: int
-    gpus_per_node: int
-    cpus_per_task: int
 
 
 @dataclass
@@ -50,34 +42,20 @@ class EgoPreprocessNarrConfig:
     pre_root_dir: str
     metadata_out_path: str
     narration_out_path: str
-
-    slurm_log_folder: str
-    timeout_min: int
-    constraint: str
-    slurm_partition: str
-    slurm_array_parallelism: int
-    gpus_per_node: int
-    cpus_per_task: int
+    limit: Optional[int]
 
 
 @dataclass
 class EgoCharadePreprocessConfig:
     out_path: str
     out_label_path: str
-
-    slurm_log_folder: str
-    timeout_min: int
-    constraint: str
-    slurm_partition: str
-    slurm_array_parallelism: int
-    gpus_per_node: int
-    cpus_per_task: int
-
     num_vids_per_machine: int
 
 
 @dataclass
 class CCPreprocessConfig:
+    in_path: str
+
     hdf5_viz_path: str
     hdf5_sent_path: str
     meta_path: str
@@ -86,17 +64,10 @@ class CCPreprocessConfig:
     prefetch_factor: int
     imgs_per_gpu: int
 
-    slurm_log_folder: str
-    timeout_min: int
-    constraint: str
-    slurm_partition: str
-    slurm_array_parallelism: int
-    gpus_per_node: int
-    cpus_per_task: int
-
 
 @dataclass
 class PreprocessConfig:
+    mode: str
     ego4d_narr: EgoPreprocessNarrConfig
     ego4d_features: EgoPreprocessFeatureConfig
     k400: K400PreprocessConfig
@@ -123,7 +94,6 @@ class TrainConfig:
     run_locally: bool
     tb_log_dir: str
     tb_log_name: str
-    slurm_log_folder: str
 
     lr: float
     beta1: float
@@ -134,10 +104,10 @@ class TrainConfig:
     eval_per_iter: int
     eval_init: bool
 
-    preprocess_mode: str
-
     use_soft_loss: Optional[bool]
     soft_loss_threshold: float
     use_bce: bool
     use_logit_scale: bool
     norm_logits: bool
+
+    slurm_config: SlurmConfig

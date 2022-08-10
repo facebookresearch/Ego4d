@@ -21,10 +21,10 @@ import torchvision.transforms as T
 from PIL import Image
 
 from sentence_transformers import SentenceTransformer
-from ego4d.research.clip.dataset import (
+from ego4d.research.clep.dataset import (
     create_data_loader,
 )
-from ego4d.research.clip.config import (
+from ego4d.research.clep.config import (
     EgoPreprocessFeatureConfig,
     TrainConfig,
     CCPreprocessConfig,
@@ -35,7 +35,6 @@ from ego4d.research.clip.config import (
 )
 from ego4d.features.inference import _load_kinetics_class_names
 from tqdm.auto import tqdm
-from hydra import compose, initialize
 from omegaconf import OmegaConf
 
 
@@ -122,7 +121,7 @@ def get_narrations(config: EgoPreprocessNarrConfig):
     return narrations
 
 
-def map_narrs_on_machine(narrs, config=None):
+def map_narrs_on_machine(narrs: List[str], config: EgoCharadePreprocessConfig) -> Dict[str, Any]:
     model = SentenceTransformer(config.st_model_name)
 
     narr_op = os.path.join(config.pre_root_dir, config.narration_out_path)
@@ -151,20 +150,6 @@ def map_narrs_on_machine(narrs, config=None):
             }, path_to_encode)
             metas.append({"uid": uid, "txt": txt, "ts": ts, "idx": idx, "post_txt": post_txt, "no_tag_txt": no_tag_txt})
     return metas
-
-
-def create_executor(config, num_batches: int):
-    executor = submitit.AutoExecutor(folder=config.slurm_log_folder)
-
-    executor.update_parameters(
-        timeout_min=config.timeout_min,
-        slurm_constraint=config.constraint,
-        slurm_partition=config.slurm_partition,
-        slurm_array_parallelism=min(config.slurm_array_parallelism, num_batches),
-        gpus_per_node=config.gpus_per_node,
-        cpus_per_task=config.cpus_per_task,
-    )
-    return executor
 
 
 def preprocess_ego_features(feature_path: str, pre_config: PreprocessConfig, pre_feature: EgoPreprocessFeatureConfig):
@@ -198,8 +183,7 @@ def preprocess_ego_narrations(narr_config: EgoPreprocessNarrConfig):
             for uid, txt, ts in narrs
         ])
     )
-    if narr_config.limit > 0:
-        narrs_with_idx = narrs_with_idx[0:narr_config.limit]
+    narrs_with_idx = narrs_with_idx[0:narr_config.limit]
 
     batches = batch_it(narrs_with_idx, narr_config.num_narrs_per_machine)
     print(f"Running txt through transformer with {len(batches)} machines")
@@ -498,8 +482,7 @@ def _get_fs(x):
 
 
 def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
-    in_path = "/checkpoint/miguelmartin/conceptial_captions/Train_GCC-training_output.csv"
-    train_df = pd.read_csv(in_path, sep='\t')
+    train_df = pd.read_csv(cc.in_path, sep='\t')
 
     examples = dict(zip(train_df.filepath, train_df.title))
     invalid_keys = []
@@ -547,19 +530,18 @@ def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
 
 @hydra.main(config_path="configs", config_name=None)
 def preprocess(config: TrainConfig):
-    # TODO: refactor
-    if config.preprocess_mode == "ego":
+    if config.pre_config.mode == "ego":
         preprocess_ego_narrations(config.pre_config.ego4d_narr)
-    elif config.preprocess_mode == "ego_features":
+    elif config.pre_config.mode == "ego_features":
         preprocess_ego_features(config.input_config.feature_path, config.pre_config, config.pre_config.ego4d_features)
-    elif config.preprocess_mode == "k400":
+    elif config.pre_config.mode == "k400":
         preprocess_k400_data(config, config.pre_config.k400)
-    elif config.preprocess_mode == "ego_charade":
+    elif config.pre_config.mode == "ego_charade":
         preprocess_ego_charade(config, config.pre_config.ego_charade)
-    elif config.preprocess_mode == "cc":
+    elif config.pre_config.mode == "cc":
         preprocess_cc(config, config.pre_config.cc)
     else:
-        raise AssertionError("{config.preprocess_mode} not supported")
+        raise AssertionError("{config.pre_config.mode} not supported")
 
 
 if __name__ == "__main__":

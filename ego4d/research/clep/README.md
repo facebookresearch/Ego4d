@@ -1,4 +1,4 @@
-# Ego4D CLIP
+# CLEP: Contrastive Language Egocentric-video Pre-training
 
 NOTE: this is very experimental code. You may have to read and modify the code
 in order to run it on your machine. Dependent on interest, this may change.
@@ -20,12 +20,12 @@ repository of this repository.
 ## Preprocessing Data
 
 To pre-process the data please use the script under
-`ego4d/research/clip/preprocess.py`. Provide `preprocess_mode` to change what
+`ego4d/research/clep/preprocess.py`. Provide `preprocess_mode` to change what
 is being pre-processed.
 
 
 ```
-python3 ego4d/vaclip/preprocess.py --config-name omnivore_features run_locally=1 preprocess_mode="ego"
+python3 ego4d/research/clep/preprocess.py --config-name omnivore_features run_locally=1 preprocess_mode="ego"
 ```
 
 Also add `run_locally=1` to run the preprocessing on a non-slurm cluster.
@@ -48,10 +48,10 @@ You will likely have to modify the paths in `configs/omnivore_features`
 
 ## Datasets
 
-Please refer to the code `ego4d/research/clip/dataset.py`.  These need to be cleaned up.
+Please refer to the code `ego4d/research/clep/dataset.py`.  These need to be cleaned up.
 
 ## Training
 
-Run training with `ego4d/research/clip/train.py`.
+Run training with `ego4d/research/clep/train.py`.
 
 Pass `run_locally=1` if you want to run the training process not on the cluster.

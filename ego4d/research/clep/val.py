@@ -6,14 +6,14 @@ from torch.nn import Identity
 
 from tqdm.auto import tqdm
 from omegaconf import OmegaConf
-from ego4d.research.clip.config import TrainConfig
+from ego4d.research.clep.config import TrainConfig
 
 from ego4d.features.config import (
     FeatureExtractConfig,
     load_model,
 )
-from ego4d.research.clip.dataset import KineticsDset, create_data_loader
-from ego4d.research.clip.utils import charades_map
+from ego4d.research.clep.dataset import KineticsDset, create_data_loader
+from ego4d.research.clep.utils import charades_map
 
 
 # taken from: https://github.com/mlfoundations/open_clip/blob/main/src/training/zero_shot.py#L29

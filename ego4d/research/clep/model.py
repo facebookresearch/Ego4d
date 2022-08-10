@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-from torch.nn import Identity
 import numpy as np
 
-from ego4d.research.clip.config import ModelConfig
+from ego4d.research.clep.config import ModelConfig
 
 def _get_layers(initial_dim, config):
     return [

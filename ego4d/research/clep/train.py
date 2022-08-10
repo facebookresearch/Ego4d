@@ -7,19 +7,19 @@ import hydra
 import time
 import submitit
 
-from ego4d.research.clip.val import (
+from ego4d.research.clep.val import (
     eval_classification,
     eval_multi_class_classification,
 )
-from ego4d.research.clip.config import TrainConfig
-from ego4d.research.clip.dataset import (
+from ego4d.research.clep.config import TrainConfig
+from ego4d.research.clep.dataset import (
     Ego4DVaClip,
     CCDset,
     KineticsDset,
     EgoCharadesDset,
     create_data_loader,
 )
-from ego4d.research.clip.model import EgoLangaugeAssociation
+from ego4d.research.clep.model import EgoLangaugeAssociation
 
 from pytorch_lightning.lite import LightningLite
 
