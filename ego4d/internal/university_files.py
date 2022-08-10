@@ -1,20 +1,27 @@
 # pyre-unsafe
-from dataclasses import dataclass
 import csv
 import json
-import tempfile
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Dict, List, Tuple, Callable, Optional, Union
-from dataclasses import Field, field as dataclass_field, fields as dataclass_fields
-from collections import defaultdict
-from credential_s3 import S3Helper
 import logging
+import os
+import tempfile
+from collections import defaultdict
+from dataclasses import (
+    dataclass,
+    Field,
+    field as dataclass_field,
+    fields as dataclass_fields,
+)
+from datetime import datetime
 from threading import Lock
+from typing import Any, Callable, Dict, List, Tuple, Union
+
+import tqdm
+from credential_s3 import S3Helper
 
 
-logging.basicConfig(filename='example.log', level=logging.DEBUG)
+logging.basicConfig(filename="example.log", level=logging.DEBUG)
 lock = Lock()
+
 
 def split_s3_path(s3_path: str) -> Tuple[str, str]:
     """
@@ -29,6 +36,7 @@ def split_s3_path(s3_path: str) -> Tuple[str, str]:
         return s3_path_components[0], "/".join(s3_path_components[1:])
     # pyre-fixme[7]: Expected `Tuple[str, str]` but got `Tuple[None, str]`.
     return None, s3_path
+
 
 class DataclassFieldCaster:
     """
@@ -91,6 +99,7 @@ class DataclassFieldCaster:
                     except ValueError:
                         value = None
                     setattr(self, field.name, value)
+
     @staticmethod
     def complex_initialized_dataclass_field(
         field_initializer: Callable, **kwargs
@@ -115,40 +124,51 @@ class DataclassFieldCaster:
         kwargs["metadata"] = metadata
         return dataclass_field(**kwargs)
 
+
 @dataclass
 class ErrorMessage:
     """Class for keeping track of the error generated in validation."""
+
     uid: str
     errorType: str
-    description:str
+    description: str
 
     def _init_(self, uid, error, desc):
         self.uid = uid
         self.errorType = error
         self.description = desc
 
+
 @dataclass
 class Device(DataclassFieldCaster):
     device_id: int
     name: str
+
 
 @dataclass
 class ComponentType(DataclassFieldCaster):
     component_type_id: int
     name: str
 
+
 @dataclass
 class Scenario(DataclassFieldCaster):
     scenario_id: int
     name: str
 
+
 DATE_FORMAT_STR = "%Y-%m-%d %H:%M:%S"
+
 
 def DATE_INITIALIZATION_FUNC(a: str):
     # TODO (Support milleseconds if needed)
     # a = a.split(".")[0]
     # Fall back to default if not available
-    return datetime.strptime(a.split(".")[0], DATE_FORMAT_STR) if a else datetime(1900, 1, 1)
+    return (
+        datetime.strptime(a.split(".")[0], DATE_FORMAT_STR)
+        if a
+        else datetime(1900, 1, 1)
+    )
 
 
 def json_load_or_empty_dict(s):
@@ -164,6 +184,7 @@ def json_load_or_empty_list(s):
         return s
     else:
         return []
+
 
 @dataclass
 class VideoMetadata(DataclassFieldCaster):
@@ -289,6 +310,7 @@ class Annotations(DataclassFieldCaster):
         )
     )
 
+
 def load_dataclass_dict_from_csv(
     input_csv_file_path: str,
     dataclass_class: type,
@@ -321,7 +343,7 @@ def load_dataclass_dict_from_csv(
     """
 
     output_dict = defaultdict(list) if list_per_key else {}
-    with open(input_csv_file_path, newline='') as csvfile:
+    with open(input_csv_file_path, newline="") as csvfile:
         reader = csv.reader(csvfile, delimiter=",", quotechar='"')
         column_index = {header: i for i, header in enumerate(next(reader))}
         for line in tqdm(reader):
@@ -338,9 +360,10 @@ def load_dataclass_dict_from_csv(
             else:
                 assert (
                     dict_key not in output_dict
-                ), f"Multiple entries for {dict_key} in {dataclass_file}"
+                ), f"Multiple entries for {dict_key} in {csvfile}"
                 output_dict[dict_key] = datum
     return output_dict
+
 
 def load_standard_metadata_files(
     standard_metadata_folder: str,
@@ -397,8 +420,8 @@ def load_university_files(
         available_files = os.listdir(metadata_folder_prefix)
 
     with tempfile.TemporaryDirectory("consortium_ingester") as tempdir:
-            # Load reqiured files
-            # Load video_metadata.csv
+        # Load reqiured files
+        # Load video_metadata.csv
         file_name = "video_metadata.csv"
         assert file_name in available_files, (
             f"required file {file_name} not found in "
@@ -440,7 +463,9 @@ def load_university_files(
         if file_name in available_files:
             if s3_bucket_name:
                 local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(f"{metadata_folder_prefix}/{file_name}", local_file_path)
+                s3_bucket.get_file(
+                    f"{metadata_folder_prefix}/{file_name}", local_file_path
+                )
             else:
                 local_file_path = f"{metadata_folder_prefix}/{file_name}"
             auxiliary_video_component_dict = load_dataclass_dict_from_csv(
@@ -456,7 +481,9 @@ def load_university_files(
         if file_name in available_files:
             if s3_bucket_name:
                 local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(f"{metadata_folder_prefix}/{file_name}", local_file_path)
+                s3_bucket.get_file(
+                    f"{metadata_folder_prefix}/{file_name}", local_file_path
+                )
             else:
                 local_file_path = f"{metadata_folder_prefix}/{file_name}"
             participant_dict = load_dataclass_dict_from_csv(
@@ -471,7 +498,9 @@ def load_university_files(
         if file_name in available_files:
             if s3_bucket_name:
                 local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(f"{metadata_folder_prefix}/{file_name}", local_file_path)
+                s3_bucket.get_file(
+                    f"{metadata_folder_prefix}/{file_name}", local_file_path
+                )
             else:
                 local_file_path = f"{metadata_folder_prefix}/{file_name}"
             synchronized_video_dict = load_dataclass_dict_from_csv(
@@ -486,7 +515,9 @@ def load_university_files(
         if file_name in available_files:
             if s3_bucket_name:
                 local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(f"{metadata_folder_prefix}/{file_name}", local_file_path)
+                s3_bucket.get_file(
+                    f"{metadata_folder_prefix}/{file_name}", local_file_path
+                )
             else:
                 local_file_path = f"{metadata_folder_prefix}/{file_name}"
             physical_setting_dict = load_dataclass_dict_from_csv(
@@ -501,7 +532,9 @@ def load_university_files(
         if file_name in available_files:
             if s3_bucket_name:
                 local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(f"{metadata_folder_prefix}/{file_name}", local_file_path)
+                s3_bucket.get_file(
+                    f"{metadata_folder_prefix}/{file_name}", local_file_path
+                )
             else:
                 local_file_path = f"{metadata_folder_prefix}/{file_name}"
             annotations_dict = load_dataclass_dict_from_csv(
@@ -519,4 +552,3 @@ def load_university_files(
         physical_setting_dict,
         annotations_dict,
     )
-

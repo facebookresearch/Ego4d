@@ -7,7 +7,7 @@ from command line flags and a configuration file.
 import argparse
 import json
 from pathlib import Path
-from typing import List, NamedTuple, Set, Union
+from typing import List, NamedTuple, Set
 
 import boto3.session
 from botocore.exceptions import ProfileNotFound
@@ -43,6 +43,7 @@ meta_path = [
     "metadata_v3",
     "metadata_v0",
 ]
+
 
 class ValidatedConfig(NamedTuple):
     """
@@ -124,7 +125,7 @@ def config_from_args(args=None) -> Config:
         "--all",
         default=False,
         help="validate all files in S3",
-        dest='validate_all'
+        dest="validate_all",
     )
 
     flag_parser.add_argument(

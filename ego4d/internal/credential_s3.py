@@ -2,15 +2,10 @@
 import logging
 import os
 import re
-import tempfile
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-import boto3
 import botocore
-from botocore.config import Config
-
-
 
 
 @dataclass

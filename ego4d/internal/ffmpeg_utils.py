@@ -1,17 +1,15 @@
 # pyre-unsafe
 
 import json
-import math
-import os
 import subprocess
-import boto3
-from botocore.exceptions import ClientError
-import logging
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Dict, List, Optional, Tuple
-from university_files import ErrorMessage
+
 import botocore
+from botocore.exceptions import ClientError
+from university_files import ErrorMessage
+
 
 @dataclass(frozen=True)
 class VideoInfo:
@@ -42,39 +40,43 @@ class VideoInfo:
         assert self.sar is not None
         return int(self.sample_width * (self.sar.numerator / self.sar.denominator))
 
+
 def get_video_info(
     s3_client: botocore.client.BaseClient,
-    bucket_name: str, 
-    video_param: Tuple[str,str], 
-    error_message: List[ErrorMessage], 
-    expiration: Optional[int] = 5
+    bucket_name: str,
+    video_param: Tuple[str, str],
+    error_message: List[ErrorMessage],
+    expiration: Optional[int] = 5,
 ) -> VideoInfo:
     """
     Args:
         bucket_name: Name of the bucket
         object_name: Key of the mp4 to read
         expiration: Time in seconds for the presigned URL to remain valid
-    
-    Return: 
+
+    Return:
         VideoInfo: information of the video stored in bucket_name specified by the object_name
         If error, returns None and log the error.
     """
     # Generate a presigned URL for the S3 object
     object_name = video_param[1]
     try:
-        filename = s3_client.generate_presigned_url('get_object',
-                                                    Params={'Bucket': bucket_name,
-                                                            'Key': object_name},
-                                                    ExpiresIn=expiration)
-    except ClientError as e:
+        filename = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket_name, "Key": object_name},
+            ExpiresIn=expiration,
+        )
+    except ClientError:
         # logging.error(e)
-        error_message.append(ErrorMessage(
-            video_param[0],
-            "Error",
-            f"video s3://{bucket_name}/{object_name} doesn't exist in bucket"
-        ))
+        error_message.append(
+            ErrorMessage(
+                video_param[0],
+                "Error",
+                f"video s3://{bucket_name}/{object_name} doesn't exist in bucket",
+            )
+        )
         return None
-    
+
     cmd = [
         "ffprobe",
         "-i",
@@ -85,7 +87,7 @@ def get_video_info(
         "json",
         "-show_format",
         "-show_streams",
-        "-hide_banner"
+        "-hide_banner",
     ]
 
     def to_fraction(fps):
@@ -99,23 +101,26 @@ def get_video_info(
     try:
         result = subprocess.run(cmd, encoding="utf-8", capture_output=True)
 
-    except Exception as e:
-        # logging.error(e)
-        error_message.append(ErrorMessage(
-            video_param[0],
-            "Error",
-            f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG"
-        ))
+    except Exception:
+        error_message.append(
+            ErrorMessage(
+                video_param[0],
+                "Error",
+                f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG",
+            )
+        )
         return None
-    
+
     if result.stderr:
-        error_message.append(ErrorMessage(
-            video_param[0],
-            "Error",
-            f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG"
-        ))
+        error_message.append(
+            ErrorMessage(
+                video_param[0],
+                "Error",
+                f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG",
+            )
+        )
         return None
-    
+
     # return result
     data = json.loads(result.stdout)
 
@@ -127,9 +132,9 @@ def get_video_info(
     vcodec = None
     acodec = None
     vstart = None
-    astart=None
-    vduration=None
-    aduration=None
+    astart = None
+    vduration = None
+    aduration = None
     audio_sample_rate = None
     channel_layout = None
     rotate = None
@@ -137,8 +142,8 @@ def get_video_info(
     mp4_duration = None
 
     if "format" in data:
-        if 'duration' in data['format']:
-            mp4_duration = float(data['format']['duration'])
+        if "duration" in data["format"]:
+            mp4_duration = float(data["format"]["duration"])
 
     # it's possible for some files
     # to not have this information available
@@ -157,7 +162,7 @@ def get_video_info(
                 a, b = stream["display_aspect_ratio"].split(":")
                 dar = Fraction(int(a), int(b))
 
-            if "codec_name" in stream: 
+            if "codec_name" in stream:
                 if "width" in stream:
                     vcodec = stream["codec_name"]
                     width = stream["width"]
@@ -166,18 +171,18 @@ def get_video_info(
 
             if "height" in stream:
                 height = stream["height"]
-            
+
             if "duration" in stream:
                 if "width" in stream:
                     vduration = float(stream["duration"])
                 else:
-                    aduration = float(stream['duration'])
-            
+                    aduration = float(stream["duration"])
+
             if "start_time" in stream:
                 if "width" in stream:
                     vstart = float(stream["start_time"])
                 else:
-                    astart = float(stream['start_time'])
+                    astart = float(stream["start_time"])
 
             if "time_base" in stream and "width" in stream:
                 vtb = to_fraction(stream["time_base"])
@@ -209,6 +214,6 @@ def get_video_info(
         rotate=rotate,
         unstructured_stream_data=data,
         video_time_base=vtb,
-        mp4_duration=mp4_duration
+        mp4_duration=mp4_duration,
     )
     return video_info
