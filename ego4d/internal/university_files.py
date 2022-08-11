@@ -16,7 +16,7 @@ from threading import Lock
 from typing import Any, Callable, Dict, List, Tuple, Union
 
 import tqdm
-from credential_s3 import S3Helper
+from ego4d.internal.credential_s3 import S3Helper
 
 
 logging.basicConfig(filename="example.log", level=logging.DEBUG)

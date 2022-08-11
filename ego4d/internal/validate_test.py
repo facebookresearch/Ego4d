@@ -110,8 +110,6 @@ def test_get_videos():
 def test_validate_mp4(video_info_dict):
     err = []
     validate._validate_mp4(video_info_dict, err)
-    # assert len(err) == 2
-    # assert err[0].description == 'width < height without rotation'
     err = []
     vinfo = video_info_dict[uid1][0]
     v1 = VideoInfo(

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import botocore
 from botocore.exceptions import ClientError
-from university_files import ErrorMessage
+from ego4d.internal.university_files import ErrorMessage
 
 
 @dataclass(frozen=True)
