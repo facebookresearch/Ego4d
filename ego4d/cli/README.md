@@ -102,4 +102,7 @@ The following university IDs can be specified:
 | utokyo |
 
 
-
+## Frequently Asked Questions (and their answers)
+1. I get `ClientError: An error occurred (403) when calling the HeadObject operation: Forbidden`
+   1. Are your datasets spelled correctly? If not, you'll see warnings at the top of your cli output.
+   2. Has it been more than 14 days since you got your license? License keys expire after 14 days, please re-sign the license with the same email at ego4ddataset.com to reactivate it.
