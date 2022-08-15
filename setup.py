@@ -26,8 +26,11 @@ setup(
         "pytest",
         "moto",
     ],
-    packages=["ego4d", "ego4d.cli"],
+    packages=["ego4d", "ego4d.cli", "ego4d.internal"],
     entry_points={
-        "console_scripts": ["ego4d=ego4d.cli.cli:main"],
+        "console_scripts": [
+            "ego4d=ego4d.cli.cli:main",
+            "ego4d_internal = ego4d.internal.cli:main",
+        ],
     },
 )

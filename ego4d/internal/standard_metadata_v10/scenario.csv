@@ -1,0 +1,171 @@
+scenario_id,name,is_ad_hoc,included_in_release_1
+1000,Sleeping,0,1
+1,Daily hygiene,0,1
+2,Doing hair/make-up,0,1
+3,Cleaning / laundry,0,1
+4,Cooking,0,1
+5,Talking with family members,0,1
+6,Hosting a party,0,1
+7,Eating,0,1
+8,Doing yardwork / shoveling snow,0,1
+9,Household management - caring for kids,0,1
+10,Fixing something in the home,0,1
+11,Playing with pets,0,1
+12,Crafting/knitting/sewing/drawing/painting,0,1
+13,Working at desk,0,1
+14,Participating in a meeting,0,1
+15,Attending a lecture/class,0,1
+16,Writing on whiteboard,0,1
+17,Video call,0,1
+18,Eating at the cafeteria,0,1
+19,Making a salad/sandwich,0,1
+20,Making coffee,0,1
+21,Talking to colleagues,0,1
+22,Grocery shopping indoors,0,1
+23,Farmers market,0,1
+24,"Clothes, other shopping",0,1
+25,Getting car fixed,0,1
+26,Going to the bank,0,1
+27,Walking the dog / pet,0,1
+28,"Washing the dog / pet, grooming horse",0,1
+29,"Appointments: doctor, dentist",0,1
+30,Watching movies at the cinema,0,1
+31,Watching tv,0,1
+32,Reading books,0,1
+33,Playing cards,0,1
+34,Playing games / video games,0,1
+35,Playing board games,0,1
+36,Gardening,0,1
+37,Escape room,0,1
+38,Scavenger Hunt and/or Geocaching- Difference with escape room is this could inolve outdoors + indoors and in case of geocaching could involve significant navigation,0,1
+39,Attending sporting events - watching and participating in,0,1
+40,Attending play/ballet,0,1
+41,Attending concerts,0,1
+42,Hanging out with friends at a bar,0,1
+43,Eating at a restaurant,0,1
+44,Eating at a friend’s home,0,1
+45,Attending a party,0,1
+46,Talking on the phone,0,1
+47,Listening to music,0,1
+48,BBQ’ing/picnics,0,1
+49,Attending religious activity,0,1
+50,"Going to a salon (nail, hair, spa)",0,1
+51,Getting a tattoo / piercing,0,1
+52,Volunteering,0,1
+53,Practicing a musical instrument,0,1
+54,Attending a festival or fair,0,1
+55,Hanging out at a coffee shop,0,1
+56,Karting / go-Kart Racing,0,1
+57,Visiting exhibition,0,1
+58,Table tennis,0,1
+59,Indoor Navigation (walking),0,1
+60,"Car - commuting, road trip",0,1
+61,Bus,0,1
+62,Train,0,1
+63,Airplane,0,1
+64,Bike,0,1
+65,Skateboard/scooter,0,1
+66,"Going to the gym - exercise machine, class, weights",0,1
+67,Yoga practice,0,1
+68,Swimming in a pool/ocean,0,1
+69,Working out at home,0,1
+70,Cycling / jogging,0,1
+71,Dancing,0,1
+72,Working out outside,0,1
+73,Walking on street,0,1
+74,Going to the park,0,1
+75,Hiking,0,1
+76,Tourism,0,1
+77,Karate,0,1
+78,Volleyball,0,1
+79,Football,0,1
+80,BasketBall,0,1
+81,Hockey,0,1
+82,Baker,0,1
+83,Carpenter,0,1
+84,Gardener,0,1
+85,Hair and Makeup stylist,0,1
+86,Household cleaners,0,1
+87,Dentist,0,1
+88,Handyman,0,1
+89,Florist,0,1
+90,Car mechanic,0,1
+91,Blacksmith,0,1
+92,Pastry chef,0,1
+93,chef,0,1
+94,Excavator worker,0,1
+95,Farmer,0,1
+96,sculptors and marble cutter,0,1
+97,"jobs related to construction/renovation company
+(Director of work, tiler, plumber, Electrician, Handyman, etc)",0,1
+98,ceramic decorator,0,1
+99,sewing workers at shirt company,0,1
+100,biology experiments,0,1
+101,building lego models / plastic models,0,1
+102,interior coordinate,0,1
+103,"Maker Lab (making items in different materials, wood plastic and also electronics), some overlap with construction etc. but benefit is all activities take place within a few rooms",0,1
+104,Scooter mechanic,1,1
+105,Bike mechanic,1,1
+106,Car/scooter washing,1,1
+107,Fixing PC,1,1
+108,mushroom picking,1,1
+109,Making Bricks,1,1
+110,DEPRECATED : Playing board games,1,1
+111,Poultry farm,1,1
+112,Pulp Traces Factory (Egges),1,1
+113,Fixing musical instrument,1,1
+114,Fishing,1,1
+115,Golfing,1,1
+116,Street art,1,1
+117,Drone flying,1,1
+118,Baseball,1,1
+119,Frisbee,1,1
+120,Camp setup/pack-up/chores,1,1
+121,Outdoor cooking,1,1
+122,Outdoor social (includes campfire),1,1
+123,Outdoor technical climbing/belaying/rappelling (includes ropework),1,1
+124,Rowing,1,1
+125,On a screen (phone/laptop),1,1
+126,Tennis,1,1
+127,Assembling a puzzle,1,1
+128,Talking with friends/housemates,1,1
+129,Gaming arcade / pool / billiards,1,1
+130,Snow sledding,1,1
+131,Drive-thru food,1,1
+132,ATV scene,1,1
+133,Crossword puzzle,1,1
+134,Working in outdoor store,1,1
+135,Potting plants (indoor),1,1
+136,Bowling,1,1
+137,Mini golf,1,1
+138,Labwork,1,1
+139,Play with cellphone,1,1
+140,Reviewing flash cards,1,1
+141,Roller skating,1,1
+142,Playing badminton,1,1
+143,Grinding mill,1,1
+144,Riding motorcycle,1,1
+145,Ironing,1,1
+146,Decorating,1,1
+147,Cleaning at the gym,1,1
+148,"Electronics (hobbyist circuitry board kind, not electrical repair)",1,1
+149,Wood restoration,,1
+150,Assembling furniture,,1
+151,Playing Darts,,1
+152,Preparing hopot,0,1
+153,Attending a TA session,0,1
+154,Eating in a canteen,0,1
+155,Taking photos in photography studio,0,1
+156,Working in milktea shop,0,1
+157,Eating in hawker center,0,1
+158,Scanning objects with a 3D scanner,1,1
+159,Community cleaning,0,1
+160,Mehandi,1,1
+161,Flower Picking,1,1
+162,writing on book,1,1
+163,Using 3D printer,,0
+164,beekeeper,,0
+165,restoration,,0
+166,Playing Tejo,,
+167,Climbing,,
+168,coachbuilder,,0
