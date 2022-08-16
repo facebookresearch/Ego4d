@@ -137,6 +137,7 @@ def main_cfg(cfg: Config) -> None:
         downloads,
         version_entries,
         bypass_version_check=validated_cfg.bypass_version_check,
+        skip_s3_checks=validated_cfg.skip_s3_checks,
     )
 
     missing = [x for x in downloads if not x.s3_exists]
@@ -153,32 +154,43 @@ def main_cfg(cfg: Config) -> None:
         )
         exit(0)
 
-    print(f"Downloading {len(active_downloads)}/{len(downloads)}..")
-
     assert all(x.s3_object for x in active_downloads)
 
-    total_size_bytes = sum(
-        x.s3_object.content_length for x in active_downloads if x.s3_object
-    )
-    if total_size_bytes == 0:
-        print(
-            "The latest versions of all requested videos already exist in the output "
-            "directories under:\n"
-            f"{validated_cfg.output_directory}"
+    total_size_bytes = None
+    if not validated_cfg.skip_s3_checks:
+        total_size_bytes = sum(
+            x.s3_object.content_length for x in active_downloads if x.s3_object
         )
-        exit(0)
+        if total_size_bytes == 0:
+            print(
+                "The latest versions of all requested videos already exist in the output "
+                "directories under:\n"
+                f"{validated_cfg.output_directory}"
+            )
+            exit(0)
 
-    expected_gb = total_size_bytes / 1024 / 1024 / 1024
+        expected_gb = total_size_bytes / 1024 / 1024 / 1024
+
     if validated_cfg.assume_yes:
-        print(f"Downloading {expected_gb:.1f} GB..")
+        if expected_gb:
+            print(f"Downloading {len(active_downloads)} files..")
+        else:
+            print(f"Downloading {expected_gb:.1f} GB..")
     else:
         confirm = None
         while confirm is None:
-            response = input(
-                f"Expected size of downloaded files is "
-                f"{expected_gb:.1f} GB. "
-                f"Do you want to start the download? ([y]/n) "
-            )
+            if validated_cfg.skip_s3_checks:
+                response = input(
+                    f"Number of files to download is: {len(active_downloads)}\n"
+                    f"Run without --skip-s3-checks for a size estimate.\n"
+                    f"Do you want to start the download? ([y]/n) "
+                )
+            else:
+                response = input(
+                    f"Expected size of downloaded files is "
+                    f"{expected_gb:.1f} GB. "
+                    f"Do you want to start the download? ([y]/n) "
+                )
             if response.lower() in ["yes", "y", ""]:
                 confirm = True
             elif response.lower() in ["no", "n"]:

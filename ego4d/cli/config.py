@@ -63,6 +63,7 @@ class ValidatedConfig(NamedTuple):
     metadata: bool
     manifest: bool
     bypass_version_check: bool
+    skip_s3_checks: bool
     video_uids: Set[str]
     universities: Set[str]
     annotations: Union[bool, Set[str]]
@@ -83,6 +84,7 @@ class Config(NamedTuple):
     metadata: bool = False
     manifest: bool = False
     bypass_version_check: bool = False
+    skip_s3_checks: bool = False
     video_uids: List[str] = []
     universities: List[str] = []
     annotations: Union[bool, List[str]] = True
@@ -114,6 +116,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         universities=set(cfg.universities) if cfg.universities else {},
         assume_yes=bool(cfg.assume_yes),
         bypass_version_check=cfg.bypass_version_check,
+        skip_s3_checks=cfg.skip_s3_checks,
         annotations=cfg.annotations if isinstance(cfg.annotations, bool) else set(),
     )
 
@@ -196,6 +199,13 @@ def config_from_args(args=None) -> Config:
         action="store_const",
         dest="bypass_version_check",
         help="Bypass existing files without checking file versions/sizes.",
+    )
+    flag_parser.add_argument(
+        "--skip-s3-checks",
+        const=True,
+        action="store_const",
+        dest="skip_s3_checks",
+        help="Skips initial check that files are present on S3 before downloading. Download size estimates are disabled with this flag.",
     )
     flag_parser.add_argument(
         "--version",

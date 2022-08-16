@@ -180,6 +180,7 @@ def filter_already_downloaded(
     downloads: Iterable[FileToDownload],
     version_entries: List[VersionEntry],
     bypass_version_check: bool = False,
+    skip_s3_checks: bool = False,
 ) -> List[FileToDownload]:
     """
     Takes a collection of files that are to be downloaded and a list of the S3.Objects
@@ -192,7 +193,7 @@ def filter_already_downloaded(
         # file_version_name = download.file_version_name(s3_object.version_id)
         # assert file_version_name
 
-        download.s3_exists = download.exists()
+        download.s3_exists = skip_s3_checks or download.exists() # shortcircuits for a faster initial download
         if not download.s3_exists:
             info(
                 f"Missing s3 object (ignored for download): {download.uid} | {download.filename}"
