@@ -11,7 +11,6 @@ Examples:
         --output_directory="~/ego4d_data"
 """
 import logging
-import os
 from typing import List
 
 import boto3
@@ -199,13 +198,15 @@ def main_cfg(cfg: Config) -> None:
             else:
                 continue
 
+    progress = DownloadProgressBar(total_size_bytes=total_size_bytes)
+
     files = download_all(
         active_downloads,
+        version_entries,
         aws_profile_name=validated_cfg.aws_profile_name,
-        callback=DownloadProgressBar(total_size_bytes=total_size_bytes).update,
+        callback=progress.update,
+        save_callback=lambda: save_version_file(version_entries, download_path),
     )
-
-    # TODO: Handle/filter? failed download pre-corrupted?
 
     print("Checking file integrity...")
     corrupted = list_corrupt_files(files)
@@ -217,14 +218,11 @@ def main_cfg(cfg: Config) -> None:
         logging.error(msg)
         # TODO: retry these downloads?
 
-    # TODO: Only succeeded/non-corrupted files (currently warns in upsert)
-    for x in active_downloads:
-        upsert_version(x, version_entries)
+    # for x in active_downloads:
+    #     upsert_version(x, version_entries)
 
+    # One additional save to confirm
     save_version_file(version_entries, download_path)
-
-    # TODO: Add logging functionality and store to hidden directory in download
-    # folder
 
 
 def main() -> None:

@@ -4,6 +4,7 @@
 Functionality related to downloading objects from S3.
 """
 import csv
+import datetime
 import logging
 import os
 import threading
@@ -34,6 +35,7 @@ from tqdm import tqdm
 
 
 __VERSION_ENTRY_FILENAME = "manifest.ver"
+SAVE_INTERVAL_S = 15
 
 
 @dataclass
@@ -263,10 +265,14 @@ def filter_already_downloaded(
 
 def download_all(
     downloads: Collection[FileToDownload],
+    entries: List[VersionEntry],
     aws_profile_name: str,
     callback: Callable[[int], None] = None,
+    save_callback: Callable[[], None] = None,
 ) -> List[FileToDownload]:
     thread_data = threading.local()
+    lock_update = threading.Lock()
+    last_save = datetime.datetime.utcnow()
 
     def initializer():
         config = Config(connect_timeout=20, retries={'mode': 'standard', 'max_attempts': 5})
@@ -275,6 +281,8 @@ def download_all(
         )
 
     def download_video(download: FileToDownload):
+        nonlocal last_save
+
         assert download.filename
         assert download.s3_bucket
         assert download.s3_object_key
@@ -307,6 +315,17 @@ def download_all(
 
             download.file_path = file_path
             download.s3_content_size_bytes = obj.content_length
+
+            with lock_update:
+                now = datetime.datetime.utcnow()
+                upsert_version(download, entries)
+                if save_callback:
+                    delta_s = (now - last_save).total_seconds()
+                    if delta_s > SAVE_INTERVAL_S:
+                        logging.debug("Incremental save..")
+                        save_callback()
+                        last_save = now
+
         except Exception as ex:
             logging.exception("S3 Download Exception: {ex}")
             download.file_path = None
