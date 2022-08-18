@@ -55,7 +55,7 @@ def main_cfg(cfg: Config) -> None:
         )
 
     output_path = create_output_directory(validated_cfg)
-    print(f"Download Path: {output_path}\n")
+    print(f"Download Path: {output_path}")
 
     # Download the primary metadata to the root directory
     if cfg.metadata:
@@ -93,8 +93,8 @@ def main_cfg(cfg: Config) -> None:
 
         download_path = create_download_directory(validated_cfg, dataset)
         print(
-            f"Created download directory for version: '{validated_cfg.version}' of "
-            f"dataset: '{dataset}' at:\n{download_path}\n"
+            f"Created download directory for version '{validated_cfg.version}' of "
+            f"dataset: '{dataset}' at: {download_path}"
         )
 
         manifest_path = download_manifest_for_version(
@@ -227,6 +227,8 @@ def main_cfg(cfg: Config) -> None:
 
 def main() -> None:
     config = config_from_args()
+    if not config:
+        return
     main_cfg(config)
 
 

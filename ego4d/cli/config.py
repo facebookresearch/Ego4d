@@ -5,7 +5,9 @@ A data object for storing user options, along with utilities for parsing input o
 from command line flags and a configuration file.
 """
 import argparse
+import csv
 import json
+import logging
 from pathlib import Path
 from typing import List, NamedTuple, Set, Union
 
@@ -88,6 +90,7 @@ class Config(NamedTuple):
     video_uids: List[str] = []
     universities: List[str] = []
     annotations: Union[bool, List[str]] = True
+    list_datasets: bool = False
 
 
 def validate_config(cfg: Config) -> ValidatedConfig:
@@ -121,15 +124,25 @@ def validate_config(cfg: Config) -> ValidatedConfig:
     )
 
 
+def print_datasets() -> None:
+    try:
+        p = Path(__file__).with_name('datasets.csv')
+        with p.open('r') as f:
+            rows = csv.DictReader(f)
+            print("Available Ego4D datasets:")
+            for row in rows:
+                print(f"{row['dataset']:<15}\t{row['description']}")
+    except Exception as ex:
+        logging.exception(f"Exception retrieving Ego4D datasets: {ex}")
+
+
 def config_from_args(args=None) -> Config:
     """
     Parses command line flags and returns a Config object with corresponding values from
     the flags.
     """
     # Parser for a configuration file
-    json_parser = argparse.ArgumentParser(
-        description="Command line tool to download Ego4D datasets from Amazon S3"
-    )
+    json_parser = argparse.ArgumentParser(add_help=False)
 
     json_parser.add_argument(
         "--config_path",
@@ -138,12 +151,14 @@ def config_from_args(args=None) -> Config:
         "from this file instead of the command line.",
     )
 
-    args, remaining = json_parser.parse_known_args(args=args)
+    json_args, remaining = json_parser.parse_known_args(args=args)
 
     # Parser for command line flags other than the configuration file
-    flag_parser = argparse.ArgumentParser(add_help=False)
+    flag_parser = argparse.ArgumentParser(
+        description="Command line tool to download Ego4D datasets from Amazon S3",
+        add_help=True,
+    )
 
-    required_flags = {"output_directory"}
     flag_parser.add_argument(
         "-o",
         "--output_directory",
@@ -169,12 +184,6 @@ def config_from_args(args=None) -> Config:
         "Otherwise, a list of specific annotations to pass, e.g. narration, fho, moments, vq, nlq, av",
     )
     flag_parser.add_argument(
-        "--viz",
-        const=True,
-        action="store_const",
-        help="Downloads the visualization dataset. (Convenience option equivalent to including viz in datasets.)",
-    )
-    flag_parser.add_argument(
         "--metadata",
         dest="metadata",
         action="store_true",
@@ -193,6 +202,12 @@ def config_from_args(args=None) -> Config:
         action="store_const",
         help="Downloads the video manifest. (True by default, only relevant if you want only the manifest.)",
     )
+    # flag_parser.add_argument(
+    #     "--viz",
+    #     const=True,
+    #     action="store_const",
+    #     help="Downloads the local visualization dataset. (Convenience option equivalent to including viz in datasets.)",
+    # )
     flag_parser.add_argument(
         "--bypass-existing",
         const=True,
@@ -250,10 +265,17 @@ def config_from_args(args=None) -> Config:
         "Mutually exclusive with the video_uids flag.",
     )
 
+    flag_parser.add_argument(
+        "--list-datasets",
+        dest="list_datasets",
+        action="store_true",
+        help="List the available datasets",
+    )
+
     # Use the values in the config file, but set them as defaults to flag_parser so they
     # can be overridden by command line flags
-    if args.config_path:
-        with open(args.config_path.expanduser()) as f:
+    if json_args.config_path:
+        with open(json_args.config_path.expanduser()) as f:
             config_contents = json.load(f)
             flag_parser.set_defaults(**config_contents)
 
@@ -269,20 +291,22 @@ def config_from_args(args=None) -> Config:
             f"Warning: Non-standard Dataset Specfied (Allowed, will attempt download): {unknown_datasets}"
         )
 
-    if parsed_args.viz:
-        if parsed_args.datasets:
-            if "viz" not in parsed_args.datasets:
-                print("Adding viz to datasets..")
-                parsed_args.datasets.append("viz")
-        else:
-            parsed_args.datasets = ["viz"]
-        del parsed_args.viz
+    # if parsed_args.viz:
+    #     if parsed_args.datasets:
+    #         if "viz" not in parsed_args.datasets:
+    #             print("Adding viz to datasets..")
+    #             parsed_args.datasets.append("viz")
+    #     else:
+    #         parsed_args.datasets = ["viz"]
+    #     del parsed_args.viz
+
+    if parsed_args.list_datasets:
+        print_datasets()
+        return None
 
     flags = {k: v for k, v in vars(parsed_args).items() if v is not None}
 
-    # Note: Since the flags from the config file are being used as default argparse
-    # values, we can't set required=True. Doing so would mean that the user couldn't
-    # leave them unspecified when invoking the CLI.
+    required_flags = {"output_directory"}
     missing = required_flags - flags.keys()
     if missing:
         raise RuntimeError(f"Missing required flags: {missing}")
@@ -299,7 +323,7 @@ def config_from_args(args=None) -> Config:
 
     config = Config(**flags)
 
-    print(f"datasets: {config.datasets}")
+    print(f"Datasets to download: {config.datasets}")
 
     # We need to check the universities values here since they might have been set
     # through the JSON config file, in which case the argparse checks won't validate
