@@ -129,9 +129,10 @@ def print_datasets() -> None:
         p = Path(__file__).with_name('datasets.csv')
         with p.open('r') as f:
             rows = csv.DictReader(f)
-            print("Available Ego4D datasets:")
+            print("\nAvailable Ego4D datasets:")
             for row in rows:
-                print(f"{row['dataset']:<15}\t{row['description']}")
+                print(f"   {row['dataset']:<21}\t{row['description']}")
+            print()
     except Exception as ex:
         logging.exception(f"Exception retrieving Ego4D datasets: {ex}")
 
