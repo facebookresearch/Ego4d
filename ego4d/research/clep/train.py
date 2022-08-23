@@ -23,12 +23,6 @@ from ego4d.research.clep.model import EgoLangaugeAssociation
 
 from pytorch_lightning.lite import LightningLite
 
-# TODO import from open_clip
-import torch.nn as nn
-import torch.distributed.nn
-from torch import distributed as dist, nn as nn
-from torch.nn import functional as F
-from open_clip.loss import ClipLoss
 import torch.nn.functional as F
 
 from tqdm.auto import tqdm

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional, List
+from ego4d.research.common import SlurmConfig
 
 @dataclass
 class InputConfig:
@@ -43,10 +44,14 @@ class EgoPreprocessNarrConfig:
     metadata_out_path: str
     narration_out_path: str
     limit: Optional[int]
+    num_narrs_per_machine: int
 
 
 @dataclass
 class EgoCharadePreprocessConfig:
+    set_path: str
+    video_root_path: str
+    class_desc_path: str
     out_path: str
     out_label_path: str
     num_vids_per_machine: int
@@ -55,6 +60,7 @@ class EgoCharadePreprocessConfig:
 @dataclass
 class CCPreprocessConfig:
     in_path: str
+    helper_workers: int
 
     hdf5_viz_path: str
     hdf5_sent_path: str
@@ -67,6 +73,8 @@ class CCPreprocessConfig:
 
 @dataclass
 class PreprocessConfig:
+    slurm_config: SlurmConfig
+
     mode: str
     ego4d_narr: EgoPreprocessNarrConfig
     ego4d_features: EgoPreprocessFeatureConfig

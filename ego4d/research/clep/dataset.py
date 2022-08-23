@@ -24,10 +24,9 @@ from torchvision.transforms._transforms_video import (
 )
 
 from collections import defaultdict
-from ego4d.research.clip.config import TrainConfig, InputConfig
+from ego4d.research.clep.config import TrainConfig, InputConfig
 
 
-# TODO: move to utils
 def get_start_end_idx(t1, t2, feature_per_sec, nf):
     assert t2 >= 0
     x1 = min(
@@ -51,16 +50,14 @@ class EgoCharadesDset(torch.utils.data.Dataset):
     ):
         super().__init__()
 
-        # TODO: configure
         self.ego_only = ego_only
-        val_set_path = "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo/CharadesEgo_v1_test.csv"
-        val_df = pd.read_csv(val_set_path)
+        val_df = pd.read_csv(config.pre_config.ego_charade.set_path)
 
         if self.ego_only is not None:
             if self.ego_only:
-                val_df = val_df[val_df.egocentric == "Yes"]
+                val_df = val_df[val_df.egocentric == "Yes"]  # pyre-ignore
             else:
-                val_df = val_df[val_df.egocentric == "No"]
+                val_df = val_df[val_df.egocentric == "No"]  # pyre-ignore
 
         val_df = val_df[~pd.isnull(val_df.actions)]
 

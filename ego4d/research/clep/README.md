@@ -20,15 +20,15 @@ repository of this repository.
 ## Preprocessing Data
 
 To pre-process the data please use the script under
-`ego4d/research/clep/preprocess.py`. Provide `preprocess_mode` to change what
+`ego4d/research/clep/preprocess/run.py`. Provide `pre_config.mode` to change what
 is being pre-processed.
 
 
 ```
-python3 ego4d/research/clep/preprocess.py --config-name omnivore_features run_locally=1 preprocess_mode="ego"
+python3 ego4d/research/clep/run_preprocess.py --config-name omnivore_features pre_config.mode="ego"
 ```
 
-Also add `run_locally=1` to run the preprocessing on a non-slurm cluster.
+Also add `pre_config.slurm_config.run_locally=1` to run the preprocessing on a non-slurm cluster.
 
 Valid preprocessing options are:
 - `ego4d_features`
@@ -55,3 +55,10 @@ Please refer to the code `ego4d/research/clep/dataset.py`.  These need to be cle
 Run training with `ego4d/research/clep/train.py`.
 
 Pass `run_locally=1` if you want to run the training process not on the cluster.
+
+# TODOs
+- [ ] pre root dir
+    - [ ] cc
+    - [ ] kinetics
+    - [ ] ego narrs
+    - [ ] ego features
