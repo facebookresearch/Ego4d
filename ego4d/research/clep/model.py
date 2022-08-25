@@ -1,8 +1,9 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 
 from ego4d.research.clep.config import ModelConfig
+
 
 def _get_layers(initial_dim, config):
     return [
@@ -31,8 +32,10 @@ class EgoLangaugeAssociation(nn.Module):
         ve = self.visual_proj(x["video"])
         te = self.text_proj(x["text"])
         return ve, te, self.logit_scale
-    
+
     def init_weights(self, module):
         if isinstance(module, nn.Linear):
-            torch.nn.init.xavier_uniform_(module.weight.data, gain=torch.nn.init.calculate_gain('relu'))
+            torch.nn.init.xavier_uniform_(
+                module.weight.data, gain=torch.nn.init.calculate_gain("relu")
+            )
             module.bias.data.zero_()

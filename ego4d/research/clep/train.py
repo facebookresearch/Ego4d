@@ -1,33 +1,31 @@
-import os
-import gc
 import copy
-import torch
+import gc
 import math
-import hydra
+import os
 import time
-import submitit
 
-from ego4d.research.clep.val import (
-    eval_classification,
-    eval_multi_class_classification,
-)
+import hydra
+import submitit
+import torch
+
+import torch.nn.functional as F
 from ego4d.research.clep.config import TrainConfig
 from ego4d.research.clep.dataset import (
-    Ego4DVaClip,
     CCDset,
-    create_kinetics_dset,
-    create_ego_charades_dset,
     create_data_loader,
+    create_ego_charades_dset,
+    create_kinetics_dset,
+    Ego4DVaClip,
 )
 from ego4d.research.clep.model import EgoLangaugeAssociation
 
+from ego4d.research.clep.val import eval_classification, eval_multi_class_classification
+
 from pytorch_lightning.lite import LightningLite
 
-import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 
 from tqdm.auto import tqdm
-
-from torch.utils.tensorboard import SummaryWriter
 
 
 class Lite(LightningLite):
@@ -44,19 +42,29 @@ class Lite(LightningLite):
         named_parameters = list(self.model.named_parameters())
 
         # https://github.com/mlfoundations/open_clip/blob/main/src/training/main.py#L163
-        exclude = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n
+        exclude = (
+            lambda n, p: p.ndim < 2
+            or "bn" in n
+            or "ln" in n
+            or "bias" in n
+            or "logit_scale" in n
+        )
         include = lambda n, p: not exclude(n, p)
-        gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
-        rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
+        gain_or_bias_params = [
+            p for n, p in named_parameters if exclude(n, p) and p.requires_grad
+        ]
+        rest_params = [
+            p for n, p in named_parameters if include(n, p) and p.requires_grad
+        ]
 
         self.optimizer = torch.optim.AdamW(
-              [
-                  {"params": gain_or_bias_params, "weight_decay": 0.},
-                  {"params": rest_params, "weight_decay": self.config.wd},
-              ],
-              lr=self.config.lr,
-              betas=(self.config.beta1, self.config.beta2),
-              eps=self.config.eps,
+            [
+                {"params": gain_or_bias_params, "weight_decay": 0.0},
+                {"params": rest_params, "weight_decay": self.config.wd},
+            ],
+            lr=self.config.lr,
+            betas=(self.config.beta1, self.config.beta2),
+            eps=self.config.eps,
         )
 
         model, optimizer = self.setup(self.model, self.optimizer)
@@ -87,7 +95,9 @@ class Lite(LightningLite):
         num_examples = 0
 
         max_steps = 2 * len(dataloader)  # TODO configure
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_steps, eta_min=0, last_epoch=-1)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=max_steps, eta_min=0, last_epoch=-1
+        )
 
         bce_loss = torch.nn.BCEWithLogitsLoss()
 
@@ -96,7 +106,9 @@ class Lite(LightningLite):
         for epoch in range(self.config.num_epochs):
             print("Epoch:", epoch)
             for batch in tqdm(dataloader, total=len(dataloader)):
-                if step % self.config.eval_per_iter == 0 and (step > 0 or self.config.eval_init):
+                if step % self.config.eval_per_iter == 0 and (
+                    step > 0 or self.config.eval_init
+                ):
                     print()
                     if step > 0:
                         print("Loss=", loss.cpu().item(), flush=True)
@@ -107,7 +119,9 @@ class Lite(LightningLite):
                         writer.add_scalar(k, v, num_examples)
                     m_value = kv_pairs[self.config.checkpoint_metric]
                     if best_model is None or best_model[0] < m_value:
-                        prev_metric = f"{best_model[0]:.3f}" if best_model is not None else None
+                        prev_metric = (
+                            f"{best_model[0]:.3f}" if best_model is not None else None
+                        )
                         print(f"Saving {prev_metric} -> {m_value:.3f}", flush=True)
                         path = f"{self.config.tb_log_name}_{m_value:.3f}.pt"
                         abs_path = os.path.join(self.config.checkpoint_dir, path)
@@ -139,7 +153,7 @@ class Lite(LightningLite):
                             label = torch.ones_like(simm, dtype=torch.float)
                         # TODO: nn.Parameter for the threshold?
                         label[simm < self.config.soft_loss_threshold] = 0.0
-                        pos_ex_prop = label.sum() / (label.shape[0]*label.shape[0])
+                        pos_ex_prop = label.sum() / (label.shape[0] * label.shape[0])
                     else:
                         label = torch.arange(txt.shape[0], device=device)
                         pos_ex_prop = None
@@ -157,14 +171,11 @@ class Lite(LightningLite):
 
                 if self.config.use_bce:
                     assert self.config.use_bce != False  # noqa
-                    loss = (
-                        bce_loss(vid2txt, label) +
-                        bce_loss(txt2vid, label)
-                    ) / 2.0
+                    loss = (bce_loss(vid2txt, label) + bce_loss(txt2vid, label)) / 2.0
                 else:
                     loss = (
-                        F.cross_entropy(vid2txt, label) +
-                        F.cross_entropy(txt2vid, label)
+                        F.cross_entropy(vid2txt, label)
+                        + F.cross_entropy(txt2vid, label)
                     ) / 2.0
 
                 self.backward(loss)  # instead of loss.backward()
@@ -178,8 +189,10 @@ class Lite(LightningLite):
                 num_examples += batch["video"].shape[0]
 
                 writer.add_scalar("Loss/train", loss.detach().cpu(), num_examples)
-                writer.add_scalar("logit_scale", model.module.logit_scale.detach().cpu(), num_examples)
-                writer.add_scalar("lr", optimizer.param_groups[0]['lr'], num_examples)
+                writer.add_scalar(
+                    "logit_scale", model.module.logit_scale.detach().cpu(), num_examples
+                )
+                writer.add_scalar("lr", optimizer.param_groups[0]["lr"], num_examples)
                 if pos_ex_prop is not None:
                     writer.add_scalar("pos_ex_prop", pos_ex_prop, num_examples)
                 writer.flush()
@@ -202,7 +215,9 @@ class Lite(LightningLite):
             self.model.text_proj(sents.to(self.device)).t(),
             dim=-1,
         )
-        res = eval_multi_class_classification(self.model.visual_proj, classifier, val_loader)
+        res = eval_multi_class_classification(
+            self.model.visual_proj, classifier, val_loader
+        )
         ret = {}
         for k, v in res.items():
             char_name = "Char_"
@@ -227,7 +242,9 @@ class Lite(LightningLite):
             self.model.text_proj(sents.to(self.device)).t(),
             dim=-1,
         )
-        res = eval_classification(self.model.visual_proj, classifier, val_loader, avg_logits=False)
+        res = eval_classification(
+            self.model.visual_proj, classifier, val_loader, avg_logits=False
+        )
         return {
             "Val/Kinetics/acc1": res["acc1"],
             "Val/Kinetics/acc5": res["acc5"],

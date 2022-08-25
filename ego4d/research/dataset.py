@@ -1,20 +1,22 @@
 import os
-from typing import List, Tuple, Any, Optional, Callable
+from typing import Any, Callable, List, Optional, Tuple
+
+import h5py
 
 import torch
-import h5py
 
 
 class LabelledFeatureDset(torch.utils.data.Dataset):
     """
     A simple utility class to load features associated with labels. The input this
     method requires is as follows:
-        1. `feature_hdf5_path`: the features transposed to a HDF5 file. 
+        1. `feature_hdf5_path`: the features transposed to a HDF5 file.
             See `save_ego4d_features_to_hdf5`
         2. `uid_label_pairs` a list of (uid, label). `label` can be anything
             `uid` is a unique id associated to the `feature_hdf5_path` file.
         3. `aggr_function` a function to aggregate based off given label
     """
+
     def __init__(
         self,
         feature_hdf5_path: str,
@@ -24,14 +26,12 @@ class LabelledFeatureDset(torch.utils.data.Dataset):
         self.uid_label_pairs = uid_label_pairs
         self.features = h5py.File(feature_hdf5_path)
         self.aggr_function = (
-            aggr_function
-            if aggr_function is not None
-            else lambda x, _: x[0:]
+            aggr_function if aggr_function is not None else lambda x, _: x[0:]
         )
 
     def __len__(self):
         return len(self.uid_label_pairs)
-    
+
     def __getitem__(self, idx: int):
         uid, label = self.uid_label_pairs[idx]
         feat = self.aggr_function(self.features[uid], label)

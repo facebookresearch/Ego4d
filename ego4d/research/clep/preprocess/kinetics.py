@@ -1,31 +1,21 @@
-import sys
-import torch
+import functools
 import os
 import random
-import functools
+import sys
 
 import h5py
 import pandas as pd
-from tqdm.auto import tqdm
-from omegaconf import OmegaConf
-from ego4d.research.clep.config import (
-    TrainConfig,
-    K400PreprocessConfig,
-)
-from ego4d.research.clep.preprocess.common import (
-    run_feature_extraction,
-    get_language_model,
-)
-from ego4d.research.common import (
-    create_executor,
-    batch_it,
-)
-from ego4d.features.config import (
-    FeatureExtractConfig,
-    Video,
-    load_model,
-)
+import torch
+from ego4d.features.config import FeatureExtractConfig, load_model, Video
 from ego4d.features.inference import _load_kinetics_class_names
+from ego4d.research.clep.config import K400PreprocessConfig, TrainConfig
+from ego4d.research.clep.preprocess.common import (
+    get_language_model,
+    run_feature_extraction,
+)
+from ego4d.research.common import batch_it, create_executor
+from omegaconf import OmegaConf
+from tqdm.auto import tqdm
 
 
 def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
@@ -46,9 +36,9 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
     val_set = pd.read_csv(os.path.join(k_config.csv_dir, f"{k_config.set_to_use}.csv"))
 
     def process_label(label):
-        ret = label.replace('"', '')
-        ret = ret.replace("'", '')
-        ret = ret.replace("_", ' ')
+        ret = label.replace('"', "")
+        ret = ret.replace("'", "")
+        ret = ret.replace("_", " ")
         return ret
 
     idx_to_label = list(_load_kinetics_class_names().items())
@@ -71,22 +61,30 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
     ]
 
     old_len = len(video_path_label_pairs)
-    video_path_label_pairs = [val for val in video_path_label_pairs if os.path.exists(val[0])]
+    video_path_label_pairs = [
+        val for val in video_path_label_pairs if os.path.exists(val[0])
+    ]
     print(f"{old_len} -> {len(video_path_label_pairs)} examples", flush=True)
 
-    feature_extract_config = OmegaConf.load(config.input_config.feature_extract_config_path)
+    feature_extract_config = OmegaConf.load(
+        config.input_config.feature_extract_config_path
+    )
     map_fn = functools.partial(
         _preprocess_k400_data,
         feature_extract_config=feature_extract_config,
     )
-    batches = batch_it(video_path_label_pairs, batch_size=k_config.num_labels_per_machine)
+    batches = batch_it(
+        video_path_label_pairs, batch_size=k_config.num_labels_per_machine
+    )
 
     label_name_pairs = []
     if config.run_locally:
         raise AssertionError("not supported yet")
     else:
         slurm_config = config.pre_config.slurm_config
-        print(f"To schedule {len(batches)} batches across {slurm_config.slurm_array_parallelism} machines")
+        print(
+            f"To schedule {len(batches)} batches across {slurm_config.slurm_array_parallelism} machines"
+        )
         cont = input("Continue? [y/N]: ")
         if cont != "y":
             print("Exiting...")
@@ -113,7 +111,9 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
         "idx_to_label_name": idx_to_label,
     }
     model = get_language_model(config)
-    for idx, (sent, label_name) in tqdm(enumerate(zip(sentences, label_names)), total=len(sentences)):
+    for idx, (sent, label_name) in tqdm(
+        enumerate(zip(sentences, label_names)), total=len(sentences)
+    ):
         assert label_to_idx[label_name] == idx
         fv = model.encode(sent, show_progress_bar=False)
         meta["label_text"].append(sent)
@@ -137,4 +137,3 @@ def _preprocess_k400_data(video_path_label_pairs, feature_extract_config):
             "label": label,
         }
     return ret
-

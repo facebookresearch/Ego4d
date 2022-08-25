@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
+
 from ego4d.research.common import SlurmConfig
+
 
 @dataclass
 class InputConfig:

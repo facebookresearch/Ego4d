@@ -1,35 +1,27 @@
-import torch
 import h5py
-from tqdm.auto import tqdm
-from omegaconf import OmegaConf
-
-from ego4d.research.clep.config import (
-    TrainConfig,
-    EgoCharadePreprocessConfig,
-)
-from ego4d.research.clep.preprocess.common import (
-    get_language_model,
-)
-from ego4d.features.config import (
-    FeatureExtractConfig,
-    Video,
-    load_model,
-)
+import torch
+from ego4d.features.config import FeatureExtractConfig, load_model, Video
 from ego4d.features.extract_features import extract_features
-from ego4d.features.inference import (
-    _video_info as video_info,
-)
+from ego4d.features.inference import _video_info as video_info
+
+from ego4d.research.clep.config import EgoCharadePreprocessConfig, TrainConfig
+from ego4d.research.clep.preprocess.common import get_language_model
+from omegaconf import OmegaConf
+from tqdm.auto import tqdm
 
 
-
-def preprocess_ego_charade(config: TrainConfig, char_config: EgoCharadePreprocessConfig):
+def preprocess_ego_charade(
+    config: TrainConfig, char_config: EgoCharadePreprocessConfig
+):
     out_dir = config.pre_config.root_dir
     os.makedirs(out_dir, exist_ok=True)
 
     df = pd.read_csv(char_config.set_path)
 
     root_path = char_config.video_root_path
-    feature_extract_config = OmegaConf.load(config.input_config.feature_extract_config_path)
+    feature_extract_config = OmegaConf.load(
+        config.input_config.feature_extract_config_path
+    )
 
     out_path = os.path.join(config.root_dir, char_config.out_path)
 
@@ -43,13 +35,11 @@ def preprocess_ego_charade(config: TrainConfig, char_config: EgoCharadePreproces
         return x.lower()
 
     sentences_ego = [
-        f"Camera wearer is {get_label_name(clazz)}"
-        for clazz in class_names
+        f"Camera wearer is {get_label_name(clazz)}" for clazz in class_names
     ]
 
     sentences_non_ego = [
-        f"The person in this video is {get_label_name(clazz)}"
-        for clazz in class_names
+        f"The person in this video is {get_label_name(clazz)}" for clazz in class_names
     ]
     model = get_language_model(config)
     # pyre-ignore
@@ -70,12 +60,17 @@ def preprocess_ego_charade(config: TrainConfig, char_config: EgoCharadePreproces
         device="cuda",
         show_progress_bar=True,
     )
-    torch.save({
-        "labels": label_name_fv,
-        "sent_ego_fv": sent_ego_fv,
-        "sent_non_ego_fv": sent_non_ego,
-    }, char_config.out_label_path)
-    video_path_ids = [(os.path.join(root_path, f"{row.id}.mp4"), row.id) for row in df.itertuples()]
+    torch.save(
+        {
+            "labels": label_name_fv,
+            "sent_ego_fv": sent_ego_fv,
+            "sent_non_ego_fv": sent_non_ego,
+        },
+        char_config.out_label_path,
+    )
+    video_path_ids = [
+        (os.path.join(root_path, f"{row.id}.mp4"), row.id) for row in df.itertuples()
+    ]
     video_path_ids = [vp for vp in video_path_ids if os.path.exists(vp[0])]
 
     batches = batch_it(video_path_ids, char_config.num_vids_per_machine)

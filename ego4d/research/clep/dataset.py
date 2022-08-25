@@ -1,17 +1,15 @@
-import os
 import math
-from typing import List, Optional, Union, Tuple
-from collections import OrderedDict
-from collections import defaultdict
+import os
+from collections import defaultdict, OrderedDict
+from typing import List, Optional, Tuple, Union
 
 import h5py
-import torch
-from torch import Tensor
-from torch.utils.data import Dataset
 import pandas as pd
-from torch.utils.data import DataLoader, Dataset
+import torch
 from ego4d.research.clep.config import TrainConfig
 from ego4d.research.dataset import LabelledFeatureDset
+from torch import Tensor
+from torch.utils.data import DataLoader, Dataset
 
 
 def get_start_end_idx(t1, t2, feature_per_sec, nf):
@@ -34,10 +32,9 @@ def _one_hot_encoding(n: int, clazzes: Union[int, List[int]]) -> torch.Tensor:
     return result
 
 
-def create_ego_charades_dset(config: TrainConfig, use_ego_sent: bool, ego_only: bool) -> Tuple[
-    Dataset,
-    Tensor,
-]:
+def create_ego_charades_dset(
+    config: TrainConfig, use_ego_sent: bool, ego_only: bool
+) -> Tuple[Dataset, Tensor,]:
     """
     Loads the ego charades dataset and returns a dataset and the associated
     sentence embeddings for each class (as a single tensor, where class_idx ==
@@ -82,31 +79,31 @@ def create_ego_charades_dset(config: TrainConfig, use_ego_sent: bool, ego_only: 
     return LabelledFeatureDset(feature_hdf5_path, id_classes_pairs), sent_ordered
 
 
-def create_kinetics_dset(config: TrainConfig) -> Tuple[
-    Dataset,
-    Tensor,
-]:
+def create_kinetics_dset(
+    config: TrainConfig,
+) -> Tuple[Dataset, Tensor,]:
     k400_config = config.pre_config.k400
     root = os.path.join(
-        config.pre_config.root_dir, 
+        config.pre_config.root_dir,
         k400_config.root_dir,
     )
 
-    sent_meta_path = os.path.join(root, k400_config.set_to_use, k400_config.metadata_out_path)
+    sent_meta_path = os.path.join(
+        root, k400_config.set_to_use, k400_config.metadata_out_path
+    )
     sent_features = torch.load(sent_meta_path)
 
     feature_hdf5_path = os.path.join(root, k400_config.viz_feature_path)
     label_name_to_idx = sent_features["label_name_to_idx"]
-    sent_ordered = torch.stack([
-        torch.tensor(fv)
-        for fv in sent_features["label_fv"]
-    ])
+    sent_ordered = torch.stack([torch.tensor(fv) for fv in sent_features["label_fv"]])
     id_label_pairs = [
         (id, label_name_to_idx[label_name])
         for id, label_name in sent_features["labels"]
     ]
     return (
-        LabelledFeatureDset(feature_hdf5_path, id_label_pairs, lambda x, _: x[0:].mean(0)),
+        LabelledFeatureDset(
+            feature_hdf5_path, id_label_pairs, lambda x, _: x[0:].mean(0)
+        ),
         sent_ordered,
     )
 
@@ -153,14 +150,12 @@ class Ego4DVaClip(Dataset):
         super().__init__()
 
         self.narr_meta_path = os.path.join(
-            config.pre_config.root_dir,
-            config.pre_config.ego4d_narr.metadata_out_path
+            config.pre_config.root_dir, config.pre_config.ego4d_narr.metadata_out_path
         )
         self.narr_meta = torch.load(self.narr_meta_path)
         self.config = config
         self.narr_feature_dir = os.path.join(
-            config.pre_config.root_dir,
-            config.pre_config.ego4d_narr.narration_out_path
+            config.pre_config.root_dir, config.pre_config.ego4d_narr.narration_out_path
         )
         self.features = h5py.File(
             os.path.join(
@@ -185,7 +180,6 @@ class Ego4DVaClip(Dataset):
         old_len = len(self.narr_meta)
         self.narr_meta = [x for x in self.narr_meta if self.betas[x["uid"]] >= 1e-1]
         print(f"{old_len} -> {len(self.narr_meta)}")
-
 
     def __len__(self):
         return len(self.narr_meta)
