@@ -10,8 +10,6 @@ from torch.nn import Identity, Module
 from torchvision.transforms import Compose, Lambda
 from torchvision.transforms._transforms_video import CenterCropVideo, NormalizeVideo
 
-from omnivore.transforms import SpatialCrop
-
 
 @dataclass
 class ModelConfig(BaseModelConfig):
@@ -63,9 +61,9 @@ def get_transform(inference_config: InferenceConfig, config: ModelConfig):
     else:
         assert inference_config.frame_window == 1
         transforms = [
-            T.Resize(size=config.side_size, antialias=True),
-            T.CenterCrop(config.crop_size),
             NormalizeVideo(config.mean, config.std),
+            ShortSideScale(size=config.side_size),
+            CenterCropVideo(config.crop_size),
         ]
 
     return ApplyTransformToKey(
