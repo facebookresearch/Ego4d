@@ -1,4 +1,5 @@
 input_config:
+  metadata_path: "/checkpoint/miguelmartin/ego4d_data/ego4d.json"
   feature_path: "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/omnivore_video_swinL"
   feature_extract_config_path: "/private/home/miguelmartin/ego4d/ego4d_vaclip/ego4d/features/configs/omnivore_video.yaml"
   features_per_second: 1.875
@@ -11,17 +12,18 @@ model_config:
   final_proj_size: 1536
 pre_config:
   mode: "k400"
+  root_dir: "/checkpoint/miguelmartin/vaclip/"
   ego_charade:
     set_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo/CharadesEgo_v1_test.csv"
     video_root_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo_v1_480/"
     class_desc_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo/Charades_v1_classes.txt"
-    out_path: "/checkpoint/miguelmartin/vaclip/charades.hdf5"
-    out_label_path: "/checkpoint/miguelmartin/vaclip/labels.pt"
+    out_path: "charades.hdf5"
+    out_label_path: "labels.pt"
   k400:
     csv_dir: "/datasets01/kinetics/092121/400/lists"
     dataset_dir: "/datasets01/kinetics/092121/400/val_288px/"
     set_to_use: "val"
-    pre_root_dir: "/checkpoint/miguelmartin/vaclip/k400_hdf5_all/"
+    root_dir: "k400_hdf5_all"
     viz_feature_path: "viz.hdf5"
     metadata_out_path: "meta.pth"
     num_labels_per_machine: 400
@@ -31,17 +33,17 @@ pre_config:
     narration_json_path: "/datasets01/ego4d_track2/v1/annotations/narration.json"
     st_model_name: "all-mpnet-base-v2"
     accelerator: "cuda"
-    pre_root_dir: "/checkpoint/miguelmartin/vaclip"
     metadata_out_path: "narrs_meta_no_tag.pt"
     narration_out_path: "narrs_w_no_tag"
+    min_words: 5
     batch_size: 50
     num_narrs_per_machine: 50000
     limit: null
   cc:
     in_path: "/checkpoint/miguelmartin/conceptial_captions/Train_GCC-training_output.csv"
-    hdf5_viz_path: "/checkpoint/miguelmartin/vaclip/cc_viz.hdf5"
-    hdf5_sent_path: "/checkpoint/miguelmartin/vaclip/cc_sent.hdf5"
-    meta_path: "/checkpoint/miguelmartin/vaclip/cc.pt"
+    hdf5_viz_path: "cc_viz.hdf5"
+    hdf5_sent_path: "cc_sent.hdf5"
+    meta_path: "cc.pt"
     helper_workers: 32
     batch_size: 200
     num_workers: 10

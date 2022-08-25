@@ -39,8 +39,8 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
     """
     random.seed(1337)
 
-    pre_dir = os.path.join(k_config.pre_root_dir, k_config.set_to_use)
-    os.makedirs(pre_dir, exist_ok=True)
+    out_dir = os.path.join(config.pre_config.root_dir, k_config.root_dir)
+    os.makedirs(out_dir, exist_ok=True)
 
     # TODO: configure
     val_set = pd.read_csv(os.path.join(k_config.csv_dir, f"{k_config.set_to_use}.csv"))
@@ -95,7 +95,7 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
         jobs = executor.map_array(map_fn, batches)
 
         # wait for the results
-        out_path = os.path.join(k_config.pre_root_dir, k_config.viz_feature_path)
+        out_path = os.path.join(out_dir, k_config.viz_feature_path)
         with h5py.File(out_path, "w") as out_f:
             for job in tqdm(jobs):
                 vs = job.result()
@@ -119,7 +119,7 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
         meta["label_text"].append(sent)
         meta["label_fv"].append(fv)
 
-    out_meta_path = os.path.join(pre_dir, k_config.metadata_out_path)
+    out_meta_path = os.path.join(out_dir, k_config.metadata_out_path)
     torch.save(meta, out_meta_path)
 
 

@@ -5,6 +5,7 @@ from ego4d.research.common import SlurmConfig
 @dataclass
 class InputConfig:
     feature_path: str
+    metadata_path: str
     features_per_second: float
     narration_width_sample_sec: float
     max_num_feature_vec_video_uids: int
@@ -40,7 +41,7 @@ class EgoPreprocessNarrConfig:
     num_workers: int
     st_model_name: str
     accelerator: str
-    pre_root_dir: str
+    root_dir: str
     metadata_out_path: str
     narration_out_path: str
     limit: Optional[int]
@@ -76,6 +77,7 @@ class PreprocessConfig:
     slurm_config: SlurmConfig
 
     mode: str
+    root_dir: str
     ego4d_narr: EgoPreprocessNarrConfig
     ego4d_features: EgoPreprocessFeatureConfig
     k400: K400PreprocessConfig

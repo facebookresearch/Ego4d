@@ -12,6 +12,8 @@ from ego4d.research.clep.config import (
     EgoPreprocessFeatureConfig,
     EgoPreprocessNarrConfig,
     PreprocessConfig,
+    TrainConfig,
+    InputConfig,
 )
 from ego4d.research.clep.preprocess.common import (
     get_language_model,
@@ -22,14 +24,15 @@ from ego4d.research.common import (
 )
 
 
-def preprocess_ego_narrations(config: PreprocessConfig, narr_config: EgoPreprocessNarrConfig):
-    os.makedirs(narr_config.pre_root_dir, exist_ok=True)
+def preprocess_ego_narrations(config: TrainConfig, narr_config: EgoPreprocessNarrConfig):
+    out_dir = config.pre_config.root_dir
+    os.makedirs(out_dir, exist_ok=True)
 
-    narr_op = os.path.join(narr_config.pre_root_dir, narr_config.narration_out_path)
+    narr_op = os.path.join(out_dir, narr_config.narration_out_path)
     os.makedirs(narr_op, exist_ok=True)
 
     narrs = get_narrations(narr_config)
-    narrs = filter_narrations(narrs)
+    narrs = filter_narrations(narrs, config.input_config, narr_config)
 
     print("Transforming text...")
     narrs_with_idx = list(
@@ -47,7 +50,7 @@ def preprocess_ego_narrations(config: PreprocessConfig, narr_config: EgoPreproce
     metas = []
     executor = create_executor(config.slurm_config, len(batches))
     jobs = executor.map_array(
-        functools.partial(_map_narrs_on_machine, config=narr_config),
+        functools.partial(_map_narrs_on_machine, config=narr_config, narr_op=narr_op),
         batches,
     )
     print("Jobs", jobs, flush=True)
@@ -56,12 +59,15 @@ def preprocess_ego_narrations(config: PreprocessConfig, narr_config: EgoPreproce
         metas.extend(j.result())
 
     print("Saving metadata")
-    m_op = os.path.join(narr_config.pre_root_dir, narr_config.metadata_out_path)
+    m_op = os.path.join(out_dir, narr_config.metadata_out_path)
     torch.save(metas, m_op)
 
 
 def preprocess_ego_features(feature_path: str, pre_config: PreprocessConfig, pre_feature: EgoPreprocessFeatureConfig):
-    narr_meta_path = os.path.join(pre_config.ego4d_narr.pre_root_dir, pre_config.ego4d_narr.metadata_out_path)
+    out_dir = pre_config.root_dir
+    os.makedirs(out_dir, exist_ok=True)
+
+    narr_meta_path = os.path.join(out_dir, pre_config.ego4d_narr.metadata_out_path)
     narr_meta = torch.load(narr_meta_path)
     video_uids = {x["uid"] for x in narr_meta}
     video_uids = list(video_uids)
@@ -77,11 +83,11 @@ def preprocess_ego_features(feature_path: str, pre_config: PreprocessConfig, pre
 
 def _map_narrs_on_machine(
     narrs: List[Tuple[int, Tuple[str, str, str, str, float]]],
-    config: EgoPreprocessNarrConfig, 
-) -> Dict[str, Any]:
-    model = SentenceTransformer(config.st_model_name)
+    config: TrainConfig, 
+    narr_op: str,
+) -> List[Dict[str, Any]]:
+    model = get_language_model(config)
 
-    narr_op = os.path.join(config.pre_root_dir, config.narration_out_path)
     batches = batch_it(narrs, config.batch_size)
 
     metas = []
@@ -105,7 +111,14 @@ def _map_narrs_on_machine(
                 "fv": fv,
                 "fv_no_tag": fv_no_tag,
             }, path_to_encode)
-            metas.append({"uid": uid, "txt": txt, "ts": ts, "idx": idx, "post_txt": post_txt, "no_tag_txt": no_tag_txt})
+            metas.append({
+                "uid": uid,
+                "txt": txt,
+                "ts": ts,
+                "idx": idx,
+                "post_txt": post_txt,
+                "no_tag_txt": no_tag_txt,
+            })
     return metas
 
 
@@ -126,9 +139,8 @@ def sub_tagged_tokens(text: str) -> str:
     return text
 
 
-def filter_narrations(narrations):
-    # TODO: config
-    meta = json.load(open("/checkpoint/miguelmartin/ego4d_data/ego4d.json"))
+def filter_narrations(narrations, config: InputConfig, pre_config: EgoPreprocessNarrConfig):
+    meta = json.load(open(config.metadata_path))
     val_set_uids = [
         vid["video_uid"]
         for vid in meta["videos"]
@@ -142,7 +154,7 @@ def filter_narrations(narrations):
         if uid in val_set_uids:
             num_val_filtered += 1
             continue
-        if len(txt.split(" ")) <= 3:
+        if len(txt.split(" ")) < pre_config.min_words:
             num_txt_filtered += 1
             continue
         ret.append((uid, txt, ts))

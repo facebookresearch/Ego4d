@@ -51,6 +51,9 @@ class ImagePathDset(torch.utils.data.Dataset):
 
 
 def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
+    out_dir = config.pre_config.root_dir
+    os.makedirs(out_dir, exist_ok=True)
+
     train_df = pd.read_csv(cc.in_path, sep='\t')
 
     examples = dict(zip(train_df.filepath, train_df.title))
@@ -79,7 +82,8 @@ def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
         batches,
     )
 
-    with h5py.File(cc.hdf5_viz_path, "w") as out_f:
+    viz_path = os.path.join(out_dir, cc.hdf5_viz_path)
+    with h5py.File(viz_path, "w") as out_f:
         for job in tqdm(jobs):
             res = job.result()
             for k, v in res.items():
@@ -90,7 +94,8 @@ def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
         functools.partial(_map_cc_sent_batch, config=config, cc=cc),
         batches,
     )
-    with h5py.File(cc.hdf5_sent_path, "w") as out_f:
+    sent_path = os.path.join(out_dir, cc.hdf5_sent_path)
+    with h5py.File(sent_path, "w") as out_f:
         for job in tqdm(jobs):
             res = job.result()
             for k, v in res.items():
@@ -116,7 +121,7 @@ def _map_cc_batch(batch_idx, cc: CCPreprocessConfig, feature_extract_config: Fea
     )
 
     dset = ImagePathDset(paths, image_transform)
-    dloader = create_data_loader(dset, cc, shuffle=False)
+    dloader = create_data_loader(dset, cc, shuffle=False)  # pyre-ignore
     viz_model.eval()
 
     ret = {}

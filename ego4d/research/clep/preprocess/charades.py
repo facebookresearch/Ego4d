@@ -23,12 +23,15 @@ from ego4d.features.inference import (
 
 
 def preprocess_ego_charade(config: TrainConfig, char_config: EgoCharadePreprocessConfig):
+    out_dir = config.pre_config.root_dir
+    os.makedirs(out_dir, exist_ok=True)
+
     df = pd.read_csv(char_config.set_path)
 
     root_path = char_config.video_root_path
     feature_extract_config = OmegaConf.load(config.input_config.feature_extract_config_path)
 
-    out_path = char_config.out_path
+    out_path = os.path.join(config.root_dir, char_config.out_path)
 
     class_desc_path = char_config.class_desc_path
     class_name_df = pd.read_csv(class_desc_path, header=None)
@@ -49,16 +52,19 @@ def preprocess_ego_charade(config: TrainConfig, char_config: EgoCharadePreproces
         for clazz in class_names
     ]
     model = get_language_model(config)
+    # pyre-ignore
     label_name_fv = model.encode(
         class_names,
         device="cuda",
         show_progress_bar=True,
     )
+    # pyre-ignore
     sent_ego_fv = model.encode(
         sentences_ego,
         device="cuda",
         show_progress_bar=True,
     )
+    # pyre-ignore
     sent_non_ego = model.encode(
         sentences_non_ego,
         device="cuda",
