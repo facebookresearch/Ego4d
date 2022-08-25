@@ -15,8 +15,8 @@ from ego4d.research.clep.config import TrainConfig
 from ego4d.research.clep.dataset import (
     Ego4DVaClip,
     CCDset,
-    KineticsDset,
-    EgoCharadesDset,
+    create_kinetics_dset,
+    create_ego_charades_dset,
     create_data_loader,
 )
 from ego4d.research.clep.model import EgoLangaugeAssociation
@@ -190,12 +190,16 @@ class Lite(LightningLite):
                 step += 1
 
     def _run_ego_charades(self, ego_only=True, use_ego_sent=True):
-        dset = EgoCharadesDset(self.config, use_ego_sent=use_ego_sent, ego_only=ego_only)
+        dset, sents = create_ego_charades_dset(
+            self.config,
+            use_ego_sent=use_ego_sent,
+            ego_only=ego_only,
+        )
         val_loader = create_data_loader(dset, self.val_config)
         val_loader = self.setup_dataloaders(val_loader)
 
         classifier = F.normalize(
-            self.model.text_proj(dset.sent_ordered.to(self.device)).t(),
+            self.model.text_proj(sents.to(self.device)).t(),
             dim=-1,
         )
         res = eval_multi_class_classification(self.model.visual_proj, classifier, val_loader)
@@ -215,12 +219,12 @@ class Lite(LightningLite):
         return ret
 
     def _run_eval_kinetics(self):
-        dset = KineticsDset(self.config)
-        val_loader = create_data_loader(dset, self.val_bs_config)
+        dset, sents = create_kinetics_dset(self.config)
+        val_loader = create_data_loader(dset, self.val_bs_config, torch.mean)
         val_loader = self.setup_dataloaders(val_loader)
 
         classifier = F.normalize(
-            self.model.text_proj(dset.sent_ordered.to(self.device)).t(),
+            self.model.text_proj(sents.to(self.device)).t(),
             dim=-1,
         )
         res = eval_classification(self.model.visual_proj, classifier, val_loader, avg_logits=False)

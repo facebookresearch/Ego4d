@@ -12,7 +12,10 @@ from ego4d.features.config import (
     FeatureExtractConfig,
     load_model,
 )
-from ego4d.research.clep.dataset import KineticsDset, create_data_loader
+from ego4d.research.clep.dataset import (
+    create_data_loader,
+    create_kinetics_dset,
+)
 from ego4d.research.clep.utils import charades_map
 
 
@@ -100,7 +103,7 @@ def eval_classification(model, classifier, loader, device=None, avg_logits=False
 
 def eval_k400_on_features(config: TrainConfig, feature_extract_config: FeatureExtractConfig):
     # NOTE: only works for omnivore right now
-    dset = KineticsDset(config)
+    dset, _ = create_kinetics_dset(config)
     config = copy.deepcopy(config)
     config.batch_size = 1
     val_loader = create_data_loader(dset, config)

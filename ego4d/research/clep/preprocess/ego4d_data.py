@@ -15,6 +15,9 @@ from ego4d.research.clep.config import (
     TrainConfig,
     InputConfig,
 )
+from ego4d.research.dataset import (
+    save_ego4d_features_to_hdf5,
+)
 from ego4d.research.clep.preprocess.common import (
     get_language_model,
 )
@@ -74,11 +77,11 @@ def preprocess_ego_features(feature_path: str, pre_config: PreprocessConfig, pre
 
     out_path = pre_feature.hdf5_path
     print("=>", out_path, flush=True)
-    with h5py.File(out_path, "w") as out_f:
-        for uid in tqdm(video_uids, desc="video_uid", leave=True):
-            feature_path = os.path.join(feature_path, f"{uid}.pt")
-            fv = torch.load(feature_path)
-            out_f.create_dataset(uid, data=fv.numpy())
+    save_ego4d_features_to_hdf5(
+        video_uids=video_uids,
+        feature_dir=feature_path,
+        out_path=out_path,
+    )
 
 
 def _map_narrs_on_machine(

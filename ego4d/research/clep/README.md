@@ -57,8 +57,7 @@ Run training with `ego4d/research/clep/train.py`.
 Pass `run_locally=1` if you want to run the training process not on the cluster.
 
 # TODOs
-- [ ] pre root dir
-    - [ ] cc
-    - [ ] kinetics
-    - [ ] ego narrs
-    - [ ] ego features
+- [ ] convert charades to use hdf5
+- [ ] create a common LanguageFeatureDset
+- [ ] create a common LabelledFeatureDataset
+

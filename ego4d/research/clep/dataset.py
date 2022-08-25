@@ -1,18 +1,17 @@
-import random
-import time
-import json
 import os
 import math
-from typing import List, Optional
+from typing import List, Optional, Union, Tuple
 from collections import OrderedDict
-from pathlib import Path
 from collections import defaultdict
 
 import h5py
 import torch
+from torch import Tensor
+from torch.utils.data import Dataset
 import pandas as pd
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from ego4d.research.clep.config import TrainConfig
+from ego4d.research.dataset import LabelledFeatureDset
 
 
 def get_start_end_idx(t1, t2, feature_per_sec, nf):
@@ -29,96 +28,90 @@ def get_start_end_idx(t1, t2, feature_per_sec, nf):
     return x1, x2 + 1
 
 
-# TODO: convert to hdf5
-class EgoCharadesDset(torch.utils.data.Dataset):
-    def __init__(self,
-        config: TrainConfig,
-        use_ego_sent: Optional[bool],
-        ego_only: Optional[bool],
-    ):
-        super().__init__()
+def _one_hot_encoding(n: int, clazzes: Union[int, List[int]]) -> torch.Tensor:
+    result = torch.zeros(n)
+    result[clazzes] = 1
+    return result
 
-        self.ego_only = ego_only
-        val_df = pd.read_csv(config.pre_config.ego_charade.set_path)
 
-        if self.ego_only is not None:
-            if self.ego_only:
-                val_df = val_df[val_df.egocentric == "Yes"]  # pyre-ignore
-            else:
-                val_df = val_df[val_df.egocentric == "No"]  # pyre-ignore
+def create_ego_charades_dset(config: TrainConfig, use_ego_sent: bool, ego_only: bool) -> Tuple[
+    Dataset,
+    Tensor,
+]:
+    """
+    Loads the ego charades dataset and returns a dataset and the associated
+    sentence embeddings for each class (as a single tensor, where class_idx ==
+    idx in the tensor).
+    """
+    val_df = pd.read_csv(config.pre_config.ego_charade.set_path)
 
-        val_df = val_df[~pd.isnull(val_df.actions)]
-
-        data_path = os.path.join(
-            config.pre_config.root_dir,
-            config.pre_config.ego_charade.out_path,
-        )
-        self.data = h5py.File(data_path)
-        self.id_classes_pairs = []
-        for row in val_df.itertuples():
-            clazzes = []
-            for x in row.actions.split(";"):
-                clazzes.append(int(x.split(" ")[0].split("c")[1]))
-            self.id_classes_pairs.append((row.id, clazzes))
-
-        assert len(self.id_classes_pairs) == len(val_df)
-        self.sent = torch.load(
-            os.path.join(
-                config.pre_config.root_dir,
-                config.pre_config.ego_charade.out_label_path,
-            )
-        )
-        if use_ego_sent is not None:
-            key = "sent_ego_fv" if use_ego_sent else "sent_non_ego_fv"
+    if ego_only is not None:
+        if ego_only:
+            val_df = val_df[val_df.egocentric == "Yes"]  # pyre-ignore
         else:
-            key = "labels"
-        self.sent_ordered = torch.stack([torch.tensor(fv) for fv in self.sent[key]])
-        self.num_clazzes = len(self.sent_ordered)
+            val_df = val_df[val_df.egocentric == "No"]  # pyre-ignore
 
-    def __len__(self):
-        return len(self.id_classes_pairs)
+    val_df = val_df[~pd.isnull(val_df.actions)]
 
-    def __getitem__(self, idx):
-        uid, classes = self.id_classes_pairs[idx]
-        feat = torch.tensor(self.data[uid][0:])
-        gt = torch.zeros(self.num_clazzes)
-        gt[classes] = 1
-        return feat, gt
-
-
-class KineticsDset(torch.utils.data.Dataset):
-    def __init__(self, config: TrainConfig):
-        super().__init__()
-        self.config = config
-
-        k400_config = config.pre_config.k400
-        root = os.path.join(
-            config.pre_config.root_dir, 
-            k400_config.root_dir,
+    sent = torch.load(
+        os.path.join(
+            config.pre_config.root_dir,
+            config.pre_config.ego_charade.out_label_path,
         )
+    )
+    if use_ego_sent is not None:
+        key = "sent_ego_fv" if use_ego_sent else "sent_non_ego_fv"
+    else:
+        key = "labels"
 
-        sent_meta_path = os.path.join(root, k400_config.set_to_use, k400_config.metadata_out_path)
-        self.sent_features = torch.load(sent_meta_path)
+    sent_ordered = torch.stack([torch.tensor(fv) for fv in sent[key]])
+    num_clazzes = len(sent_ordered)
 
-        viz_path = os.path.join(root, k400_config.viz_feature_path)
-        self.videos = h5py.File(viz_path)
-        self.label_name_to_idx = self.sent_features["label_name_to_idx"]
-        self.sent_ordered = torch.stack([
-            torch.tensor(fv)
-            for fv in self.sent_features["label_fv"]
-        ])
-        self.labels = self.sent_features["labels"]
+    feature_hdf5_path = os.path.join(
+        config.pre_config.root_dir,
+        config.pre_config.ego_charade.out_path,
+    )
+    id_classes_pairs = []
+    for row in val_df.itertuples():
+        clazzes = []
+        for x in row.actions.split(";"):
+            clazzes.append(int(x.split(" ")[0].split("c")[1]))
+        id_classes_pairs.append((row.id, _one_hot_encoding(num_clazzes, clazzes)))
+    assert len(id_classes_pairs) == len(val_df)
 
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        path, label_name = self.labels[idx]
-        feat = self.videos[path][0:].mean(0)
-        return feat, self.label_name_to_idx[label_name]
+    return LabelledFeatureDset(feature_hdf5_path, id_classes_pairs), sent_ordered
 
 
-class CCDset(torch.utils.data.Dataset):
+def create_kinetics_dset(config: TrainConfig) -> Tuple[
+    Dataset,
+    Tensor,
+]:
+    k400_config = config.pre_config.k400
+    root = os.path.join(
+        config.pre_config.root_dir, 
+        k400_config.root_dir,
+    )
+
+    sent_meta_path = os.path.join(root, k400_config.set_to_use, k400_config.metadata_out_path)
+    sent_features = torch.load(sent_meta_path)
+
+    feature_hdf5_path = os.path.join(root, k400_config.viz_feature_path)
+    label_name_to_idx = sent_features["label_name_to_idx"]
+    sent_ordered = torch.stack([
+        torch.tensor(fv)
+        for fv in sent_features["label_fv"]
+    ])
+    id_label_pairs = [
+        (id, label_name_to_idx[label_name])
+        for id, label_name in sent_features["labels"]
+    ]
+    return (
+        LabelledFeatureDset(feature_hdf5_path, id_label_pairs, lambda x, _: x[0:].mean(0)),
+        sent_ordered,
+    )
+
+
+class CCDset(Dataset):
     def __init__(
         self,
         config: TrainConfig,
@@ -152,7 +145,7 @@ class CCDset(torch.utils.data.Dataset):
         }
 
 
-class Ego4DVaClip(torch.utils.data.Dataset):
+class Ego4DVaClip(Dataset):
     def __init__(
         self,
         config: TrainConfig,
@@ -217,7 +210,7 @@ class Ego4DVaClip(torch.utils.data.Dataset):
             t1,
             t2,
             self.config.input_config.features_per_second,
-            len(features)
+            len(features),
         )
         features = features[start_idx:end_idx]
         v_feat = features.mean(0)  # aggregate

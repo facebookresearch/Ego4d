@@ -23,7 +23,7 @@ class ModelConfig:
 class K400PreprocessConfig:
     dataset_dir: str
     set_to_use: str
-    pre_root_dir: str
+    root_dir: str
     viz_feature_path: str
     metadata_out_path: str
     feature_extract_config_path: str
