@@ -13,6 +13,7 @@ setup(
     install_requires=[
         "boto3",
         "tqdm",
+        "regex",
         # "av",
         # "torch",
         # "torchvision",

@@ -7,7 +7,7 @@ representation for the download operation.
 import csv
 import logging
 import os
-import re
+import regex
 from enum import Enum
 from pathlib import Path
 from typing import Dict, Iterable, Set
@@ -77,7 +77,7 @@ class VideoMetadata:
 
         benchmarks = row.get(self.__BENCHMARKS_KEY)
         if benchmarks:
-            self.benchmarks = re.sub(r"\s+", "", benchmarks.lower())
+            self.benchmarks = regex.sub(r"\s+", "", benchmarks.lower())
         else:
             self.benchmarks = None
 
@@ -102,7 +102,7 @@ def list_videos_in_manifest(
             if "benchmarks" in reader.fieldnames:
                 has_benchmarks = True
                 benchmarks = [x.lower() for x in benchmarks]
-                b_re = re.compile(r"\[(\w+)?(?:\|(\w+))*\]", re.IGNORECASE)
+                b_re = regex.compile(r"\[(\w+)?(?:\|(\w+))*\]", regex.IGNORECASE)
                 print(f"Filtering by benchmarks: {benchmarks}")
             else:
                 print(
@@ -112,7 +112,6 @@ def list_videos_in_manifest(
         for row in reader:
             metadata = VideoMetadata(row)
             if has_benchmarks:
-                # print(f"row benchmarks: {metadata.benchmarks}")
                 if not metadata.benchmarks:
                     continue
                 m = b_re.match(metadata.benchmarks)
@@ -122,9 +121,13 @@ def list_videos_in_manifest(
                             f"Invalid benchmarks manifest entry ignored: {metadata.benchmarks}"
                         )
                     continue
-                # print(f"row benchmark groups: {m.groups()}")
-                # assert all(x is not None for x in m.groups())
-                if not any(x in benchmarks for x in m.groups()):
+                grps = m.captures(1) + m.captures(2)
+                cnt_bars = metadata.benchmarks.count('|')
+                if cnt_bars > 0:
+                    assert len(grps) == (cnt_bars + 1), f"Invalid benchmarks row: {metadata.benchmarks}"
+                else:
+                    assert len(grps) <= 1, f"Invalid benchmarks row: {metadata.benchmarks}"
+                if not any(x in benchmarks for x in grps):
                     continue
             if for_universities and metadata.university not in for_universities:
                 continue
