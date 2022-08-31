@@ -10,7 +10,6 @@ from ego4d.cli.universities import BUCKET_TO_UNIV, UNIV_TO_BUCKET
 from ego4d.internal.ffmpeg_utils import get_video_info, VideoInfo
 from ego4d.internal.university_files import *
 import collections
-import logging
 import math
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -130,6 +129,7 @@ def _get_videos(
     bucket_name: str,
     video_info_param: List[Tuple[str, str]],
     error_message: List[ErrorMessage],
+    num_workers: int,
 ) -> Dict[str, List[VideoInfo]]:
     """
     Args:
@@ -152,7 +152,7 @@ def _get_videos(
             lock.release()
 
     def run(thread_helper, video_info_param):
-        with ThreadPoolExecutor(max_workers=15) as pool:
+        with ThreadPoolExecutor(max_workers=num_workers) as pool:
             results = list(
                 tqdm(
                     pool.map(thread_helper, video_info_param),
@@ -601,8 +601,9 @@ def validate_university_files(  # noqa :C901
     scenarios: Dict[str, Scenario],
     bucket_name: str,
     s3: botocore.client.BaseClient,
-    error_details_path: str,
-    error_summary_path: str,
+    error_details: str,
+    error_summary: str,
+    num_workers: int,
 ) -> List[ErrorMessage]:
     error_message = []
     # Check ids in video_components_dict are in video_metadata_dict
@@ -613,7 +614,9 @@ def validate_university_files(  # noqa :C901
     video_info_param = _validate_video_components(
         s3, bucket_name, video_metadata_dict, video_components_dict, error_message
     )
-    video_info_dict = _get_videos(s3, bucket_name, video_info_param, error_message)
+    video_info_dict = _get_videos(
+        s3, bucket_name, video_info_param, error_message, num_workers
+    )
     _validate_mp4(video_info_dict, error_message)
     _validate_synchronized_videos(
         video_metadata_dict, synchronized_video_dict, error_message
@@ -658,8 +661,16 @@ def validate_university_files(  # noqa :C901
 
 
 def validate_all(
-    path, s3, standard_metadata_folder, error_details_path, error_summary_path
+    path,
+    s3,
+    standard_metadata_folder,
+    error_details_path,
+    error_summary_path,
+    num_workers,
 ):
+    bucket, path = split_s3_path(path)
+    print(bucket, path)
+
     # get access to metadata_folder
     devices, component_types, scenarios = load_standard_metadata_files(
         s3, path, standard_metadata_folder
@@ -691,4 +702,5 @@ def validate_all(
         s3,
         error_details_path,
         error_summary_path,
+        num_workers,
     )

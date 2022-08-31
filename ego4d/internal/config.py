@@ -6,8 +6,9 @@ from command line flags and a configuration file.
 """
 import argparse
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, NamedTuple, Set
+from typing import List, Set
 
 import boto3.session
 from botocore.exceptions import ProfileNotFound
@@ -45,7 +46,8 @@ meta_path = [
 ]
 
 
-class ValidatedConfig(NamedTuple):
+@dataclass
+class ValidatedConfig:
     """
     Data object that stores validated user-supplied configuration options for a video
     download operation.
@@ -58,9 +60,11 @@ class ValidatedConfig(NamedTuple):
     error_summary_name: str
     aws_profile_name: str
     universities: Set[str]
+    num_workers: int
 
 
-class Config(NamedTuple):
+@dataclass
+class Config:
     """
     Data object that stores the user-supplied configuration options for a video download
     operation.
@@ -71,8 +75,9 @@ class Config(NamedTuple):
     metadata_folder: str
     error_details_name: str
     error_summary_name: str
+    num_workers: int
     aws_profile_name: str = "default"
-    universities: List[str] = []
+    universities: List[str] = field(default_factory=list)
 
 
 def validate_config(cfg: Config) -> ValidatedConfig:
@@ -97,6 +102,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         error_summary_name=cfg.error_summary_name,
         aws_profile_name=cfg.aws_profile_name,
         universities=set(cfg.universities) if cfg.universities else {},
+        num_workers=cfg.num_workers,
     )
 
 
@@ -146,6 +152,14 @@ def config_from_args(args=None) -> Config:
     )
     flag_parser.add_argument(
         "-es", "--error_summary_name", help="output file name for error summary"
+    )
+    flag_parser.add_argument(
+        "-nw",
+        "--num_workers",
+        type=int,
+        help="number of workers",
+        default=20,
+        required=False,
     )
     flag_parser.add_argument(
         "--aws_profile_name",
