@@ -53,6 +53,9 @@ class ValidatedConfig(NamedTuple):
 
     input_directory: str
     validate_all: bool
+    metadata_folder: str
+    error_details_name: str
+    error_summary_name: str
     aws_profile_name: str
     universities: Set[str]
 
@@ -65,6 +68,9 @@ class Config(NamedTuple):
 
     input_directory: str
     validate_all: bool
+    metadata_folder: str
+    error_details_name: str
+    error_summary_name: str
     aws_profile_name: str = "default"
     universities: List[str] = []
 
@@ -86,6 +92,9 @@ def validate_config(cfg: Config) -> ValidatedConfig:
     return ValidatedConfig(
         input_directory=cfg.input_directory,
         validate_all=bool(cfg.validate_all),
+        metadata_folder=cfg.metadata_folder,
+        error_details_name=cfg.error_details_name,
+        error_summary_name=cfg.error_summary_name,
         aws_profile_name=cfg.aws_profile_name,
         universities=set(cfg.universities) if cfg.universities else {},
     )
@@ -127,7 +136,17 @@ def config_from_args(args=None) -> Config:
         help="validate all files in S3",
         dest="validate_all",
     )
-
+    flag_parser.add_argument(
+        "-mf",
+        "--metadata_folder",
+        help="the metadata folder where csv files like devices, component_types, scenarios are stored",
+    )
+    flag_parser.add_argument(
+        "-ed", "--error_details_name", help="output file name for error details"
+    )
+    flag_parser.add_argument(
+        "-es", "--error_summary_name", help="output file name for error summary"
+    )
     flag_parser.add_argument(
         "--aws_profile_name",
         help="Defaults to 'default'. Specifies the AWS profile name from "

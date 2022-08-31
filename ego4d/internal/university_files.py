@@ -15,8 +15,9 @@ from datetime import datetime
 from threading import Lock
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-import tqdm
 from ego4d.internal.credential_s3 import S3Helper
+
+from tqdm import tqdm
 
 
 logging.basicConfig(filename="example.log", level=logging.DEBUG)
@@ -366,9 +367,13 @@ def load_dataclass_dict_from_csv(
 
 
 def load_standard_metadata_files(
+    s3,
+    path: str,
     standard_metadata_folder: str,
 ) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
     # Load consortium-wide metadata into memory
+    bucket, path = split_s3_path(path)
+    download_standard_metadata_files_from_s3(s3, bucket, path, standard_metadata_folder)
     devices = load_dataclass_dict_from_csv(
         f"{standard_metadata_folder}/device.csv", Device, "device_id"
     )
@@ -381,6 +386,29 @@ def load_standard_metadata_files(
         f"{standard_metadata_folder}/scenario.csv", Scenario, "scenario_id"
     )
     validate_standard_metadata_files(devices, component_types, scenarios)
+    return devices, component_types, scenarios
+
+def download_standard_metadata_files_from_s3(
+    s3,
+    bucket: str,
+    path: str,
+    standard_metadata_folder: str
+) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
+    s3_bucket = S3Helper(s3, bucket)
+    devices = s3_bucket.get_file("/"+path+"/device.csv",standard_metadata_folder)
+    component_types = s3_bucket.get_file(path+"/component_type.csv",standard_metadata_folder)
+    scenarios = s3_bucket.get_file(path+"/scenarios.csv",standard_metadata_folder)
+    return devices, component_types, scenarios
+
+def download_standard_metadata_files_from_s3(
+    s3, bucket: str, path: str, standard_metadata_folder: str
+) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
+    s3_bucket = S3Helper(s3, bucket)
+    devices = s3_bucket.get_file("/" + path + "/device.csv", standard_metadata_folder)
+    component_types = s3_bucket.get_file(
+        path + "/component_type.csv", standard_metadata_folder
+    )
+    scenarios = s3_bucket.get_file(path + "/scenarios.csv", standard_metadata_folder)
     return devices, component_types, scenarios
 
 

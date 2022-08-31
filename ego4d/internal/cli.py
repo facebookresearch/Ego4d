@@ -6,7 +6,10 @@ Command line tool to download Ego4D datasets.
 
 Examples:
       python -m ego4d.internal.cli \
-        -i "s3://ego4d-cmu/metadata_v27"
+        -i "s3://ego4d-cmu/metadata_v27" \
+        -mf "./ego4d/internal/standard_metadata_v10" \
+        -ed "error_details" \
+        -es "error_summary" \
 """
 import boto3
 from ego4d.cli.universities import UNIV_TO_BUCKET
@@ -34,9 +37,21 @@ def main_cfg(cfg: Config) -> None:
     if cfg.validate_all:
         for u in unis:
             path = f"s3://{UNIV_TO_BUCKET[u]}/{meta_path[u]}"
-            validate_all(path, s3)
+            validate_all(
+                path,
+                s3,
+                validated_cfg.metadata_folder,
+                validated_cfg.error_details_name,
+                validated_cfg.error_summary_name,
+            )
     else:
-        validate_all(validated_cfg.input_directory, s3)
+        validate_all(
+            validated_cfg.input_directory,
+            s3,
+            validated_cfg.metadata_folder,
+            validated_cfg.error_details_name,
+            validated_cfg.error_summary_name,
+        )
 
 
 def main() -> None:
