@@ -15,8 +15,9 @@ from datetime import datetime
 from threading import Lock
 from typing import Any, Callable, Dict, List, Tuple, Union
 
-import tqdm
 from ego4d.internal.credential_s3 import S3Helper
+
+from tqdm import tqdm
 
 
 logging.basicConfig(filename="example.log", level=logging.DEBUG)

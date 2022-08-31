@@ -71,7 +71,7 @@ def get_video_info(
         error_message.append(
             ErrorMessage(
                 video_param[0],
-                "Error",
+                "video_does_not_exist_in_bucket_error",
                 f"video s3://{bucket_name}/{object_name} doesn't exist in bucket",
             )
         )
@@ -105,7 +105,7 @@ def get_video_info(
         error_message.append(
             ErrorMessage(
                 video_param[0],
-                "Error",
+                "ffmpeg_cannot_read_error",
                 f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG",
             )
         )
@@ -115,7 +115,7 @@ def get_video_info(
         error_message.append(
             ErrorMessage(
                 video_param[0],
-                "Error",
+                "ffmpeg_cannot_read_error",
                 f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG",
             )
         )
