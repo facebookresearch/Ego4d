@@ -6,7 +6,7 @@ Command line tool to download Ego4D datasets.
 
 Examples:
       python -m ego4d.cli.cli \
-        --version="v1_1" \
+        --version="v1" \
         --datasets full_scale annotations \
         --output_directory="~/ego4d_data"
 """
