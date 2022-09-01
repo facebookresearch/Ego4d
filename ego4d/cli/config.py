@@ -14,8 +14,10 @@ from typing import List, NamedTuple, Set, Union
 import boto3.session
 from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
+from ego4d.cli.manifest import download_datasets
 
 
+VERSION_DEFAULT = "v1"
 DATASET_PRIMARY = "full_scale"
 DATASETS_VIDEO = ["full_scale", "clips", "components/videos", "video_540ss"]
 DATASETS_FILE = [
@@ -69,6 +71,7 @@ class ValidatedConfig(NamedTuple):
     video_uids: Set[str]
     universities: Set[str]
     annotations: Union[bool, Set[str]]
+    list_datasets: bool
 
 
 class Config(NamedTuple):
@@ -77,9 +80,9 @@ class Config(NamedTuple):
     operation.
     """
 
-    output_directory: str
-    assume_yes: bool
-    version: str
+    output_directory: str = None
+    assume_yes: bool = False
+    version: str = VERSION_DEFAULT
     datasets: List[str] = []
     benchmarks: Set[str] = []
     aws_profile_name: str = "default"
@@ -108,7 +111,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         raise RuntimeError(f"Could not find AWS profile '{cfg.aws_profile_name}'.")
 
     return ValidatedConfig(
-        output_directory=Path(cfg.output_directory).expanduser(),
+        output_directory=Path(cfg.output_directory).expanduser() if cfg.output_directory else None,
         version=cfg.version,
         datasets=set(cfg.datasets),
         benchmarks=set(cfg.benchmarks),
@@ -121,20 +124,8 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         bypass_version_check=cfg.bypass_version_check,
         skip_s3_checks=cfg.skip_s3_checks,
         annotations=cfg.annotations if isinstance(cfg.annotations, bool) else set(),
+        list_datasets=cfg.list_datasets,
     )
-
-
-def print_datasets() -> None:
-    try:
-        p = Path(__file__).with_name('datasets.csv')
-        with p.open('r') as f:
-            rows = csv.DictReader(f)
-            print("\nAvailable Ego4D datasets:")
-            for row in rows:
-                print(f"   {row['dataset']:<21}\t{row['description']}")
-            print()
-    except Exception as ex:
-        logging.exception(f"Exception retrieving Ego4D datasets: {ex}")
 
 
 def config_from_args(args=None) -> Config:
@@ -226,7 +217,7 @@ def config_from_args(args=None) -> Config:
     flag_parser.add_argument(
         "--version",
         help="A version identifier - i.e. 'v1'",
-        default="v1",
+        default=VERSION_DEFAULT,
     )
     flag_parser.add_argument(
         "--aws_profile_name",
@@ -301,13 +292,13 @@ def config_from_args(args=None) -> Config:
     #         parsed_args.datasets = ["viz"]
     #     del parsed_args.viz
 
+    help_cmd = False
     if parsed_args.list_datasets:
-        print_datasets()
-        return None
+        help_cmd = True
 
     flags = {k: v for k, v in vars(parsed_args).items() if v is not None}
 
-    required_flags = {"output_directory"}
+    required_flags = {"output_directory"} if not help_cmd else set()
     missing = required_flags - flags.keys()
     if missing:
         raise RuntimeError(f"Missing required flags: {missing}")
@@ -323,8 +314,6 @@ def config_from_args(args=None) -> Config:
         flags["video_uids"] = uids_str.split()
 
     config = Config(**flags)
-
-    print(f"Datasets to download: {config.datasets}")
 
     # We need to check the universities values here since they might have been set
     # through the JSON config file, in which case the argparse checks won't validate

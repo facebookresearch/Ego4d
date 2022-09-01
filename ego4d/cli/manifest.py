@@ -5,11 +5,13 @@ Functionality related to parsing the video manifest and storing an in-memory
 representation for the download operation.
 """
 import csv
+import datetime
 import logging
 import os
 import re
 from enum import Enum
 from pathlib import Path
+import tempfile
 from typing import Dict, Iterable, Set
 
 from ego4d.cli.s3path import bucket_and_key_from_path
@@ -17,6 +19,7 @@ from ego4d.cli.universities import BUCKET_TO_UNIV
 
 __MANIFEST_BUCKET = "ego4d-consortium-sharing"
 __METADATA_FILENAME = "ego4d.json"
+__DATASETS_FILENAME = "datasets.csv"
 
 
 class VideoMetadata:
@@ -188,3 +191,51 @@ def download_metadata(version: str, download_dir: Path, s3) -> Path:
 
     _metadata_object(version, s3).download_file(str(download_path))
     return download_path
+
+
+def _datasets_object(version: str, s3):
+    """
+    The primary metadata JSON
+    """
+    return s3.Bucket(__MANIFEST_BUCKET).Object(
+        f"public/{version}/{__DATASETS_FILENAME}"
+    )
+
+
+def download_datasets(version: str, download_dir: Path, s3) -> Path:
+    """
+    Downloads the primary datasets csv to the download_path
+    """
+    download_path = download_dir / __DATASETS_FILENAME
+    if download_path.exists():
+        mtime = datetime.datetime.fromtimestamp(download_path.stat().st_mtime, tz=datetime.timezone.utc)
+        delta = (datetime.utcnow() - mtime).totalseconds() / 3600
+        if delta < 12:
+            print("Bypassing recent datasets.csv..")
+            return download_path
+    else:
+        print("Downloading datasets.csv..")
+
+    _datasets_object(version, s3).download_file(str(download_path))
+    return download_path
+
+
+def print_datasets(version: str, s3) -> None:
+    assert version
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            p = download_datasets(version, tmppath, s3)
+            if not p.exists():
+                logging.error("datasets.csv download failed!")
+                print("Download datasets.csv error (defaulting to local)..")
+                p = Path(__file__).with_name('datasets.csv')
+            with p.open('r') as f:
+                rows = csv.DictReader(f)
+                print("\nAvailable Ego4D datasets:")
+                for row in rows:
+                    print(f"   {row['dataset']:<21}\t{row['description']}")
+                print()
+    except Exception as ex:
+        logging.exception(f"Exception retrieving Ego4D datasets: {ex}")
+

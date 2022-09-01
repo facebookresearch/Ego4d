@@ -33,7 +33,7 @@ from ego4d.cli.download import (
     save_version_file,
     upsert_version,
 )
-from ego4d.cli.manifest import download_manifest_for_version, download_metadata
+from ego4d.cli.manifest import download_manifest_for_version, download_metadata, print_datasets
 from ego4d.cli.progressbar import DownloadProgressBar
 from tqdm import tqdm
 
@@ -54,6 +54,13 @@ def main_cfg(cfg: Config) -> None:
             "ERROR: video_uids specified for non-video datasets (and will be ignored)"
         )
 
+    if validated_cfg.list_datasets:
+        print_datasets(validated_cfg.version, s3)
+        return
+
+    print(f"Datasets to download: {validated_cfg.datasets}")
+
+    # TODO: Handle not output dir
     output_path = create_output_directory(validated_cfg)
     print(f"Download Path: {output_path}")
 
