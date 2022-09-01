@@ -12,9 +12,9 @@ from ego4d.research.clep.preprocess.kinetics import preprocess_k400_data
 
 @hydra.main(config_path="configs", config_name=None)
 def preprocess(config: TrainConfig):
-    if config.pre_config.mode == "ego":
+    if config.pre_config.mode == "ego4d_narr":
         preprocess_ego_narrations(config.pre_config, config.pre_config.ego4d_narr)
-    elif config.pre_config.mode == "ego_features":
+    elif config.pre_config.mode == "ego4d_features":
         preprocess_ego_features(
             config.input_config.feature_path,
             config.pre_config,

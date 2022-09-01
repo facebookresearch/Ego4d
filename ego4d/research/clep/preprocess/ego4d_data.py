@@ -50,6 +50,7 @@ def preprocess_ego_narrations(
 
     metas = []
     executor = create_executor(config.slurm_config, len(batches))
+    # TODO: fixme
     jobs = executor.map_array(
         functools.partial(_map_narrs_on_machine, config=narr_config, narr_op=narr_op),
         batches,
@@ -111,16 +112,14 @@ def _map_narrs_on_machine(
         for fv_no_tag, fv, (idx, (no_tag_txt, post_txt, uid, txt, ts)) in zip(
             fvs_without_tags, fvs, batch
         ):
-            od = os.path.join(narr_op, uid)
-            os.makedirs(od, exist_ok=True)
-            path_to_encode = os.path.join(od, f"{idx}.pt")
-            torch.save(
-                {
-                    "fv": fv,
-                    "fv_no_tag": fv_no_tag,
-                },
-                path_to_encode,
-            )
+            # od = os.path.join(narr_op, uid)
+            # os.makedirs(od, exist_ok=True)
+            # path_to_encode = os.path.join(od, f"{idx}.pt")
+            # torch.save(
+            #     {
+            #     },
+            #     path_to_encode,
+            # )
             metas.append(
                 {
                     "uid": uid,
@@ -129,6 +128,8 @@ def _map_narrs_on_machine(
                     "idx": idx,
                     "post_txt": post_txt,
                     "no_tag_txt": no_tag_txt,
+                    "fv": fv,
+                    "fv_no_tag": fv_no_tag,
                 }
             )
     return metas

@@ -25,7 +25,11 @@ is being pre-processed.
 
 
 ```
+python3 ego4d/research/clep/run_preprocess.py --config-name omnivore_features pre_config.mode="k400"
+python3 ego4d/research/clep/run_preprocess.py --config-name omnivore_features pre_config.mode="ego_charades"
 python3 ego4d/research/clep/run_preprocess.py --config-name omnivore_features pre_config.mode="ego"
+python3 ego4d/research/clep/run_preprocess.py --config-name omnivore_features pre_config.mode="ego_features"
+python3 ego4d/research/clep/run_preprocess.py --config-name omnivore_features pre_config.mode="cc"
 ```
 
 Also add `pre_config.slurm_config.run_locally=1` to run the preprocessing on a non-slurm cluster.
@@ -60,4 +64,10 @@ Pass `run_locally=1` if you want to run the training process not on the cluster.
 - [ ] convert charades to use hdf5
 - [ ] create a common LanguageFeatureDset
 - [ ] create a common LabelledFeatureDataset
+- [ ] check preprocess for:
+    - [ ] kinetics
+    - [ ] ego_charades
+    - [ ] ego4d_features
+    - [ ] ego4d
+    - [ ] cc
 

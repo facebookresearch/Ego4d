@@ -12,7 +12,7 @@ model_config:
   final_proj_size: 1536
 pre_config:
   mode: "k400"
-  root_dir: "/checkpoint/miguelmartin/vaclip/"
+  root_dir: "/checkpoint/miguelmartin/clep/"
   ego_charade:
     set_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo/CharadesEgo_v1_test.csv"
     video_root_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo_v1_480/"
@@ -58,6 +58,7 @@ pre_config:
     slurm_array_parallelism: 100
     gpus_per_node: 1
     cpus_per_task: 10
+    run_locally: false
 batch_size: 128
 num_workers: 10
 prefetch_factor: 4

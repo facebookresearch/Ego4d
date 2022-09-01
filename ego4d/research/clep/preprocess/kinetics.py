@@ -18,6 +18,22 @@ from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 
 
+def _preprocess_k400_data(video_path_label_pairs, feature_extract_config):
+    model = load_model(feature_extract_config, patch_final_layer=True)
+
+    ret = {}
+    for path, label in tqdm(video_path_label_pairs):
+        predictions = run_feature_extraction(path, model, feature_extract_config)
+        if predictions is None:
+            continue
+
+        ret[path] = {
+            "features": predictions.result[path],
+            "label": label,
+        }
+    return ret
+
+
 def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
     """
     Assumptions:
@@ -121,19 +137,3 @@ def preprocess_k400_data(config: TrainConfig, k_config: K400PreprocessConfig):
 
     out_meta_path = os.path.join(out_dir, k_config.metadata_out_path)
     torch.save(meta, out_meta_path)
-
-
-def _preprocess_k400_data(video_path_label_pairs, feature_extract_config):
-    model = load_model(feature_extract_config, patch_final_layer=True)
-
-    ret = {}
-    for path, label in tqdm(video_path_label_pairs):
-        predictions = run_feature_extraction(path, model, feature_extract_config)
-        if predictions is None:
-            continue
-
-        ret[path] = {
-            "features": predictions.result[path],
-            "label": label,
-        }
-    return ret
