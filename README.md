@@ -6,11 +6,11 @@ EGO4D is the world's largest egocentric (first person) video ML dataset and benc
 
 Public Documentation/Start Here: [Ego4D Docs](https://ego4d-data.org/docs/start-here/)
 
+Explore the dataset here (you'll need a license): [Ego4D Visualizer](https://visualize.ego4d-data.org/)
+
 For the CLI readme (to download/access): [CLI README](ego4d/cli/README.md)
 
 For a demo notebook: [Annotation Notebook](notebooks/annotation_visualization.ipynb)
-
-For the visualization engine: [Viz README](viz/narrations/README.md)
 
 For feature extraction: [Feature README](ego4d/features/README.md)
 
