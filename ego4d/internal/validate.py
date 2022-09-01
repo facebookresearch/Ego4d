@@ -26,11 +26,8 @@ from tqdm import tqdm
 lock = Lock()
 
 """
- --validate: local path or an s3 path, local so someone can iterate on theirs files on their machine.
-
---all: check all of the latest files for each university
-
-the metadata folder where csv files like devices, component_types, scenarios are stored
+-i: The S3 path where the metadata is stored
+-a: check all of the latest files for each university
 -mf: "./ego4d/internal/standard_metadata_v10"
 -ed: "error_details"
 -es: "error_summary"
@@ -93,30 +90,37 @@ def _validate_video_components(
                         f" when it should have {i}",
                     )
                 )
-
-            s3_path = f"{university_video_folder_path.rstrip('/')}/{components[i].video_component_relative_path}"
-            bucket, key = split_s3_path(s3_path)
-            if bucket != bucket_name:
+            if not components[i].video_component_relative_path:
                 error_message.append(
                     ErrorMessage(
                         video_id,
-                        "bucket_name_inconsistent_error",
-                        f"video has bucket_name {bucket_name}"
-                        f" when it should have {bucket}",
+                        "empty_video_component_relative_path_error",
+                        f"Found an empty relative path for the video_id {video_id}",
                     )
                 )
-
-            try:
-                s3.head_object(Bucket=bucket, Key=key)
-                video_info_param.append((video_id, key))
-            except ClientError as e:
-                error_message.append(
-                    ErrorMessage(
-                        video_id,
-                        "path_does_not_exist_error",
-                        f"video s3://{bucket}/{key} doesn't exist in bucket",
+            else:
+                s3_path = f"{university_video_folder_path.rstrip('/')}/{components[i].video_component_relative_path}"
+                bucket, key = split_s3_path(s3_path)
+                if bucket != bucket_name:
+                    error_message.append(
+                        ErrorMessage(
+                            video_id,
+                            "bucket_name_inconsistent_error",
+                            f"video has bucket_name {bucket_name}"
+                            f" when it should have {bucket}",
+                        )
                     )
-                )
+                try:
+                    s3.head_object(Bucket=bucket, Key=key)
+                    video_info_param.append((video_id, key))
+                except ClientError as e:
+                    error_message.append(
+                        ErrorMessage(
+                            video_id,
+                            "path_does_not_exist_error",
+                            f"video s3://{bucket}/{key} doesn't exist in bucket",
+                        )
+                    )
 
     return video_info_param
 
@@ -597,8 +601,8 @@ def validate_university_files(  # noqa :C901
     scenarios: Dict[str, Scenario],
     bucket_name: str,
     s3: botocore.client.BaseClient,
-    error_details: str,
-    error_summary: str,
+    error_details_path: str,
+    error_summary_path: str,
 ) -> List[ErrorMessage]:
     error_message = []
     # Check ids in video_components_dict are in video_metadata_dict
@@ -639,13 +643,13 @@ def validate_university_files(  # noqa :C901
             error_dict[err.errorType] += 1
 
     fields = ["univeristy_video_id", "errorType", "description"]
-    with open(error_details, "w") as f:
+    with open(error_details_path, "w") as f:
         # using csv.writer method from CSV package
         write = csv.writer(f)
         write.writerow(fields)
         for e in error_message:
             write.writerow([e.uid, e.errorType, e.description])
-    with open(error_summary, "w") as f:
+    with open(error_summary_path, "w") as f:
         write = csv.writer(f)
         write.writerow(["error_type", "num_of_occurrences"])
         for error_type, error_counts in error_dict.items():
@@ -653,14 +657,14 @@ def validate_university_files(  # noqa :C901
     return error_message
 
 
-def validate_all(path, s3, standard_metadata_folder, error_details, error_summary):
-    bucket, path = split_s3_path(path)
-    print(bucket, path)
-
+def validate_all(
+    path, s3, standard_metadata_folder, error_details_path, error_summary_path
+):
     # get access to metadata_folder
     devices, component_types, scenarios = load_standard_metadata_files(
-        standard_metadata_folder
+        s3, path, standard_metadata_folder
     )
+    bucket, path = split_s3_path(path)
 
     (
         video_metadata_dict,
@@ -685,6 +689,6 @@ def validate_all(path, s3, standard_metadata_folder, error_details, error_summar
         scenarios,
         bucket,
         s3,
-        error_details,
-        error_summary,
+        error_details_path,
+        error_summary_path,
     )
