@@ -367,9 +367,14 @@ def load_dataclass_dict_from_csv(
 
 
 def load_standard_metadata_files(
+    s3,
+    path: str,
     standard_metadata_folder: str,
 ) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
     # Load consortium-wide metadata into memory
+    bucket, path = split_s3_path(path)
+    # uncomment the below line to download metadata to the specified metadata folder
+    # download_standard_metadata_files_from_s3(s3, bucket, path, standard_metadata_folder)
     devices = load_dataclass_dict_from_csv(
         f"{standard_metadata_folder}/device.csv", Device, "device_id"
     )
@@ -383,6 +388,31 @@ def load_standard_metadata_files(
     )
     validate_standard_metadata_files(devices, component_types, scenarios)
     return devices, component_types, scenarios
+
+
+def download_standard_metadata_files_from_s3(
+    s3, bucket: str, path: str, standard_metadata_folder: str
+) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
+    s3_bucket = S3Helper(s3, bucket)
+    auxiliary_videos = s3_bucket.get_file(
+        os.path.join(path, "auxiliary_video_component_data_file.csv"),
+        os.path.join(
+            standard_metadata_folder + "auxiliary_video_component_data_file.csv"
+        ),
+    )
+    physical_settings = s3_bucket.get_file(
+        os.path.join(path, "physical_setting.csv"),
+        os.path.join(standard_metadata_folder + "physical_setting.csv"),
+    )
+    video_components = s3_bucket.get_file(
+        os.path.join(path, "video_component_file.csv"),
+        os.path.join(standard_metadata_folder + "video_component_file.csv"),
+    )
+    video_metadata = s3_bucket.get_file(
+        os.path.join(path, "video_metadata.csv"),
+        os.path.join(standard_metadata_folder + "video_metadata.csv"),
+    )
+    return auxiliary_videos, physical_settings, video_components, video_metadata
 
 
 def validate_standard_metadata_files(

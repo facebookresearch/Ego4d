@@ -6,7 +6,7 @@ Command line tool to download Ego4D datasets.
 
 Examples:
       python -m ego4d.internal.cli \
-        -i "s3://ego4d-cmu/metadata_v27" \
+        -i "s3://ego4d-unict/metadata_v7" \
         -mf "./ego4d/internal/standard_metadata_v10" \
         -ed "error_details" \
         -es "error_summary" \
