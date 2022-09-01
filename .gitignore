@@ -1,5 +1,6 @@
 *.log
 *.pyc
+build/
 dist/
 *.egg-info
 .idea/
