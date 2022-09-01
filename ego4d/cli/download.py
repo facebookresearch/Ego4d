@@ -4,6 +4,7 @@
 Functionality related to downloading objects from S3.
 """
 import csv
+import datetime
 import logging
 import os
 import threading
@@ -25,6 +26,7 @@ from typing import (
 
 import boto3.session
 import botocore.exceptions
+from botocore.client import Config
 from ego4d.cli import manifest
 from ego4d.cli.config import DATASET_FILE_EXTENSIONS, DATASETS_VIDEO, ValidatedConfig
 from ego4d.cli.manifest import VideoMetadata
@@ -32,6 +34,7 @@ from tqdm import tqdm
 
 
 __VERSION_ENTRY_FILENAME = "manifest.ver"
+SAVE_INTERVAL_S = 15
 
 
 @dataclass
@@ -178,6 +181,7 @@ def filter_already_downloaded(
     downloads: Iterable[FileToDownload],
     version_entries: List[VersionEntry],
     bypass_version_check: bool = False,
+    skip_s3_checks: bool = False,
 ) -> List[FileToDownload]:
     """
     Takes a collection of files that are to be downloaded and a list of the S3.Objects
@@ -190,7 +194,9 @@ def filter_already_downloaded(
         # file_version_name = download.file_version_name(s3_object.version_id)
         # assert file_version_name
 
-        download.s3_exists = download.exists()
+        download.s3_exists = (
+            skip_s3_checks or download.exists()
+        )  # shortcircuits for a faster initial download
         if not download.s3_exists:
             info(
                 f"Missing s3 object (ignored for download): {download.uid} | {download.filename}"
@@ -260,17 +266,26 @@ def filter_already_downloaded(
 
 def download_all(
     downloads: Collection[FileToDownload],
+    entries: List[VersionEntry],
     aws_profile_name: str,
     callback: Callable[[int], None] = None,
+    save_callback: Callable[[], None] = None,
 ) -> List[FileToDownload]:
     thread_data = threading.local()
+    lock_update = threading.Lock()
+    last_save = datetime.datetime.utcnow()
 
     def initializer():
+        config = Config(
+            connect_timeout=20, retries={"mode": "standard", "max_attempts": 5}
+        )
         thread_data.s3 = boto3.session.Session(profile_name=aws_profile_name).resource(
-            "s3"
+            "s3", config=config
         )
 
     def download_video(download: FileToDownload):
+        nonlocal last_save
+
         assert download.filename
         assert download.s3_bucket
         assert download.s3_object_key
@@ -303,6 +318,17 @@ def download_all(
 
             download.file_path = file_path
             download.s3_content_size_bytes = obj.content_length
+
+            with lock_update:
+                now = datetime.datetime.utcnow()
+                upsert_version(download, entries)
+                if save_callback:
+                    delta_s = (now - last_save).total_seconds()
+                    if delta_s > SAVE_INTERVAL_S:
+                        logging.debug("Incremental save..")
+                        save_callback()
+                        last_save = now
+
         except Exception as ex:
             logging.exception("S3 Download Exception: {ex}")
             download.file_path = None

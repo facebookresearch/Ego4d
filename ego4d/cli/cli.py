@@ -11,7 +11,6 @@ Examples:
         --output_directory="~/ego4d_data"
 """
 import logging
-import os
 from typing import List
 
 import boto3
@@ -34,7 +33,11 @@ from ego4d.cli.download import (
     save_version_file,
     upsert_version,
 )
-from ego4d.cli.manifest import download_manifest_for_version, download_metadata
+from ego4d.cli.manifest import (
+    download_manifest_for_version,
+    download_metadata,
+    print_datasets,
+)
 from ego4d.cli.progressbar import DownloadProgressBar
 from tqdm import tqdm
 
@@ -55,8 +58,15 @@ def main_cfg(cfg: Config) -> None:
             "ERROR: video_uids specified for non-video datasets (and will be ignored)"
         )
 
+    if validated_cfg.list_datasets:
+        print_datasets(validated_cfg.version, s3)
+        return
+
+    print(f"Datasets to download: {validated_cfg.datasets}")
+
+    # TODO: Handle not output dir
     output_path = create_output_directory(validated_cfg)
-    print(f"Download Path: {output_path}\n")
+    print(f"Download Path: {output_path}")
 
     # Download the primary metadata to the root directory
     if cfg.metadata:
@@ -94,8 +104,8 @@ def main_cfg(cfg: Config) -> None:
 
         download_path = create_download_directory(validated_cfg, dataset)
         print(
-            f"Created download directory for version: '{validated_cfg.version}' of "
-            f"dataset: '{dataset}' at:\n{download_path}\n"
+            f"Created download directory for version '{validated_cfg.version}' of "
+            f"dataset: '{dataset}' at: {download_path}"
         )
 
         manifest_path = download_manifest_for_version(
@@ -137,6 +147,7 @@ def main_cfg(cfg: Config) -> None:
         downloads,
         version_entries,
         bypass_version_check=validated_cfg.bypass_version_check,
+        skip_s3_checks=validated_cfg.skip_s3_checks,
     )
 
     missing = [x for x in downloads if not x.s3_exists]
@@ -153,32 +164,43 @@ def main_cfg(cfg: Config) -> None:
         )
         exit(0)
 
-    print(f"Downloading {len(active_downloads)}/{len(downloads)}..")
-
     assert all(x.s3_object for x in active_downloads)
 
-    total_size_bytes = sum(
-        x.s3_object.content_length for x in active_downloads if x.s3_object
-    )
-    if total_size_bytes == 0:
-        print(
-            "The latest versions of all requested videos already exist in the output "
-            "directories under:\n"
-            f"{validated_cfg.output_directory}"
+    total_size_bytes = None
+    if not validated_cfg.skip_s3_checks:
+        total_size_bytes = sum(
+            x.s3_object.content_length for x in active_downloads if x.s3_object
         )
-        exit(0)
+        if total_size_bytes == 0:
+            print(
+                "The latest versions of all requested videos already exist in the output "
+                "directories under:\n"
+                f"{validated_cfg.output_directory}"
+            )
+            exit(0)
 
-    expected_gb = total_size_bytes / 1024 / 1024 / 1024
+        expected_gb = total_size_bytes / 1024 / 1024 / 1024
+
     if validated_cfg.assume_yes:
-        print(f"Downloading {expected_gb:.1f} GB..")
+        if expected_gb:
+            print(f"Downloading {len(active_downloads)} files..")
+        else:
+            print(f"Downloading {expected_gb:.1f} GB..")
     else:
         confirm = None
         while confirm is None:
-            response = input(
-                f"Expected size of downloaded files is "
-                f"{expected_gb:.1f} GB. "
-                f"Do you want to start the download? ([y]/n) "
-            )
+            if validated_cfg.skip_s3_checks:
+                response = input(
+                    f"Number of files to download is: {len(active_downloads)}\n"
+                    f"Run without --skip-s3-checks for a size estimate.\n"
+                    f"Do you want to start the download? ([y]/n) "
+                )
+            else:
+                response = input(
+                    f"Expected size of downloaded files is "
+                    f"{expected_gb:.1f} GB. "
+                    f"Do you want to start the download? ([y]/n) "
+                )
             if response.lower() in ["yes", "y", ""]:
                 confirm = True
             elif response.lower() in ["no", "n"]:
@@ -187,13 +209,15 @@ def main_cfg(cfg: Config) -> None:
             else:
                 continue
 
+    progress = DownloadProgressBar(total_size_bytes=total_size_bytes)
+
     files = download_all(
         active_downloads,
+        version_entries,
         aws_profile_name=validated_cfg.aws_profile_name,
-        callback=DownloadProgressBar(total_size_bytes=total_size_bytes).update,
+        callback=progress.update,
+        save_callback=lambda: save_version_file(version_entries, download_path),
     )
-
-    # TODO: Handle/filter? failed download pre-corrupted?
 
     print("Checking file integrity...")
     corrupted = list_corrupt_files(files)
@@ -205,18 +229,17 @@ def main_cfg(cfg: Config) -> None:
         logging.error(msg)
         # TODO: retry these downloads?
 
-    # TODO: Only succeeded/non-corrupted files (currently warns in upsert)
-    for x in active_downloads:
-        upsert_version(x, version_entries)
+    # for x in active_downloads:
+    #     upsert_version(x, version_entries)
 
+    # One additional save to confirm
     save_version_file(version_entries, download_path)
-
-    # TODO: Add logging functionality and store to hidden directory in download
-    # folder
 
 
 def main() -> None:
     config = config_from_args()
+    if not config:
+        return
     main_cfg(config)
 
 

@@ -14,6 +14,7 @@ from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
+VERSION_DEFAULT = "v1"
 DATASET_PRIMARY = "full_scale"
 DATASETS_VIDEO = ["full_scale", "clips", "components/videos", "video_540ss"]
 DATASETS_FILE = [
@@ -63,9 +64,11 @@ class ValidatedConfig(NamedTuple):
     metadata: bool
     manifest: bool
     bypass_version_check: bool
+    skip_s3_checks: bool
     video_uids: Set[str]
     universities: Set[str]
     annotations: Union[bool, Set[str]]
+    list_datasets: bool
 
 
 class Config(NamedTuple):
@@ -74,18 +77,20 @@ class Config(NamedTuple):
     operation.
     """
 
-    output_directory: str
-    assume_yes: bool
-    version: str
+    output_directory: str = None
+    assume_yes: bool = False
+    version: str = VERSION_DEFAULT
     datasets: List[str] = []
     benchmarks: Set[str] = []
     aws_profile_name: str = "default"
     metadata: bool = False
     manifest: bool = False
     bypass_version_check: bool = False
+    skip_s3_checks: bool = False
     video_uids: List[str] = []
     universities: List[str] = []
     annotations: Union[bool, List[str]] = True
+    list_datasets: bool = False
 
 
 def validate_config(cfg: Config) -> ValidatedConfig:
@@ -103,7 +108,9 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         raise RuntimeError(f"Could not find AWS profile '{cfg.aws_profile_name}'.")
 
     return ValidatedConfig(
-        output_directory=Path(cfg.output_directory).expanduser(),
+        output_directory=Path(cfg.output_directory).expanduser()
+        if cfg.output_directory
+        else None,
         version=cfg.version,
         datasets=set(cfg.datasets),
         benchmarks=set(cfg.benchmarks),
@@ -114,7 +121,9 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         universities=set(cfg.universities) if cfg.universities else {},
         assume_yes=bool(cfg.assume_yes),
         bypass_version_check=cfg.bypass_version_check,
+        skip_s3_checks=cfg.skip_s3_checks,
         annotations=cfg.annotations if isinstance(cfg.annotations, bool) else set(),
+        list_datasets=cfg.list_datasets,
     )
 
 
@@ -124,9 +133,7 @@ def config_from_args(args=None) -> Config:
     the flags.
     """
     # Parser for a configuration file
-    json_parser = argparse.ArgumentParser(
-        description="Command line tool to download Ego4D datasets from Amazon S3"
-    )
+    json_parser = argparse.ArgumentParser(add_help=False)
 
     json_parser.add_argument(
         "--config_path",
@@ -135,12 +142,14 @@ def config_from_args(args=None) -> Config:
         "from this file instead of the command line.",
     )
 
-    args, remaining = json_parser.parse_known_args(args=args)
+    json_args, remaining = json_parser.parse_known_args(args=args)
 
     # Parser for command line flags other than the configuration file
-    flag_parser = argparse.ArgumentParser(add_help=False)
+    flag_parser = argparse.ArgumentParser(
+        description="Command line tool to download Ego4D datasets from Amazon S3",
+        add_help=True,
+    )
 
-    required_flags = {"output_directory"}
     flag_parser.add_argument(
         "-o",
         "--output_directory",
@@ -166,12 +175,6 @@ def config_from_args(args=None) -> Config:
         "Otherwise, a list of specific annotations to pass, e.g. narration, fho, moments, vq, nlq, av",
     )
     flag_parser.add_argument(
-        "--viz",
-        const=True,
-        action="store_const",
-        help="Downloads the visualization dataset. (Convenience option equivalent to including viz in datasets.)",
-    )
-    flag_parser.add_argument(
         "--metadata",
         dest="metadata",
         action="store_true",
@@ -190,6 +193,12 @@ def config_from_args(args=None) -> Config:
         action="store_const",
         help="Downloads the video manifest. (True by default, only relevant if you want only the manifest.)",
     )
+    # flag_parser.add_argument(
+    #     "--viz",
+    #     const=True,
+    #     action="store_const",
+    #     help="Downloads the local visualization dataset. (Convenience option equivalent to including viz in datasets.)",
+    # )
     flag_parser.add_argument(
         "--bypass-existing",
         const=True,
@@ -198,9 +207,16 @@ def config_from_args(args=None) -> Config:
         help="Bypass existing files without checking file versions/sizes.",
     )
     flag_parser.add_argument(
+        "--skip-s3-checks",
+        const=True,
+        action="store_const",
+        dest="skip_s3_checks",
+        help="Skips initial check that files are present on S3 before downloading. Download size estimates are disabled with this flag.",
+    )
+    flag_parser.add_argument(
         "--version",
         help="A version identifier - i.e. 'v1'",
-        default="v1",
+        default=VERSION_DEFAULT,
     )
     flag_parser.add_argument(
         "--aws_profile_name",
@@ -240,10 +256,17 @@ def config_from_args(args=None) -> Config:
         "Mutually exclusive with the video_uids flag.",
     )
 
+    flag_parser.add_argument(
+        "--list-datasets",
+        dest="list_datasets",
+        action="store_true",
+        help="List the available datasets",
+    )
+
     # Use the values in the config file, but set them as defaults to flag_parser so they
     # can be overridden by command line flags
-    if args.config_path:
-        with open(args.config_path.expanduser()) as f:
+    if json_args.config_path:
+        with open(json_args.config_path.expanduser()) as f:
             config_contents = json.load(f)
             flag_parser.set_defaults(**config_contents)
 
@@ -259,20 +282,22 @@ def config_from_args(args=None) -> Config:
             f"Warning: Non-standard Dataset Specfied (Allowed, will attempt download): {unknown_datasets}"
         )
 
-    if parsed_args.viz:
-        if parsed_args.datasets:
-            if "viz" not in parsed_args.datasets:
-                print("Adding viz to datasets..")
-                parsed_args.datasets.append("viz")
-        else:
-            parsed_args.datasets = ["viz"]
-        del parsed_args.viz
+    # if parsed_args.viz:
+    #     if parsed_args.datasets:
+    #         if "viz" not in parsed_args.datasets:
+    #             print("Adding viz to datasets..")
+    #             parsed_args.datasets.append("viz")
+    #     else:
+    #         parsed_args.datasets = ["viz"]
+    #     del parsed_args.viz
+
+    help_cmd = False
+    if parsed_args.list_datasets:
+        help_cmd = True
 
     flags = {k: v for k, v in vars(parsed_args).items() if v is not None}
 
-    # Note: Since the flags from the config file are being used as default argparse
-    # values, we can't set required=True. Doing so would mean that the user couldn't
-    # leave them unspecified when invoking the CLI.
+    required_flags = {"output_directory"} if not help_cmd else set()
     missing = required_flags - flags.keys()
     if missing:
         raise RuntimeError(f"Missing required flags: {missing}")
@@ -288,8 +313,6 @@ def config_from_args(args=None) -> Config:
         flags["video_uids"] = uids_str.split()
 
     config = Config(**flags)
-
-    print(f"datasets: {config.datasets}")
 
     # We need to check the universities values here since they might have been set
     # through the JSON config file, in which case the argparse checks won't validate
