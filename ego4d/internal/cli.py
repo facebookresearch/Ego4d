@@ -52,6 +52,7 @@ def main_cfg(cfg: Config) -> None:
                 validated_cfg.error_details_name,
                 validated_cfg.error_summary_name,
                 validated_cfg.num_workers,
+                validated_cfg.expiry_time_sec,
             )
     else:
         input_dir = validated_cfg.input_directory
@@ -69,6 +70,7 @@ def main_cfg(cfg: Config) -> None:
             validated_cfg.error_details_name,
             validated_cfg.error_summary_name,
             validated_cfg.num_workers,
+            validated_cfg.expiry_time_sec,
         )
 
 

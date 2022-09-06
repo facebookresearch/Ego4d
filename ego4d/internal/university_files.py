@@ -1,7 +1,6 @@
 # pyre-unsafe
 import csv
 import json
-import logging
 import os
 import tempfile
 from collections import defaultdict
@@ -12,19 +11,14 @@ from dataclasses import (
     fields as dataclass_fields,
 )
 from datetime import datetime
-from threading import Lock
-from typing import Any, Callable, Dict, List, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from ego4d.internal.credential_s3 import S3Helper
 
 from tqdm import tqdm
 
 
-logging.basicConfig(filename="example.log", level=logging.DEBUG)
-lock = Lock()
-
-
-def split_s3_path(s3_path: str) -> Tuple[str, str]:
+def split_s3_path(s3_path: str) -> Tuple[Optional[str], str]:
     """
     Splits a full s3_path of the form "s3://bucket/folder/.../file.ext"
     into a tuple of ("bucket", "folder/.../file.ext")

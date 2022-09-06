@@ -61,6 +61,7 @@ class ValidatedConfig:
     aws_profile_name: str
     universities: Set[str]
     num_workers: int
+    expiry_time_sec: int
 
 
 @dataclass
@@ -76,7 +77,8 @@ class Config:
     error_details_name: str
     error_summary_name: str
     num_workers: int
-    aws_profile_name: str = "default"
+    expiry_time_sec: int
+    aws_profile_name: str
     universities: List[str] = field(default_factory=list)
 
 
@@ -103,6 +105,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         aws_profile_name=cfg.aws_profile_name,
         universities=set(cfg.universities) if cfg.universities else {},
         num_workers=cfg.num_workers,
+        expiry_time_sec=cfg.expiry_time_sec,
     )
 
 
@@ -159,6 +162,14 @@ def config_from_args(args=None) -> Config:
         type=int,
         help="number of workers",
         default=20,
+        required=False,
+    )
+    flag_parser.add_argument(
+        "-expiry",
+        "--expiry_time_sec",
+        type=int,
+        help="default expiry for presigned URLs (in seconds)",
+        default=3600,
         required=False,
     )
     flag_parser.add_argument(
