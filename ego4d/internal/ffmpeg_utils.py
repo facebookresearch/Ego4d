@@ -1,7 +1,9 @@
 # pyre-unsafe
 
 import json
+import random
 import subprocess
+import time
 from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Dict, List, Optional, Tuple
@@ -42,39 +44,16 @@ class VideoInfo:
 
 
 def get_video_info(
-    s3_client: botocore.client.BaseClient,
-    bucket_name: str,
-    video_param: Tuple[str, str],
-    error_message: List[ErrorMessage],
-    expiration: Optional[int] = 5,
-) -> Optional[VideoInfo]:
+    filename: str, name: Optional[str] = None, num_retries: int = 10
+) -> Tuple[Optional[VideoInfo], List[ErrorMessage]]:
     """
-    Args:
-        bucket_name: Name of the bucket
-        object_name: Key of the mp4 to read
-        expiration: Time in seconds for the presigned URL to remain valid
-
     Return:
         VideoInfo: information of the video stored in bucket_name specified by the object_name
         If error, returns None and log the error.
     """
     # Generate a presigned URL for the S3 object
-    object_name = video_param[1]
-    try:
-        filename = s3_client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket_name, "Key": object_name},
-            ExpiresIn=expiration,
-        )
-    except ClientError as ex:
-        error_message.append(
-            ErrorMessage(
-                video_param[0],
-                "video_does_not_exist_in_bucket_error",
-                f"video s3://{bucket_name}/{object_name} doesn't exist in bucket - {ex}",
-            )
-        )
-        return None
+    error_message = []
+    name = name if name is not None else filename
 
     cmd = [
         "ffprobe",
@@ -97,28 +76,40 @@ def get_video_info(
             return 0
         return Fraction(int(a), int(b))
 
-    try:
-        result = subprocess.run(cmd, encoding="utf-8", capture_output=True)
-
-    except Exception as ex:
-        error_message.append(
-            ErrorMessage(
-                video_param[0],
-                "ffmpeg_cannot_read_error",
-                f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG - {ex}",
+    result = None
+    x = 1
+    for _ in range(10):
+        time.sleep(random.random() * x + x / 2)
+        try:
+            result = subprocess.run(cmd, encoding="utf-8", capture_output=True)
+        except Exception as ex:
+            error_message.append(
+                ErrorMessage(
+                    name,
+                    "ffmpeg_cannot_read_error",
+                    f"{ex}",
+                )
             )
-        )
-        return None
+            return None, error_message
 
-    if result.stderr:
-        error_message.append(
-            ErrorMessage(
-                video_param[0],
-                "ffmpeg_cannot_read_error",
-                f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG - {result.stderr}",  # noqa
+        if result.stderr:
+            if "tls" in result.stderr:
+                x *= 2
+                continue
+            if "http" in result.stderr:
+                x *= 2
+                continue
+            error_message.append(
+                ErrorMessage(
+                    name,
+                    "ffmpeg_cannot_read_error",
+                    f"{result.stderr}",
+                )
             )
-        )
-        return None
+            return None, error_message
+        break
+
+    assert result is not None
 
     # return result
     data = json.loads(result.stdout)
@@ -215,4 +206,4 @@ def get_video_info(
         video_time_base=vtb,
         mp4_duration=mp4_duration,
     )
-    return video_info
+    return video_info, error_message
