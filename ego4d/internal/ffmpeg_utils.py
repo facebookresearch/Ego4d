@@ -47,7 +47,7 @@ def get_video_info(
     video_param: Tuple[str, str],
     error_message: List[ErrorMessage],
     expiration: Optional[int] = 5,
-) -> VideoInfo:
+) -> Optional[VideoInfo]:
     """
     Args:
         bucket_name: Name of the bucket
@@ -66,13 +66,12 @@ def get_video_info(
             Params={"Bucket": bucket_name, "Key": object_name},
             ExpiresIn=expiration,
         )
-    except ClientError:
-        # logging.error(e)
+    except ClientError as ex:
         error_message.append(
             ErrorMessage(
                 video_param[0],
                 "video_does_not_exist_in_bucket_error",
-                f"video s3://{bucket_name}/{object_name} doesn't exist in bucket",
+                f"video s3://{bucket_name}/{object_name} doesn't exist in bucket - {ex}",
             )
         )
         return None
@@ -101,12 +100,12 @@ def get_video_info(
     try:
         result = subprocess.run(cmd, encoding="utf-8", capture_output=True)
 
-    except Exception:
+    except Exception as ex:
         error_message.append(
             ErrorMessage(
                 video_param[0],
                 "ffmpeg_cannot_read_error",
-                f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG",
+                f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG - {ex}",
             )
         )
         return None
@@ -116,7 +115,7 @@ def get_video_info(
             ErrorMessage(
                 video_param[0],
                 "ffmpeg_cannot_read_error",
-                f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG",
+                f"video s3://{bucket_name}/{object_name} can't be read by FFMPEG - {result.stderr}",  # noqa
             )
         )
         return None

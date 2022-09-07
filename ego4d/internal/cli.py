@@ -12,6 +12,7 @@ Examples:
         -es "error_summary" \
 """
 import boto3
+import botocore.client as bclient
 from ego4d.cli.universities import UNIV_TO_BUCKET
 from ego4d.internal.config import (
     Config,
@@ -23,6 +24,12 @@ from ego4d.internal.config import (
 from ego4d.internal.validate import validate_all
 
 
+def _get_location(bucket_name: str) -> str:
+    client = boto3.client("s3")
+    response = client.get_bucket_location(Bucket=bucket_name)
+    return response["LocationConstraint"]
+
+
 def main_cfg(cfg: Config) -> None:
 
     validated_cfg = validate_config(cfg)
@@ -30,27 +37,38 @@ def main_cfg(cfg: Config) -> None:
     # This service resource in the default session will be used for general light-weight
     # requests on the main thread, such as downloading the video manifests and getting
     # S3 object metadata
-    # s3 = boto3.session.Session(profile_name=validated_cfg.aws_profile_name).resource(
-    #     "s3"
-    # )
-    s3 = boto3.client("s3")
     if cfg.validate_all:
         for u in unis:
-            path = f"s3://{UNIV_TO_BUCKET[u]}/{meta_path[u]}"
+            bucket = UNIV_TO_BUCKET[u]
+            path = f"s3://{bucket}/{meta_path[u]}"
+            s3 = boto3.client(
+                "s3",
+                config=bclient.Config(region_name=_get_location(bucket)),
+            )
             validate_all(
                 path,
                 s3,
                 validated_cfg.metadata_folder,
                 validated_cfg.error_details_name,
                 validated_cfg.error_summary_name,
+                validated_cfg.num_workers,
             )
     else:
+        input_dir = validated_cfg.input_directory
+        assert "s3://" in input_dir
+        bucket = input_dir.split("://")[1].split("/")[0]
+
+        s3 = boto3.client(
+            "s3",
+            config=bclient.Config(region_name=_get_location(bucket)),
+        )
         validate_all(
-            validated_cfg.input_directory,
+            input_dir,
             s3,
             validated_cfg.metadata_folder,
             validated_cfg.error_details_name,
             validated_cfg.error_summary_name,
+            validated_cfg.num_workers,
         )
 
 
