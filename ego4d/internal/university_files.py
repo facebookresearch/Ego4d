@@ -367,19 +367,15 @@ def load_standard_metadata_files(
     bucket, path = split_s3_path(standard_metadata_folder)
     s3_bucket = S3Helper(s3, bucket)
     truncated, available_metadata_files = s3_bucket.ls(path)
-    assert not truncated, (
-        f"Folder {s3_bucket_name}/{path} " "has too many entries"
-    )
+    assert not truncated, f"Folder {bucket}/{path} " "has too many entries"
     available_files = {f.key.split("/")[-1] for f in available_metadata_files}
-
 
     with tempfile.TemporaryDirectory("tmp_standard_metadata_folder") as tempdir:
         # Load reqiured files
         # Load device.csv
         file_name = "device.csv"
         assert file_name in available_files, (
-            f"required file {file_name} not found in "
-            f"{s3_bucket_name}/{path}"
+            f"required file {file_name} not found in " f"{bucket}/{path}"
         )
         local_file_path = f"{tempdir}/{file_name}"
         s3_bucket.get_file(f"{path}/{file_name}", local_file_path)
@@ -391,8 +387,7 @@ def load_standard_metadata_files(
 
         file_name = "component_type.csv"
         assert file_name in available_files, (
-            f"required file {file_name} not found in "
-            f"{s3_bucket_name}/{path}"
+            f"required file {file_name} not found in " f"{bucket}/{path}"
         )
         local_file_path = f"{tempdir}/{file_name}"
         s3_bucket.get_file(f"{path}/{file_name}", local_file_path)
@@ -402,11 +397,9 @@ def load_standard_metadata_files(
             "component_type_id",
         )
 
-
         file_name = "scenario.csv"
         assert file_name in available_files, (
-            f"required file {file_name} not found in "
-            f"{s3_bucket_name}/{path}"
+            f"required file {file_name} not found in " f"{bucket}/{path}"
         )
         local_file_path = f"{tempdir}/{file_name}"
         s3_bucket.get_file(f"{path}/{file_name}", local_file_path)
@@ -426,20 +419,20 @@ def download_standard_metadata_files_from_s3(
     auxiliary_videos = s3_bucket.get_file(
         os.path.join(path, "auxiliary_video_component_data_file.csv"),
         os.path.join(
-            standard_metadata_folder,"auxiliary_video_component_data_file.csv"
+            standard_metadata_folder, "auxiliary_video_component_data_file.csv"
         ),
     )
     physical_settings = s3_bucket.get_file(
         os.path.join(path, "physical_setting.csv"),
-        os.path.join(standard_metadata_folder,"physical_setting.csv"),
+        os.path.join(standard_metadata_folder, "physical_setting.csv"),
     )
     video_components = s3_bucket.get_file(
         os.path.join(path, "video_component_file.csv"),
-        os.path.join(standard_metadata_folder,"video_component_file.csv"),
+        os.path.join(standard_metadata_folder, "video_component_file.csv"),
     )
     video_metadata = s3_bucket.get_file(
         os.path.join(path, "video_metadata.csv"),
-        os.path.join(standard_metadata_folder,"video_metadata.csv"),
+        os.path.join(standard_metadata_folder, "video_metadata.csv"),
     )
     return auxiliary_videos, physical_settings, video_components, video_metadata
 
