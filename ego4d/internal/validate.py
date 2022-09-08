@@ -772,7 +772,7 @@ def validate_all(
 ):
     # get access to metadata_folder
     devices, component_types, scenarios = load_standard_metadata_files(
-        s3, path, standard_metadata_folder
+        s3, standard_metadata_folder
     )
     bucket, path = split_s3_path(path)
 
