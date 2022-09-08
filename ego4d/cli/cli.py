@@ -11,6 +11,7 @@ Examples:
         --output_directory="~/ego4d_data"
 """
 import logging
+from pathlib import Path
 from typing import List
 
 import boto3
@@ -108,9 +109,16 @@ def main_cfg(cfg: Config) -> None:
             f"dataset: '{dataset}' at: {download_path}"
         )
 
-        manifest_path = download_manifest_for_version(
-            validated_cfg.version, dataset, download_path, s3
-        )
+        if cfg.manifest_override_path:
+            p = Path(cfg.manifest_override_path).expanduser()
+            print(f"Overriding {dataset} manifest path: {p}")
+            if not p.exists():
+                logging.error(f"Manifest override doesn't exists: {p}")
+            manifest_path = str(p)
+        else:
+            manifest_path = download_manifest_for_version(
+                validated_cfg.version, dataset, download_path, s3
+            )
 
         version_entries = load_version_file(download_path)
 
