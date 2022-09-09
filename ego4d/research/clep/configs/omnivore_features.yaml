@@ -1,7 +1,7 @@
 input_config:
   metadata_path: "/checkpoint/miguelmartin/ego4d_data/ego4d.json"
   feature_path: "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/omnivore_video_swinL"
-  feature_extract_config_path: "/private/home/miguelmartin/ego4d/ego4d_vaclip/ego4d/features/configs/omnivore_video.yaml"
+  feature_extract_config_path: "/private/home/miguelmartin/ego4d/ego4d_public/ego4d/features/configs/omnivore_video.yaml"
   features_per_second: 1.875
   narration_width_sample_sec: 2
   max_num_feature_vec_video_uids: 30
@@ -19,6 +19,7 @@ pre_config:
     class_desc_path: "/datasets01/Charades-ego-v1/101320/charades-ego-v1/CharadesEgo/Charades_v1_classes.txt"
     out_path: "charades.hdf5"
     out_label_path: "labels.pt"
+    num_vids_per_machine: 50
   k400:
     csv_dir: "/datasets01/kinetics/092121/400/lists"
     dataset_dir: "/datasets01/kinetics/092121/400/val_288px/"
@@ -28,16 +29,16 @@ pre_config:
     metadata_out_path: "meta.pth"
     num_labels_per_machine: 400
   ego4d_features:
-    hdf5_path: "/checkpoint/miguelmartin/vaclip/features.hdf5"
+    hdf5_path: "features.hdf5"
   ego4d_narr:
     narration_json_path: "/datasets01/ego4d_track2/v1/annotations/narration.json"
     st_model_name: "all-mpnet-base-v2"
     accelerator: "cuda"
-    metadata_out_path: "narrs_meta_no_tag.pt"
-    narration_out_path: "narrs_w_no_tag"
+    metadata_out_path: "narrs_meta.pt"
+    narration_out_dir: "narrs"
     min_words: 5
     batch_size: 50
-    num_narrs_per_machine: 50000
+    num_narrs_per_machine: 100000
     limit: null
   cc:
     in_path: "/checkpoint/miguelmartin/conceptial_captions/Train_GCC-training_output.csv"
@@ -54,7 +55,7 @@ pre_config:
     slurm_log_folder: "slurm_log"
     timeout_min: 240
     constraint: "volta"
-    slurm_partition: "learnfair"
+    slurm_partition: "pixar"
     slurm_array_parallelism: 100
     gpus_per_node: 1
     cpus_per_task: 10

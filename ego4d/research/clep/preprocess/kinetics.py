@@ -6,7 +6,7 @@ import sys
 import h5py
 import pandas as pd
 import torch
-from ego4d.features.config import FeatureExtractConfig, load_model, Video
+from ego4d.features.config import load_model
 from ego4d.features.inference import _load_kinetics_class_names
 from ego4d.research.clep.config import K400PreprocessConfig, TrainConfig
 from ego4d.research.clep.preprocess.common import (

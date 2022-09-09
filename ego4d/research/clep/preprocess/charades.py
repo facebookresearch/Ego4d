@@ -1,11 +1,17 @@
+import functools
+import os
+
 import h5py
 import torch
-from ego4d.features.config import FeatureExtractConfig, load_model, Video
-from ego4d.features.extract_features import extract_features
-from ego4d.features.inference import _video_info as video_info
+import pandas as pd
+from ego4d.features.config import load_model
 
+from ego4d.research.common import batch_it, create_executor
 from ego4d.research.clep.config import EgoCharadePreprocessConfig, TrainConfig
-from ego4d.research.clep.preprocess.common import get_language_model
+from ego4d.research.clep.preprocess.common import (
+    get_language_model,
+    run_feature_extraction,
+)
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm
 
@@ -23,7 +29,7 @@ def preprocess_ego_charade(
         config.input_config.feature_extract_config_path
     )
 
-    out_path = os.path.join(config.root_dir, char_config.out_path)
+    out_path = os.path.join(out_dir, char_config.out_path)
 
     class_desc_path = char_config.class_desc_path
     class_name_df = pd.read_csv(class_desc_path, header=None)
@@ -74,7 +80,7 @@ def preprocess_ego_charade(
     video_path_ids = [vp for vp in video_path_ids if os.path.exists(vp[0])]
 
     batches = batch_it(video_path_ids, char_config.num_vids_per_machine)
-    executor = create_executor(char_config, len(batches))
+    executor = create_executor(config.pre_config.slurm_config, len(batches))
     map_fn = functools.partial(
         _preprocess_ego_charade,
         feature_extract_config=feature_extract_config,
@@ -86,7 +92,7 @@ def preprocess_ego_charade(
         for j in tqdm(jobs):
             feat = j.result()
             for uid, ret in feat.items():
-                out_f.create_dataset(uid, data=ret["all_fvs"].numpy())
+                out_f.create_dataset(uid, data=ret["features"].numpy())
 
 
 def _preprocess_ego_charade(video_path_ids, feature_extract_config):
@@ -94,7 +100,7 @@ def _preprocess_ego_charade(video_path_ids, feature_extract_config):
 
     ret = {}
     for path, uid in tqdm(video_path_ids):
-        predictions = _extract_features(path, model, feature_extract_config)
+        predictions = run_feature_extraction(path, model, feature_extract_config)
         assert predictions is not None
         ret[uid] = {
             "features": predictions.result[path],

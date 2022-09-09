@@ -1,3 +1,4 @@
+import functools
 import os
 
 from multiprocessing import Pool
@@ -69,9 +70,12 @@ def preprocess_cc(config: TrainConfig, cc: CCPreprocessConfig):
     )
 
     executor = create_executor(config.pre_config.slurm_config, len(batches))
+
     jobs = executor.map_array(
         functools.partial(
-            _map_cc_batch, cc=cc, feature_extract_config=feature_extract_config
+            _map_cc_batch,
+            cc=cc,
+            feature_extract_config=feature_extract_config,
         ),
         batches,
     )
@@ -124,7 +128,7 @@ def _map_cc_batch(
     ret = {}
     with torch.no_grad():
         for xx in tqdm(dloader, total=len(dloader)):
-            fv = viz_model(xx["img"].cuda())
+            fv = viz_model({"video": xx["img"].cuda()})
             for p, f in zip(xx["path"], fv.cpu().numpy()):
                 ret[_get_key(p, idx)] = f
     return ret

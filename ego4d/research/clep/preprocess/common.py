@@ -15,7 +15,7 @@ def run_feature_extraction(
 ):
     v_info = video_info(path)
     # pyre-ignore
-    vid = Video(path, path, v_info["num_frames"], w=None, h=None)
+    vid = Video(path, path, v_info["num_frames"], w=None, h=None, has_audio=False, is_stereo=False)
     if vid.frame_count is None:
         return None
 

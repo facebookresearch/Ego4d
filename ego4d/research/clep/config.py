@@ -45,7 +45,7 @@ class EgoPreprocessNarrConfig:
     accelerator: str
     root_dir: str
     metadata_out_path: str
-    narration_out_path: str
+    narration_out_dir: str
     limit: Optional[int]
     num_narrs_per_machine: int
 

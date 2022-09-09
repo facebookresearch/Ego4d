@@ -2,8 +2,9 @@ import os
 from typing import Any, Callable, List, Optional, Tuple
 
 import h5py
-
 import torch
+
+from tqdm.auto import tqdm
 
 
 class LabelledFeatureDset(torch.utils.data.Dataset):

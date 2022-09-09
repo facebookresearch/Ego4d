@@ -89,7 +89,7 @@ def create_kinetics_dset(
     )
 
     sent_meta_path = os.path.join(
-        root, k400_config.set_to_use, k400_config.metadata_out_path
+        root, k400_config.metadata_out_path
     )
     sent_features = torch.load(sent_meta_path)
 
@@ -155,7 +155,7 @@ class Ego4DVaClip(Dataset):
         self.narr_meta = torch.load(self.narr_meta_path)
         self.config = config
         self.narr_feature_dir = os.path.join(
-            config.pre_config.root_dir, config.pre_config.ego4d_narr.narration_out_path
+            config.pre_config.root_dir, config.pre_config.ego4d_narr.narration_out_dir
         )
         self.features = h5py.File(
             os.path.join(

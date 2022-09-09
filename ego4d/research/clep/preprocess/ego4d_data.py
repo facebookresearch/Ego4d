@@ -1,10 +1,10 @@
+import submitit.helpers as sh
 import functools
 import json
 import os
 from typing import Any, Dict, List, Tuple
 
 import h5py
-import numpy as np
 
 import torch
 from ego4d.research.clep.config import (
@@ -27,8 +27,8 @@ def preprocess_ego_narrations(
     out_dir = config.pre_config.root_dir
     os.makedirs(out_dir, exist_ok=True)
 
-    narr_op = os.path.join(out_dir, narr_config.narration_out_path)
-    os.makedirs(narr_op, exist_ok=True)
+    narr_od = os.path.join(out_dir, narr_config.narration_out_dir)
+    os.makedirs(narr_od, exist_ok=True)
 
     narrs = get_narrations(narr_config)
     narrs = filter_narrations(narrs, config.input_config, narr_config)
@@ -49,16 +49,21 @@ def preprocess_ego_narrations(
     print(f"Num narrs = {len(narrs_with_idx)}", flush=True)
 
     metas = []
-    executor = create_executor(config.slurm_config, len(batches))
-    # TODO: fixme
+    executor = create_executor(config.pre_config.slurm_config, len(batches))
     jobs = executor.map_array(
-        functools.partial(_map_narrs_on_machine, config=narr_config, narr_op=narr_op),
+        functools.partial(
+            _map_narrs_on_machine,
+            config=config,
+            narr_od=narr_od,
+        ),
         batches,
     )
     print("Jobs", jobs, flush=True)
 
-    for j in tqdm(jobs):
-        metas.extend(j.result())
+    metas = []
+    for j in tqdm(sh.as_completed(jobs), total=len(jobs)):
+        res = j.result()
+        metas.extend(res)
 
     print("Saving metadata")
     m_op = os.path.join(out_dir, narr_config.metadata_out_path)
@@ -67,18 +72,16 @@ def preprocess_ego_narrations(
 
 def preprocess_ego_features(
     feature_path: str,
-    pre_config: PreprocessConfig,
+    config: TrainConfig,
     pre_feature: EgoPreprocessFeatureConfig,
 ):
-    out_dir = pre_config.root_dir
+    out_dir = config.pre_config.root_dir
     os.makedirs(out_dir, exist_ok=True)
 
-    narr_meta_path = os.path.join(out_dir, pre_config.ego4d_narr.metadata_out_path)
-    narr_meta = torch.load(narr_meta_path)
-    video_uids = {x["uid"] for x in narr_meta}
-    video_uids = list(video_uids)
+    meta = json.load(open(config.input_config.metadata_path))
+    video_uids = [x["video_uid"] for x in meta["videos"]]
 
-    out_path = pre_feature.hdf5_path
+    out_path = os.path.join(config.pre_config.root_dir, pre_feature.hdf5_path)
     print("=>", out_path, flush=True)
     save_ego4d_features_to_hdf5(
         video_uids=video_uids,
@@ -90,7 +93,7 @@ def preprocess_ego_features(
 def _map_narrs_on_machine(
     narrs: List[Tuple[int, Tuple[str, str, str, str, float]]],
     config: TrainConfig,
-    narr_op: str,
+    narr_od: str,
 ) -> List[Dict[str, Any]]:
     model = get_language_model(config)
 
@@ -100,26 +103,28 @@ def _map_narrs_on_machine(
     for batch in tqdm(batches):
         fvs = model.encode(
             [x for _, (_, x, _, _, _) in batch],
-            device=config.accelerator,
+            device="cuda" if config.accelerator == "gpu" else config.accelerator,
             show_progress_bar=False,
         )
         fvs_without_tags = model.encode(
             [x for _, (x, _, _, _, _) in batch],
-            device=config.accelerator,
+            device="cuda" if config.accelerator == "gpu" else config.accelerator,
             show_progress_bar=False,
         )
 
         for fv_no_tag, fv, (idx, (no_tag_txt, post_txt, uid, txt, ts)) in zip(
             fvs_without_tags, fvs, batch
         ):
-            # od = os.path.join(narr_op, uid)
-            # os.makedirs(od, exist_ok=True)
-            # path_to_encode = os.path.join(od, f"{idx}.pt")
-            # torch.save(
-            #     {
-            #     },
-            #     path_to_encode,
-            # )
+            od = os.path.join(narr_od, uid)
+            os.makedirs(od, exist_ok=True)
+            path_to_encode = os.path.join(od, f"{idx}.pt")
+            torch.save(
+                {
+                    "fv": fv,
+                    "fv_no_tag": fv_no_tag,
+                },
+                path_to_encode,
+            )
             metas.append(
                 {
                     "uid": uid,
@@ -128,8 +133,6 @@ def _map_narrs_on_machine(
                     "idx": idx,
                     "post_txt": post_txt,
                     "no_tag_txt": no_tag_txt,
-                    "fv": fv,
-                    "fv_no_tag": fv_no_tag,
                 }
             )
     return metas
@@ -185,7 +188,7 @@ def filter_narrations(
     return ret
 
 
-def get_narrations(config: EgoPreprocessNarrConfig) -> List[Tuple[str, str, float]]:
+def get_narrations(config: EgoPreprocessNarrConfig) -> List[Tuple[str, str, float, str]]:
     narration_json = json.load(open(config.narration_json_path))
     uid_subset = set(narration_json.keys())
     narrations = [

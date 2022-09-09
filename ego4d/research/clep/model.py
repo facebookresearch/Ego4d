@@ -29,6 +29,7 @@ class EgoLangaugeAssociation(nn.Module):
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
     def forward(self, x):
+        breakpoint()
         ve = self.visual_proj(x["video"])
         te = self.text_proj(x["text"])
         return ve, te, self.logit_scale
