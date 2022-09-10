@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="ego4d",
-    version="1.2",
+    version="1.2.3",
     author="FAIR",
     author_email="info@ego4d-data.org",
     description="Ego4D Dataset CLI",
@@ -13,20 +13,12 @@ setup(
     install_requires=[
         "boto3",
         "tqdm",
-        # "av",
-        # "torch",
-        # "torchvision",
-        # "pytorch_lightning",
-        # "matplotlib",
-        # "simplejson",
-        # "matplotlib",
-        # "pandas",
     ],
     tests_require=[
         "pytest",
         "moto",
     ],
-    packages=["ego4d", "ego4d.cli", "ego4d.internal"],
+    packages=find_packages(exclude=("tests", "tests.*")),
     entry_points={
         "console_scripts": [
             "ego4d=ego4d.cli.cli:main",
