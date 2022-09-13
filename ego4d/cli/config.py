@@ -69,6 +69,7 @@ class ValidatedConfig(NamedTuple):
     universities: Set[str]
     annotations: Union[bool, Set[str]]
     list_datasets: bool
+    manifest_override_path: str
 
 
 class Config(NamedTuple):
@@ -91,6 +92,7 @@ class Config(NamedTuple):
     universities: List[str] = []
     annotations: Union[bool, List[str]] = True
     list_datasets: bool = False
+    manifest_override_path: str = None
 
 
 def validate_config(cfg: Config) -> ValidatedConfig:
@@ -124,6 +126,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         skip_s3_checks=cfg.skip_s3_checks,
         annotations=cfg.annotations if isinstance(cfg.annotations, bool) else set(),
         list_datasets=cfg.list_datasets,
+        manifest_override_path=cfg.manifest_override_path,
     )
 
 
@@ -254,6 +257,11 @@ def config_from_args(args=None) -> Config:
         "--video_uid_file",
         help="Path to a whitespace delimited file that contains a list of UIDs. "
         "Mutually exclusive with the video_uids flag.",
+    )
+    flag_parser.add_argument(
+        "--manifest-override-path",
+        help="Override the manifest with the specified path.  Only relevant if exactly "
+        "1 dataset is specified",
     )
 
     flag_parser.add_argument(
