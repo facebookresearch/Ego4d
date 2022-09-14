@@ -161,7 +161,7 @@ def config_from_args(args=None) -> Config:
         "--num_workers",
         type=int,
         help="number of workers",
-        default=20,
+        default=25,
         required=False,
     )
     flag_parser.add_argument(
