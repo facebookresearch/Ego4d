@@ -13,21 +13,12 @@ setup(
     install_requires=[
         "boto3",
         "tqdm",
-        "regex",
-        # "av",
-        # "torch",
-        # "torchvision",
-        # "pytorch_lightning",
-        # "matplotlib",
-        # "simplejson",
-        # "matplotlib",
-        # "pandas",
     ],
     tests_require=[
         "pytest",
         "moto",
     ],
-    packages=["ego4d", "ego4d.cli", "ego4d.internal"],
+    packages=find_packages(exclude=("tests", "tests.*")),
     entry_points={
         "console_scripts": [
             "ego4d=ego4d.cli.cli:main",

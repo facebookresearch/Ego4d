@@ -37,7 +37,7 @@ schedule_config:
   time_per_forward_pass: 2.5
   schedule_time_per_node: 10.0
 model_config:
-  model_name: "omnivore_swinB_imagenet21k"
+  model_name: "omnivore_swinL_imagenet21k"
   input_type: "video"
   side_size: 256
   crop_size: 224
