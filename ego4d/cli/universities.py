@@ -14,7 +14,7 @@ UNIV_TO_BUCKET = {
     "kaust": "ego4d-kaust",
     "minnesota": "ego4d-minnesota",
     "nus": "ego4d-speac",
-    "unict": "ego4d-unict",
+    "unict": "ego4d-unict-milan",
     "utokyo": "ego4d-utokyo",
     "uniandes": "ego4d-university-sa",
     "cmu_africa": "ego4d-universityaf",

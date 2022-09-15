@@ -1,5 +1,7 @@
 tqdm
 pytorchvideo
+boto3
+regex
 av==9.0.2
 einops==0.4.1
 numpy==1.22.3
