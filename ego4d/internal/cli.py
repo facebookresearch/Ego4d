@@ -43,7 +43,12 @@ def main_cfg(cfg: Config) -> None:
             path = f"s3://{bucket}/{meta_path[u]}"
             s3 = boto3.client(
                 "s3",
-                config=bclient.Config(region_name=_get_location(bucket)),
+                config=bclient.Config(
+                    region_name=_get_location(bucket),
+                    connect_timeout=180,
+                    max_pool_connections=validated_cfg.num_workers,
+                    retries={"total_max_attempts": 3},
+                ),
             )
             validate_all(
                 path,
@@ -61,7 +66,12 @@ def main_cfg(cfg: Config) -> None:
 
         s3 = boto3.client(
             "s3",
-            config=bclient.Config(region_name=_get_location(bucket)),
+            config=bclient.Config(
+                region_name=_get_location(bucket),
+                connect_timeout=180,
+                max_pool_connections=validated_cfg.num_workers,
+                retries={"total_max_attempts": 3},
+            ),
         )
         validate_all(
             input_dir,

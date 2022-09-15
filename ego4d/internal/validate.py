@@ -81,7 +81,10 @@ def _validate_vcs(
                     f" when it should have {i}",
                 )
             )
-        if not components[i].video_component_relative_path:
+        if (
+            not components[i].video_component_relative_path
+            and not components[i].is_redacted
+        ):
             errors.append(
                 ErrorMessage(
                     video_id,
@@ -90,28 +93,29 @@ def _validate_vcs(
                 )
             )
         else:
-            s3_path = f"{university_video_folder_path.rstrip('/')}/{components[i].video_component_relative_path}"
-            bucket, key = split_s3_path(s3_path)
-            if bucket != bucket_name:
-                errors.append(
-                    ErrorMessage(
-                        video_id,
-                        "bucket_name_inconsistent_error",
-                        f"video has bucket_name {bucket_name}"
-                        f" when it should have {bucket}",
+            if not components[i].is_redacted:
+                s3_path = f"{university_video_folder_path.rstrip('/')}/{components[i].video_component_relative_path}"
+                bucket, key = split_s3_path(s3_path)
+                if bucket != bucket_name:
+                    errors.append(
+                        ErrorMessage(
+                            video_id,
+                            "bucket_name_inconsistent_error",
+                            f"video has bucket_name {bucket_name}"
+                            f" when it should have {bucket}",
+                        )
                     )
-                )
-            try:
-                s3.head_object(Bucket=bucket, Key=key)
-                result.append((video_id, key))
-            except ClientError:
-                errors.append(
-                    ErrorMessage(
-                        video_id,
-                        "path_does_not_exist_error",
-                        f"video s3://{bucket}/{key} doesn't exist in bucket",
+                try:
+                    s3.head_object(Bucket=bucket, Key=key)
+                    result.append((video_id, key))
+                except ClientError:
+                    errors.append(
+                        ErrorMessage(
+                            video_id,
+                            "path_does_not_exist_error",
+                            f"video s3://{bucket}/{key} doesn't exist in bucket",
+                        )
                     )
-                )
 
     return result, errors
 
@@ -458,6 +462,7 @@ def _validate_synchronized_videos(
 
 def _validate_auxilliary_videos(
     video_metadata_dict: Dict[str, VideoMetadata],
+    video_components_dict: Dict[str, List[VideoComponentFile]],
     auxiliary_video_component_dict: Dict[str, List[AuxiliaryVideoComponentDataFile]],
     component_types: Dict[str, ComponentType],
     error_message: List[ErrorMessage],
@@ -475,7 +480,7 @@ def _validate_auxilliary_videos(
     # and that the component_type is valid
     print("validating auxiliary videos")
     if auxiliary_video_component_dict:
-        for video_id, components in auxiliary_video_component_dict.items():
+        for video_id, aux_components in auxiliary_video_component_dict.items():
             if video_id not in video_metadata_dict:
                 error_message.append(
                     ErrorMessage(
@@ -484,37 +489,49 @@ def _validate_auxilliary_videos(
                         f"{video_id} in auxiliary_video_component_dict can't be found in video_metadata",
                     )
                 )
-            elif video_metadata_dict[video_id].number_video_components != len(
-                components
-            ):
-                error_message.append(
-                    ErrorMessage(
-                        video_id,
-                        "video_component_length_inconsistent_error",
-                        f"the video has {len(components)} auxiliary components when it"
-                        f" should have {video_metadata_dict[video_id].number_video_components}",
-                    )
-                )
-            components.sort(key=lambda x: x.component_index)
-            for i in range(len(components)):
-                component = components[i]
-                if i != component.component_index:
+
+            else:
+                redacted_video_components = [
+                    component
+                    for component in video_components_dict[video_id]
+                    if component.is_redacted
+                ]
+                if video_metadata_dict[video_id].number_video_components - len(
+                    redacted_video_components
+                ) != len(aux_components):
                     error_message.append(
                         ErrorMessage(
                             video_id,
-                            "video_component_wrong_index_error",
-                            f"the video component has auxiliary component index {component.component_index}"
-                            f" when it should have {i}",
+                            "video_component_length_inconsistent_error",
+                            f"the video has {len(aux_components)} auxiliary components when it"
+                            f" should have {video_metadata_dict[video_id].number_video_components}",  # noqa
                         )
                     )
-                if component.component_type_id not in component_types:
-                    error_message.append(
-                        ErrorMessage(
-                            video_id,
-                            "component_type_id_not_found_error",
-                            f"auxiliary component's component_type_id: '{component.component_type_id} does not exist in component_types'",
+                non_redacted_video_components = [
+                    component.component_index
+                    for component in video_components_dict[video_id]
+                    if not component.is_redacted
+                ]
+                aux_components.sort(key=lambda x: x.component_index)
+                for i in range(len(aux_components)):
+                    component = aux_components[i]
+                    if non_redacted_video_components[i] != component.component_index:
+                        error_message.append(
+                            ErrorMessage(
+                                video_id,
+                                "video_component_wrong_index_error",
+                                f"the video component has auxiliary component index {component.component_index}"
+                                f" when it should have {non_redacted_video_components[i]}",  # noqa
+                            )
                         )
-                    )
+                    if component.component_type_id not in component_types:
+                        error_message.append(
+                            ErrorMessage(
+                                video_id,
+                                "component_type_id_not_found_error",
+                                f"auxiliary component's component_type_id: '{component.component_type_id} does not exist in component_types'",  # noqa
+                            )
+                        )
 
 
 def _validate_participant(
@@ -724,6 +741,7 @@ def validate_university_files(  # noqa :C901
     )
     _validate_auxilliary_videos(
         video_metadata_dict=video_metadata_dict,
+        video_components_dict=video_components_dict,
         auxiliary_video_component_dict=auxiliary_video_component_dict,
         component_types=component_types,
         error_message=error_message,
