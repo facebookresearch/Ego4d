@@ -135,7 +135,7 @@ def config_from_args(args=None) -> Config:
     flag_parser.add_argument(
         "-i",
         "--input_directory",
-        help="The S3 path where the metadata is stored",
+        help="The S3 path where the university's video metadata is stored",
     )
 
     flag_parser.add_argument(
@@ -148,7 +148,7 @@ def config_from_args(args=None) -> Config:
     flag_parser.add_argument(
         "-mf",
         "--metadata_folder",
-        help="the local metadata folder where csv files (video components, metadata, etc.) will be downloaded to and stored in",
+        help="The S3 path where the device/component_type/scenario metadata is stored",
     )
     flag_parser.add_argument(
         "-ed", "--error_details_name", help="output file name for error details"
@@ -161,7 +161,7 @@ def config_from_args(args=None) -> Config:
         "--num_workers",
         type=int,
         help="number of workers",
-        default=20,
+        default=25,
         required=False,
     )
     flag_parser.add_argument(

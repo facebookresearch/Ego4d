@@ -7,7 +7,7 @@ Command line tool to download Ego4D datasets.
 Examples:
       python -m ego4d.internal.cli \
         -i "s3://ego4d-unict/metadata_v7" \
-        -mf "./ego4d/internal/standard_metadata_v10" \
+        -mf "s3://ego4d-consortium-sharing/internal/standard_metadata_v10/" \
         -ed "error_details" \
         -es "error_summary" \
 """
@@ -43,7 +43,12 @@ def main_cfg(cfg: Config) -> None:
             path = f"s3://{bucket}/{meta_path[u]}"
             s3 = boto3.client(
                 "s3",
-                config=bclient.Config(region_name=_get_location(bucket)),
+                config=bclient.Config(
+                    region_name=_get_location(bucket),
+                    connect_timeout=180,
+                    max_pool_connections=validated_cfg.num_workers,
+                    retries={"total_max_attempts": 3},
+                ),
             )
             validate_all(
                 path,
@@ -61,7 +66,12 @@ def main_cfg(cfg: Config) -> None:
 
         s3 = boto3.client(
             "s3",
-            config=bclient.Config(region_name=_get_location(bucket)),
+            config=bclient.Config(
+                region_name=_get_location(bucket),
+                connect_timeout=180,
+                max_pool_connections=validated_cfg.num_workers,
+                retries={"total_max_attempts": 3},
+            ),
         )
         validate_all(
             input_dir,
