@@ -761,24 +761,34 @@ def validate_university_files(  # noqa :C901
         error_message=error_message,
     )
 
-    error_dict = collections.defaultdict(int)
+    error_dict_non_released = collections.defaultdict(int)
+    error_dict_released = collections.defaultdict(int)
     if error_message:
         for err in error_message:
             if err.uid not in released_videos[u]:
-                error_dict[err.errorType] += 1
+                error_dict_non_released[err.errorType] += 1
+            else:
+                error_dict_released[err.errorType] += 1
 
-    fields = ["univeristy_video_id", "errorType", "description"]
+    fields = ["univeristy_video_id", "errorType", "description", "is_released"]
     with open(error_details_path, "w") as f:
         # using csv.writer method from CSV package
         write = csv.writer(f)
         write.writerow(fields)
         for e in error_message:
-            if err.uid not in released_videos[u]:
-                write.writerow([e.uid, e.errorType, e.description])
+            if e.uid not in released_videos[u]:
+                write.writerow([e.uid, e.errorType, e.description, 0])
+            else:
+                write.writerow([e.uid, e.errorType, e.description, 1])
     with open(error_summary_path, "w") as f:
         write = csv.writer(f)
+        write.writerow(["Not Yet Released Videos"])
         write.writerow(["error_type", "num_of_occurrences"])
-        for error_type, error_counts in error_dict.items():
+        for error_type, error_counts in error_dict_non_released.items():
+            write.writerow([error_type, error_counts])
+        write.writerow(["Released Videos"])
+        write.writerow(["error_type", "num_of_occurrences"])
+        for error_type, error_counts in error_dict_released.items():
             write.writerow([error_type, error_counts])
     return error_message
 

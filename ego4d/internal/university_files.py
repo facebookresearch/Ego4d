@@ -426,7 +426,7 @@ def load_released_video_files(
         released_videos = collections.defaultdict(list)
         with open(local_file_path, newline="") as csvfile:
             reader = csv.reader(csvfile, delimiter=",", quotechar='"')
-            header = next(reader)
+            next(reader)
             for line in reader:
                 released_videos[line[2]].append(line[0])
         return released_videos
