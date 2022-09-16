@@ -16,6 +16,7 @@ from ego4d.internal.university_files import (
     ComponentType,
     Device,
     ErrorMessage,
+    load_released_video_files,
     load_standard_metadata_files,
     load_university_files,
     Particpant,
@@ -707,6 +708,8 @@ def validate_university_files(  # noqa :C901
     scenarios: Dict[str, Scenario],
     bucket_name: str,
     s3: botocore.client.BaseClient,
+    u: str,
+    released_videos: Dict[str, List[str]],
     error_details_path: str,
     error_summary_path: str,
     num_workers: int,
@@ -716,7 +719,6 @@ def validate_university_files(  # noqa :C901
     # Check ids in video_components_dict are in video_metadata_dict
     # and the # of components is correct
     video_info_param = []
-
     video_info_param = _validate_video_components(
         s3=s3,
         bucket_name=bucket_name,
@@ -759,22 +761,34 @@ def validate_university_files(  # noqa :C901
         error_message=error_message,
     )
 
-    error_dict = collections.defaultdict(int)
+    error_dict_non_released = collections.defaultdict(int)
+    error_dict_released = collections.defaultdict(int)
     if error_message:
         for err in error_message:
-            error_dict[err.errorType] += 1
+            if err.uid not in released_videos[u]:
+                error_dict_non_released[err.errorType] += 1
+            else:
+                error_dict_released[err.errorType] += 1
 
-    fields = ["univeristy_video_id", "errorType", "description"]
+    fields = ["univeristy_video_id", "errorType", "description", "is_released"]
     with open(error_details_path, "w") as f:
         # using csv.writer method from CSV package
         write = csv.writer(f)
         write.writerow(fields)
         for e in error_message:
-            write.writerow([e.uid, e.errorType, e.description])
+            if e.uid not in released_videos[u]:
+                write.writerow([e.uid, e.errorType, e.description, 0])
+            else:
+                write.writerow([e.uid, e.errorType, e.description, 1])
     with open(error_summary_path, "w") as f:
         write = csv.writer(f)
+        write.writerow(["Not Yet Released Videos"])
         write.writerow(["error_type", "num_of_occurrences"])
-        for error_type, error_counts in error_dict.items():
+        for error_type, error_counts in error_dict_non_released.items():
+            write.writerow([error_type, error_counts])
+        write.writerow(["Released Videos"])
+        write.writerow(["error_type", "num_of_occurrences"])
+        for error_type, error_counts in error_dict_released.items():
             write.writerow([error_type, error_counts])
     return error_message
 
@@ -782,6 +796,8 @@ def validate_university_files(  # noqa :C901
 def validate_all(
     path,
     s3,
+    u,
+    released_video_path,
     standard_metadata_folder,
     error_details_path,
     error_summary_path,
@@ -792,6 +808,7 @@ def validate_all(
     devices, component_types, scenarios = load_standard_metadata_files(
         s3, standard_metadata_folder
     )
+    released_videos = load_released_video_files(s3, released_video_path)
     bucket, path = split_s3_path(path)
 
     (
@@ -817,6 +834,8 @@ def validate_all(
         scenarios,
         bucket,
         s3,
+        u,
+        released_videos,
         error_details_path,
         error_summary_path,
         num_workers,

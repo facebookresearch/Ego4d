@@ -1,4 +1,5 @@
 # pyre-unsafe
+import collections
 import csv
 import json
 import os
@@ -408,6 +409,27 @@ def load_standard_metadata_files(
         )
     validate_standard_metadata_files(devices, component_types, scenarios)
     return devices, component_types, scenarios
+
+
+def load_released_video_files(
+    s3,
+    released_video_path: str,
+) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
+    bucket, path = split_s3_path(released_video_path)
+    s3_bucket = S3Helper(s3, bucket)
+
+    with tempfile.TemporaryDirectory("tmp_released_video_folder") as tempdir:
+        # Load reqiured file
+        file_name = path.split("/")[-1]
+        local_file_path = f"{tempdir}/{file_name}"
+        s3_bucket.get_file(f"{path}", local_file_path)
+        released_videos = collections.defaultdict(list)
+        with open(local_file_path, newline="") as csvfile:
+            reader = csv.reader(csvfile, delimiter=",", quotechar='"')
+            next(reader)
+            for line in reader:
+                released_videos[line[2]].append(line[0])
+        return released_videos
 
 
 def validate_standard_metadata_files(

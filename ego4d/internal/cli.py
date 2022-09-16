@@ -53,6 +53,8 @@ def main_cfg(cfg: Config) -> None:
             validate_all(
                 path,
                 s3,
+                u,
+                validated_cfg.released_video_path,
                 validated_cfg.metadata_folder,
                 validated_cfg.error_details_name,
                 validated_cfg.error_summary_name,
@@ -61,6 +63,7 @@ def main_cfg(cfg: Config) -> None:
             )
     else:
         input_dir = validated_cfg.input_directory
+        u = validated_cfg.input_university
         assert "s3://" in input_dir
         bucket = input_dir.split("://")[1].split("/")[0]
 
@@ -76,6 +79,8 @@ def main_cfg(cfg: Config) -> None:
         validate_all(
             input_dir,
             s3,
+            validated_cfg.input_university,
+            validated_cfg.released_video_path,
             validated_cfg.metadata_folder,
             validated_cfg.error_details_name,
             validated_cfg.error_summary_name,

@@ -5,19 +5,29 @@
 python -m ego4d.internal.cli \
        -i "<s3_video_metadata_bucket>" \
        -mf "<s3_other_metadata_bucket>" \
+       -rp "<s3_released_videos_path>" \
+       -u <university_name>
        -ed "<error_details_path>" \
        -es "<error_summary_path>" \
 ```
 - s3_video_metadata_bucket: the s3 bucket where files like video_metadata.csv, auxiliary_video_component_data_file.csv, video_component_file.csv, video_metadata.csv were stored
 - s3_other_metadata_bucket: the s3 bucket where files like component_type.csv, device.csv, scenarios.csv were stored
+- s3_released_videos_path: the s3 path where of the already released video files
+- university_name: name of the university, current list:
+    ```
+    ["unict", "cmu","iiith","minnesota","utokyo","kaust","indiana","nus","bristol","georgiatech","frl_track_1_public","cmu_africa","uniandes"]
+    ```
 - error_details_path: the path where you want to save the validation error details to
 - error_summary_path: the path where you want to save the validation error summary to
+
 
 ## Example
 ```
 python -m ego4d.internal.cli \
        -i "s3://ego4d-unict/metadata_v7" \
        -mf "s3://ego4d-consortium-sharing/internal/standard_metadata_v10" \
+       -rp "s3://ego4d-consortium-sharing/internal/ingested_metadata/20220907.csv" \
+       -u unict \
        -ed "error_details" \
        -es "error_summary" \
 ```

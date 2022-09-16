@@ -56,6 +56,8 @@ class ValidatedConfig:
     input_directory: str
     validate_all: bool
     metadata_folder: str
+    released_video_path: str
+    input_university: str
     error_details_name: str
     error_summary_name: str
     aws_profile_name: str
@@ -74,6 +76,8 @@ class Config:
     input_directory: str
     validate_all: bool
     metadata_folder: str
+    released_video_path: str
+    input_university: str
     error_details_name: str
     error_summary_name: str
     num_workers: int
@@ -100,6 +104,8 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         input_directory=cfg.input_directory,
         validate_all=bool(cfg.validate_all),
         metadata_folder=cfg.metadata_folder,
+        released_video_path=cfg.released_video_path,
+        input_university=cfg.input_university,
         error_details_name=cfg.error_details_name,
         error_summary_name=cfg.error_summary_name,
         aws_profile_name=cfg.aws_profile_name,
@@ -149,6 +155,16 @@ def config_from_args(args=None) -> Config:
         "-mf",
         "--metadata_folder",
         help="The S3 path where the device/component_type/scenario metadata is stored",
+    )
+    flag_parser.add_argument(
+        "-rp",
+        "--released_video_path",
+        help="The S3 path where released_videos file is stored",
+    )
+    flag_parser.add_argument(
+        "-u",
+        "--input_university",
+        help="The university name we're checking data on",
     )
     flag_parser.add_argument(
         "-ed", "--error_details_name", help="output file name for error details"
