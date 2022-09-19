@@ -1,0 +1,22 @@
+input_config:
+  annotation_dir: /checkpoint/miguelmartin/ego4d_data/v1/annotations
+  feature_hdf5_path: /checkpoint/miguelmartin/clep/features.hdf5
+batch_size: 128
+num_workers: 10
+prefetch_factor: 4
+num_epochs: 200
+accelerator: "gpu"
+devices: 1
+tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_public_2/runs"
+tb_log_name: "nlq"
+lr: 0.001
+beta1: 0.9
+beta2: 0.98
+wd: 0.1
+eps: 1.0e-6
+run_locally: false
+eval_per_iter: 500
+eval_init: true
+checkpoint_dir: "/checkpoint/miguelmartin/nlq/checkpoints"
+checkpoint_metric: "TODO"
+slurm_log_folder: "slurm_log"
