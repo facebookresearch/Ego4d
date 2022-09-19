@@ -24,9 +24,9 @@ goal for each subdirectory is to cover one specific theme.
 - `ego4d`: the `ego4d` *python* module exists
     - [`cli`](ego4d/cli/README.md): The Ego4D CLI for downloading the dataset
     - [`features`](ego4d/features/README.md): Feature extraction across the dataset
-    - [`research`])(ego4d/research/README.md): Everything related to research and
+    - [`research`](ego4d/research/README.md): Everything related to research and
       usage of the dataset (dataloaders, etc).
-        - [`research/clep`])(ego4d/research/clep/README.md): Contrastive Language Ego-centric video Pre-training
+        - [`research/clep`](ego4d/research/clep/README.md): Contrastive Language Ego-centric video Pre-training
 - [`viz`](viz/narrations/README.md): visualization engine
 
 # License
