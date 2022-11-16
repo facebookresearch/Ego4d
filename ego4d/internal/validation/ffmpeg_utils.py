@@ -8,9 +8,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Dict, List, Optional, Tuple
 
-import botocore
-from botocore.exceptions import ClientError
-from ego4d.internal.university_files import ErrorMessage
+from ego4d.internal.validation.university_files import ErrorMessage
 
 
 @dataclass(frozen=True)
@@ -44,14 +42,14 @@ class VideoInfo:
 
 
 def get_video_info(
-    filename: str, name: Optional[str] = None, num_retries: int = 10
+    filename: str,
+    name: Optional[str] = None,
 ) -> Tuple[Optional[VideoInfo], List[ErrorMessage]]:
     """
     Return:
         VideoInfo: information of the video stored in bucket_name specified by the object_name
         If error, returns None and log the error.
     """
-    # Generate a presigned URL for the S3 object
     error_message = []
     name = name if name is not None else filename
 

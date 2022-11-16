@@ -14,15 +14,15 @@ Examples:
 import boto3
 import botocore.client as bclient
 from ego4d.cli.universities import UNIV_TO_BUCKET
-from ego4d.internal.config import (
+from ego4d.internal.s3 import get_client
+from ego4d.internal.validation.validate import validate_all
+from ego4d.internal.validation.config import (
     Config,
     config_from_args,
     meta_path,
     unis,
     validate_config,
 )
-from ego4d.internal.s3 import get_client, get_location
-from ego4d.internal.validate import validate_all
 
 
 def main_cfg(cfg: Config) -> None:
@@ -51,18 +51,17 @@ def main_cfg(cfg: Config) -> None:
     else:
         input_dir = validated_cfg.input_directory
         u = validated_cfg.input_university
-        assert "s3://" in input_dir
-        bucket = input_dir.split("://")[1].split("/")[0]
 
-        s3 = boto3.client(
-            "s3",
-            config=bclient.Config(
-                region_name=get_location(bucket),
-                connect_timeout=180,
-                max_pool_connections=validated_cfg.num_workers,
-                retries={"total_max_attempts": 3},
-            ),
-        )
+        s3 = None
+        if "s3://" in input_dir:
+            bucket = input_dir.split("://")[1].split("/")[0]
+            s3 = get_client(
+                bucket_name=bucket,
+                num_workers=validated_cfg.num_workers,
+                connect_timeout=validated_cfg.expiry_time_sec,
+                max_attempts=10,
+            )
+
         validate_all(
             input_dir,
             s3,

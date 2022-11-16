@@ -14,9 +14,15 @@ from dataclasses import (
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from ego4d.internal.credential_s3 import S3Helper
+from iopath.common.file_io import PathManager
+from iopath.common.s3 import S3PathHandler
 
 from tqdm import tqdm
+
+from ego4d.internal.s3 import ls_relative
+
+pathmgr = PathManager()
+pathmgr.register_handler(S3PathHandler())
 
 
 def split_s3_path(s3_path: str) -> Tuple[Optional[str], str]:
@@ -128,11 +134,6 @@ class ErrorMessage:
     uid: str
     errorType: str
     description: str
-
-    def _init_(self, uid, error, desc):
-        self.uid = uid
-        self.errorType = error
-        self.description = desc
 
 
 @dataclass
@@ -339,7 +340,7 @@ def load_dataclass_dict_from_csv(
     """
 
     output_dict = defaultdict(list) if list_per_key else {}
-    with open(input_csv_file_path, newline="") as csvfile:
+    with pathmgr.open(input_csv_file_path) as csvfile:
         reader = csv.reader(csvfile, delimiter=",", quotechar='"')
         column_index = {header: i for i, header in enumerate(next(reader))}
         for line in tqdm(reader):
@@ -362,74 +363,50 @@ def load_dataclass_dict_from_csv(
 
 
 def load_standard_metadata_files(
-    s3,
     standard_metadata_folder: str,
 ) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
-    bucket, path = split_s3_path(standard_metadata_folder)
-    s3_bucket = S3Helper(s3, bucket)
-    truncated, available_metadata_files = s3_bucket.ls(path)
-    assert not truncated, f"Folder {bucket}/{path} " "has too many entries"
-    available_files = {f.key.split("/")[-1] for f in available_metadata_files}
+    available_files = ls_relative(standard_metadata_folder, pathmgr)
 
-    with tempfile.TemporaryDirectory("tmp_standard_metadata_folder") as tempdir:
-        # Load reqiured files
-        # Load device.csv
-        file_name = "device.csv"
-        assert file_name in available_files, (
-            f"required file {file_name} not found in " f"{bucket}/{path}"
-        )
-        local_file_path = f"{tempdir}/{file_name}"
-        s3_bucket.get_file(f"{path}/{file_name}", local_file_path)
-        devices = load_dataclass_dict_from_csv(
-            local_file_path,
-            Device,
-            "device_id",
-        )
+    file_name = "device.csv"
+    assert file_name in available_files, (
+        f"required file {file_name} not found in " f"{standard_metadata_folder}"
+    )
+    file_path = os.path.join(standard_metadata_folder, file_name)
+    devices = load_dataclass_dict_from_csv(file_path, Device, "device_id")
 
-        file_name = "component_type.csv"
-        assert file_name in available_files, (
-            f"required file {file_name} not found in " f"{bucket}/{path}"
-        )
-        local_file_path = f"{tempdir}/{file_name}"
-        s3_bucket.get_file(f"{path}/{file_name}", local_file_path)
-        component_types = load_dataclass_dict_from_csv(
-            local_file_path,
-            ComponentType,
-            "component_type_id",
-        )
+    file_name = "component_type.csv"
+    assert file_name in available_files, (
+        f"required file {file_name} not found in " f"{standard_metadata_folder}"
+    )
+    file_path = os.path.join(standard_metadata_folder, file_name)
+    component_types = load_dataclass_dict_from_csv(
+        file_path, ComponentType, "component_type_id"
+    )
 
-        file_name = "scenario.csv"
-        assert file_name in available_files, (
-            f"required file {file_name} not found in " f"{bucket}/{path}"
-        )
-        local_file_path = f"{tempdir}/{file_name}"
-        s3_bucket.get_file(f"{path}/{file_name}", local_file_path)
-        scenarios = load_dataclass_dict_from_csv(
-            local_file_path, Scenario, "scenario_id"
-        )
+    file_name = "scenario.csv"
+    assert file_name in available_files, (
+        f"required file {file_name} not found in " f"{standard_metadata_folder}"
+    )
+    file_path = os.path.join(standard_metadata_folder, file_name)
+    scenarios = load_dataclass_dict_from_csv(file_path, Scenario, "scenario_id")
+
     validate_standard_metadata_files(devices, component_types, scenarios)
     return devices, component_types, scenarios
 
 
 def load_released_video_files(
-    s3,
-    released_video_path: str,
-) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
-    bucket, path = split_s3_path(released_video_path)
-    s3_bucket = S3Helper(s3, bucket)
+    released_video_path: Optional[str],
+) -> Optional[Dict[str, List[str]]]:
+    if released_video_path is None:
+        return None
 
-    with tempfile.TemporaryDirectory("tmp_released_video_folder") as tempdir:
-        # Load reqiured file
-        file_name = path.split("/")[-1]
-        local_file_path = f"{tempdir}/{file_name}"
-        s3_bucket.get_file(f"{path}", local_file_path)
+    with pathmgr.open(released_video_path) as csvfile:
         released_videos = collections.defaultdict(list)
-        with open(local_file_path, newline="") as csvfile:
-            reader = csv.reader(csvfile, delimiter=",", quotechar='"')
-            next(reader)
-            for line in reader:
-                released_videos[line[2]].append(line[0])
-        return released_videos
+        reader = csv.reader(csvfile, delimiter=",", quotechar='"')
+        next(reader)
+        for line in reader:
+            released_videos[line[2]].append(line[0])
+    return released_videos
 
 
 def validate_standard_metadata_files(
@@ -444,9 +421,7 @@ def validate_standard_metadata_files(
 
 
 def load_university_files(
-    s3,
-    s3_bucket_name: str,
-    metadata_folder_prefix: str,
+    video_metadata_folder: str,
 ) -> Tuple[
     Dict[str, VideoMetadata],
     Dict[str, List[VideoComponentFile]],
@@ -456,140 +431,90 @@ def load_university_files(
     Dict[str, PhysicalSetting],
     Dict[str, Annotations],
 ]:
+    available_files = ls_relative(video_metadata_folder, pathmgr)
 
-    if s3_bucket_name:
-        s3_bucket = S3Helper(s3, s3_bucket_name)
-        truncated, available_metadata_files = s3_bucket.ls(metadata_folder_prefix)
-        assert not truncated, (
-            f"Folder {s3_bucket_name}/{metadata_folder_prefix} " "has too many entries"
-        )
-        available_files = {f.key.split("/")[-1] for f in available_metadata_files}
-    else:
-        available_files = os.listdir(metadata_folder_prefix)
+    # Load reqiured files
+    # Load video_metadata.csv
+    file_name = "video_metadata.csv"
+    assert file_name in available_files, (
+        f"required file {file_name} not found in " f"{video_metadata_folder}"
+    )
+    file_path = os.path.join(video_metadata_folder, file_name)
+    video_metadata_dict = load_dataclass_dict_from_csv(
+        file_path,
+        VideoMetadata,
+        "university_video_id",
+    )
 
-    with tempfile.TemporaryDirectory("consortium_ingester") as tempdir:
-        # Load reqiured files
-        # Load video_metadata.csv
-        file_name = "video_metadata.csv"
-        assert file_name in available_files, (
-            f"required file {file_name} not found in "
-            f"{s3_bucket_name}/{metadata_folder_prefix}"
-        )
-        if s3_bucket_name:
-            local_file_path = f"{tempdir}/{file_name}"
-            s3_bucket.get_file(f"{metadata_folder_prefix}/{file_name}", local_file_path)
-        else:
-            local_file_path = f"{metadata_folder_prefix}/{file_name}"
-        video_metadata_dict = load_dataclass_dict_from_csv(
-            local_file_path,
-            VideoMetadata,
-            "university_video_id",
-        )
+    # Load video_component_file.csv
+    file_name = "video_component_file.csv"
+    assert file_name in available_files, (
+        f"required file {file_name} not found in " f"{video_metadata_folder}"
+    )
+    file_path = os.path.join(video_metadata_folder, file_name)
+    video_components_dict = load_dataclass_dict_from_csv(
+        file_path,
+        VideoComponentFile,
+        "university_video_id",
+        list_per_key=True,
+    )
 
-        # Load video_component_file.csv
-        file_name = "video_component_file.csv"
-        assert file_name in available_files, (
-            f"required file {file_name} not found in "
-            f"{s3_bucket_name}/{metadata_folder_prefix}"
-        )
-        if s3_bucket_name:
-            local_file_path = f"{tempdir}/{file_name}"
-            s3_bucket.get_file(f"{metadata_folder_prefix}/{file_name}", local_file_path)
-        else:
-            local_file_path = f"{metadata_folder_prefix}/{file_name}"
-        video_components_dict = load_dataclass_dict_from_csv(
-            local_file_path,
-            VideoComponentFile,
+    # Load optional files
+    # Load auxiliary_video_component_data_file.csv, if available
+    file_name = "auxiliary_video_component_data_file.csv"
+    auxiliary_video_component_dict = {}
+    if file_name in available_files:
+        file_path = os.path.join(video_metadata_folder, file_name)
+        auxiliary_video_component_dict = load_dataclass_dict_from_csv(
+            file_path,
+            AuxiliaryVideoComponentDataFile,
             "university_video_id",
             list_per_key=True,
         )
 
-        # Load optional files
-        # Load auxiliary_video_component_data_file.csv, if available
-        file_name = "auxiliary_video_component_data_file.csv"
-        auxiliary_video_component_dict = {}
-        if file_name in available_files:
-            if s3_bucket_name:
-                local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(
-                    f"{metadata_folder_prefix}/{file_name}", local_file_path
-                )
-            else:
-                local_file_path = f"{metadata_folder_prefix}/{file_name}"
-            auxiliary_video_component_dict = load_dataclass_dict_from_csv(
-                local_file_path,
-                AuxiliaryVideoComponentDataFile,
-                "university_video_id",
-                list_per_key=True,
-            )
+    # Load participant.csv, if available
+    file_name = "participant.csv"
+    participant_dict = {}
+    if file_name in available_files:
+        file_path = os.path.join(video_metadata_folder, file_name)
+        participant_dict = load_dataclass_dict_from_csv(
+            file_path,
+            Particpant,
+            "participant_id",
+        )
 
-        # Load participant.csv, if available
-        file_name = "participant.csv"
-        participant_dict = {}
-        if file_name in available_files:
-            if s3_bucket_name:
-                local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(
-                    f"{metadata_folder_prefix}/{file_name}", local_file_path
-                )
-            else:
-                local_file_path = f"{metadata_folder_prefix}/{file_name}"
-            participant_dict = load_dataclass_dict_from_csv(
-                local_file_path,
-                Particpant,
-                "participant_id",
-            )
+    # Load synchronized_videos.csv, if available
+    file_name = "synchronized_videos.csv"
+    synchronized_video_dict = {}
+    if file_name in available_files:
+        file_path = os.path.join(video_metadata_folder, file_name)
+        synchronized_video_dict = load_dataclass_dict_from_csv(
+            file_path,
+            SynchronizedVideos,
+            "video_grouping_id",
+        )
 
-        # Load synchronized_videos.csv, if available
-        file_name = "synchronized_videos.csv"
-        synchronized_video_dict = {}
-        if file_name in available_files:
-            if s3_bucket_name:
-                local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(
-                    f"{metadata_folder_prefix}/{file_name}", local_file_path
-                )
-            else:
-                local_file_path = f"{metadata_folder_prefix}/{file_name}"
-            synchronized_video_dict = load_dataclass_dict_from_csv(
-                local_file_path,
-                SynchronizedVideos,
-                "video_grouping_id",
-            )
+    # Load physical_setting.csv, if available
+    file_name = "physical_setting.csv"
+    physical_setting_dict = {}
+    if file_name in available_files:
+        file_path = os.path.join(video_metadata_folder, file_name)
+        physical_setting_dict = load_dataclass_dict_from_csv(
+            file_path,
+            PhysicalSetting,
+            "setting_id",
+        )
 
-            # Load physical_setting.csv, if available
-        file_name = "physical_setting.csv"
-        physical_setting_dict = {}
-        if file_name in available_files:
-            if s3_bucket_name:
-                local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(
-                    f"{metadata_folder_prefix}/{file_name}", local_file_path
-                )
-            else:
-                local_file_path = f"{metadata_folder_prefix}/{file_name}"
-            physical_setting_dict = load_dataclass_dict_from_csv(
-                local_file_path,
-                PhysicalSetting,
-                "setting_id",
-            )
-
-            # Load annotations.csv, if available
-        file_name = "annotations.csv"
-        annotations_dict = {}
-        if file_name in available_files:
-            if s3_bucket_name:
-                local_file_path = f"{tempdir}/{file_name}"
-                s3_bucket.get_file(
-                    f"{metadata_folder_prefix}/{file_name}", local_file_path
-                )
-            else:
-                local_file_path = f"{metadata_folder_prefix}/{file_name}"
-            annotations_dict = load_dataclass_dict_from_csv(
-                local_file_path,
-                Annotations,
-                "university_video_id",
-            )
+    # Load annotations.csv, if available
+    file_name = "annotations.csv"
+    annotations_dict = {}
+    if file_name in available_files:
+        file_path = os.path.join(video_metadata_folder, file_name)
+        annotations_dict = load_dataclass_dict_from_csv(
+            file_path,
+            Annotations,
+            "university_video_id",
+        )
 
     return (
         video_metadata_dict,
