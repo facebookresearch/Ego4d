@@ -434,7 +434,7 @@ def _validate_mp4(
 
 def _validate_synchronized_videos(
     video_metadata_dict: Dict[str, VideoMetadata],
-    synchronized_video_dict: Dict[str, List[SynchronizedVideos]],
+    synchronized_video_dict: Dict[str, SynchronizedVideos],
     error_message: List[ErrorMessage],
 ) -> None:
     """
@@ -447,18 +447,19 @@ def _validate_synchronized_videos(
         generated when validating synchronized_videos.csv.
     """
     print("validating syncrhonized videos")
-    if synchronized_video_dict:
-        for video_grouping_id, components in synchronized_video_dict.items():
-            for component in components:
-                for video_id, _ in component.associated_videos:
-                    if video_id not in video_metadata_dict:
-                        error_message.append(
-                            ErrorMessage(
-                                video_id,
-                                "video_not_found_in_video_metadata_error",
-                                f"{video_id} in synchronized_video_dict can't be found in video_metadata",
-                            )
-                        )
+    if synchronized_video_dict is None:
+        return None
+
+    for video_grouping_id, sync_video in synchronized_video_dict.items():
+        for video_id, _ in sync_video.associated_videos.items():
+            if video_id not in video_metadata_dict:
+                error_message.append(
+                    ErrorMessage(
+                        video_id,
+                        "video_not_found_in_video_metadata_error",
+                        f"{video_id} in synchronized_video_dict can't be found in video_metadata",
+                    )
+                )
 
 
 def _validate_auxilliary_videos(
@@ -508,6 +509,7 @@ def _validate_auxilliary_videos(
                             f" should have {video_metadata_dict[video_id].number_video_components}",  # noqa
                         )
                     )
+                    continue
                 non_redacted_video_components = [
                     component.component_index
                     for component in video_components_dict[video_id]

@@ -413,23 +413,26 @@ def load_standard_metadata_files(
 
 def load_released_video_files(
     s3,
-    released_video_path: str,
+    released_video_path: Optional[str],
 ) -> Tuple[Dict[str, Device], Dict[str, ComponentType], Dict[str, Scenario]]:
     bucket, path = split_s3_path(released_video_path)
     s3_bucket = S3Helper(s3, bucket)
+
+    result = defaultdict(list)
+    if released_video_path is None or len(released_video_path) == 0:
+        return result
 
     with tempfile.TemporaryDirectory("tmp_released_video_folder") as tempdir:
         # Load reqiured file
         file_name = path.split("/")[-1]
         local_file_path = f"{tempdir}/{file_name}"
         s3_bucket.get_file(f"{path}", local_file_path)
-        released_videos = collections.defaultdict(list)
         with open(local_file_path, newline="") as csvfile:
             reader = csv.reader(csvfile, delimiter=",", quotechar='"')
             next(reader)
             for line in reader:
-                released_videos[line[2]].append(line[0])
-        return released_videos
+                result[line[2]].append(line[0])
+        return result
 
 
 def validate_standard_metadata_files(
