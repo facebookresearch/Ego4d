@@ -481,60 +481,57 @@ def _validate_auxilliary_videos(
     # Check ids in auxiliary_video_component_dict are in video_metadata_dict
     # and that the component_type is valid
     print("validating auxiliary videos")
-    if auxiliary_video_component_dict:
-        for video_id, aux_components in auxiliary_video_component_dict.items():
-            if video_id not in video_metadata_dict:
+    if auxiliary_video_component_dict is None or len(auxiliary_video_component_dict) == 0:
+        return None
+    
+    for video_id, aux_components in auxiliary_video_component_dict.items():
+        if video_id not in video_metadata_dict:
+            error_message.append(
+                ErrorMessage(
+                    video_id,
+                    "video_not_found_in_video_metadata_error",
+                    f"{video_id} in auxiliary_video_component_dict can't be found in video_metadata",
+                )
+            )
+            continue
+
+        comps_by_type = defaultdict(list)
+        for x in aux_components:
+            comps_by_type[x.component_type_id].append(x)
+
+        for type_id, comps in comps_by_type.items():
+            if type_id not in component_types:
                 error_message.append(
                     ErrorMessage(
                         video_id,
-                        "video_not_found_in_video_metadata_error",
-                        f"{video_id} in auxiliary_video_component_dict can't be found in video_metadata",
+                        "component_type_id_not_found_error",
+                        f"auxiliary component's component_type_id: '{type_id} does not exist in component_types'",  # noqa
                     )
                 )
 
-            else:
-                redacted_video_components = [
-                    component
-                    for component in video_components_dict[video_id]
-                    if component.is_redacted
-                ]
-                if video_metadata_dict[video_id].number_video_components - len(
-                    redacted_video_components
-                ) != len(aux_components):
-                    error_message.append(
-                        ErrorMessage(
-                            video_id,
-                            "video_component_length_inconsistent_error",
-                            f"the video has {len(aux_components)} auxiliary components when it"
-                            f" should have {video_metadata_dict[video_id].number_video_components}",  # noqa
-                        )
+            comp_idx_set = { c.component_index for c in video_components_dict[video_id] }
+            non_red_idx_set = {c.component_index for c in video_components_dict[video_id] if not c.is_redacted}
+            aux_comp_idx_set = { c.component_index for c in comps }
+            unexpected_indices = aux_comp_idx_set - comp_idx_set
+            missing_non_red_indices = non_red_idx_set - aux_comp_idx_set
+            if len(unexpected_indices) > 0:
+                error_message.append(
+                    ErrorMessage(
+                        video_id,
+                        "video_component_length_inconsistent_error",
+                        f"Auxilary components (type_id={type_id}): unexpected component indices = {unexpected_indices}",  #noqa
                     )
-                    continue
-                non_redacted_video_components = [
-                    component.component_index
-                    for component in video_components_dict[video_id]
-                    if not component.is_redacted
-                ]
-                aux_components.sort(key=lambda x: x.component_index)
-                for i in range(len(aux_components)):
-                    component = aux_components[i]
-                    if non_redacted_video_components[i] != component.component_index:
-                        error_message.append(
-                            ErrorMessage(
-                                video_id,
-                                "video_component_wrong_index_error",
-                                f"the video component has auxiliary component index {component.component_index}"
-                                f" when it should have {non_redacted_video_components[i]}",  # noqa
-                            )
-                        )
-                    if component.component_type_id not in component_types:
-                        error_message.append(
-                            ErrorMessage(
-                                video_id,
-                                "component_type_id_not_found_error",
-                                f"auxiliary component's component_type_id: '{component.component_type_id} does not exist in component_types'",  # noqa
-                            )
-                        )
+                )
+            if len(missing_non_red_indices) > 0:
+                error_message.append(
+                    ErrorMessage(
+                        video_id,
+                        "component_type_id_not_found_warning",
+                        f"Auxilary components (type_id={type_id}): missing non redacted indices = {missing_non_red_indices}",  # noqa
+                    )
+                )
+
+
 
 
 def _validate_participant(
