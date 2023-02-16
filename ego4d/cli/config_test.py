@@ -87,6 +87,34 @@ def test_valid_flags():
     assert c.metadata == True
 
 
+def test_version_flags():
+    c = config_from_args(
+        [
+            "--datasets",
+            "full_scale",
+            "--output_directory=~/test",
+            "--version=v2",
+            "--universities",
+            "cmu",
+            "indiana",
+            "--aws_profile_name=ego4d",
+            "--video_uids",
+            "123",
+            "456",
+            "789",
+            "--metadata",
+        ]
+    )
+
+    assert c.version == "v2"
+    assert c.datasets == ["full_scale"]
+    assert c.universities == ["cmu", "indiana"]
+    assert c.output_directory == "~/test"
+    assert c.aws_profile_name == "ego4d"
+    assert c.video_uids == ["123", "456", "789"]
+    assert c.metadata == True
+
+
 def test_video_uid_file():
     uids = "123 456\n789"
 

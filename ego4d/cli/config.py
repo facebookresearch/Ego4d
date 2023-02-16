@@ -14,7 +14,7 @@ from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
-VERSION_DEFAULT = "v1"
+VERSION_DEFAULT = "v2"
 DATASET_PRIMARY = "full_scale"
 DATASETS_VIDEO = ["full_scale", "clips", "components/videos", "video_540ss"]
 DATASETS_FILE = [
@@ -218,7 +218,7 @@ def config_from_args(args=None) -> Config:
     )
     flag_parser.add_argument(
         "--version",
-        help="A version identifier - i.e. 'v1'",
+        help="A version identifier - i.e. 'v1' or 'v2'",
         default=VERSION_DEFAULT,
     )
     flag_parser.add_argument(
