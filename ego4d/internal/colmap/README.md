@@ -1,16 +1,86 @@
 # COLMAP
 
-Run `preprocess.py`
+This code is a pipeline which you can use to run COLMAP on an EgoExo take. There
+is an optional but suggested requirement for running this code: QR timesync has
+been run for the take. If it has not been run, you must input where the aria
+walkthrough occurs in the take.
 
-## `preprocess.py` documentation:
+You do not require to have the take local on your machine. We can either stream
+from S3 or the script will download all appropriate data to your machine (it
+downloads this once). Streaming from S3 should be fast enough for the needs of
+this script. The exception to this is the VRS file must be downloaded, as we
+do not interact with VRS files remotely (as of yet).
 
-Please note, as hydra is used, you should use absolute paths.
+We have written an associated notebook in `notebooks/COLMAP.ipynb` which will
+allow you to proceed with the following steps:
+1. Generate appropriate inputs to feed into COLMAP based on a supplied
+   configuration
+    - This does not require your videos to be downloaded locally (streaming via
+      S3 can occur)
+    - This step will generate a set of frames
+2. Validate that the above configuration has generated appropriate frames
+    - What to validate will
+3. Upload your configuration to S3
+4. Let Meta run COLMAP on your inputs
+    - Please ensure you you ***do not*** modify the input files **unless** the
+      script generates. This is such that we have reproducable
+5. Optionally, you may run COLMAP and upload the files as appropriate. Again: ***do not modify generated inputs***, we want to enforce reproducibility
+      - If you find that COLMAP does not generate a model appropriately without
+        parameter tweaking, please communicate this and optionally add the
+        option to the script generation code. COLMAP can be configured
+        completely from the command line.
+6. Finally validate your COLMAP outputs
+    - Feel free to validate this yourself. The COLMAP script will run COLMAP's
+      validation step, which will output a text file like so:
+        ```
+        Cameras: 6
+        Images: 278
+        Registered images: 278
+        Points: 45824
+        Observations: 750872
+        Mean track length: 16.385999
+        Mean observations per image: 2700.978417
+        Mean reprojection error: 0.744607px
+        ```
+    - Please ensure the reprojection error is not large, we have 6 cameras and
+      the registered images is approximately the same as the number of images.
+7. Align with Aria's SLAM trajectory paths
+    - TODO: integrate Rawal's pipeline
+    - You can refer to Rawal's pipeline: https://github.com/rawalkhirodkar/ego4dv2/
 
-This script will generate a bash script which will execute COLMAP on the frames
+## Setup and Installation
+
+Please setup a conda environment with python 3.9 (this is due to pycolmap, see:
+https://github.com/colmap/pycolmap/issues/111) and install appropriate packages
+with the `ego4d/internal/colmap/requirements.txt` file:
+
+```
+conda create -n colmap python=3.9
+conda activate colmap
+pip install -r ego4d/internal/colmap/requirements.txt
+```
+
+
+### (Optional) Setting up COLMAP
+Please see my
+[notes](https://gist.github.com/miguelmartin75/8bf23bba1f8eaf29a6e8a98e293501a4) for compiling.
+
+## Running on the CLI (DEPRECATED)
+
+Parameter documentation is defined in juypter, inlined with code.
+
+### `preprocess.py` documentation
+
+Please the notebook in `notebooks/COLMAP.ipynb` instead of using this file
+directly unless you have a specific reason to (e.g. for scripting purposes). The
+notebook will output a YAML file you can feed directly into this script.
+
+notes:
+- as hydra is used, you should use absolute paths.
+- this script will generate a bash script which will execute COLMAP on the frames
 produced by the `preprocess.py` script. It will additionally download and cache
 data (you can force a download, see below).
-
-Please refer to the section below for more granular docs. Please place your
+- please refer to the section below for more granular docs. Please place your
 YAML configuration files in `ego4d/internal/colmap/configs`
 
 ### Examples
@@ -38,78 +108,3 @@ sync exo views (requires syncing to be complete)
 ```
 python3 ego4d/internal/colmap/preprocess.py --config-name cmu_example sync_exo_views=True
 ```
-
-### Parameter Documentation
-input:
-- data parameters:
-    - uni_name
-    - take_id
-    - data_dir = "./data/"
-    - colmap_dir = "./colmap"
-- reconstruction params:
-    - name (str, optional)
-        - if no name provided, one will be generated for you based off the
-          reconstruction parameters (see code below)
-    - use_gpu (bool)
-    - sync_exo_views (bool)
-    - include_aria (bool)
-    - rot_mode (int):
-        - 0 => rotate none
-        - 1 => rotate aria (if available)
-        - 2 => rotate exo and mobile to aria
-- frame selection parameters
-    - frame_rate (float) (default = 1/2)
-        frame rate to sample mobile, aria and exo/gopro videos from
-    - exo_from_frame (int) (default = null)
-        start frame for exo video
-    - exo_to_frame (int) (default = null)
-        end frame for exo video
-    - exo_fps (float) (default = null)
-        the fps for the exo video, used for sampling frame. Not used if
-        supplying frames
-
-        if null this is obtained from pyav
-    - aria_fps (float) (default = 30)
-        the fps for the aria video, used for sampling frame. Not used if
-        supplying frames
-    - mobile_fps (float) (default = null)
-        the fps for the mobile (or walkthrough) video, used for sampling frame.
-        Not used if supplying frames
-
-        if null this is obtained from pyav
-    - exo1_frames (list of int) (default = null)
-        frames to use for the first exo video
-        if non-null, `exo_to_frame` / `exo_from_frame` must be null and
-        the exo2, exo3, exo4_frames must be non null
-    - exo2_frames (list of int) (default = null)
-        same as exo1_frames but for 2nd exo video
-    - exo3_frames (list of int) (default = null)
-        same as exo1_frames but for 3rd exo video
-    - exo4_frames  (list of int) (default = null)
-        same as exo1_frames but for 4th exo video
-    - mobile_frames (list of int) (default = null)
-        frames to use for the mobile video. If null, all frames to make
-        `frame_rate` will be used (skip every N frames according to `mobile_fps`)
-    - aria_frames (list of int) (default = null)
-        frames to use for the aria video. If null, all frames to make
-        `frame_rate` will be used (skip every M frames according to `aria_fps`)
-output:
-- in `data_dir`:
-    <uni_name>_<take_id>:
-        aria01 (vrs file)
-        cam01 (mp4 file)
-        cam02 (mp4 file)
-        cam03 (mp4 file)
-        cam04 (mp4 file)
-        mobile (mp4 file)
-        timesync.csv
-        metadata.json
-- in `<data_dir>/colmap/<uni_name>_<take_id>/<name>`
-    - config.json
-    - frames/
-        contains frames
-    - run_colmap.sh
-        this will default to use COLMAP_BIN but can be overridden to a
-        custom COLMAP_BIN
-
-Once you run ./run_colmap.sh
