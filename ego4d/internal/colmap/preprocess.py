@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -13,9 +14,13 @@ import hydra
 import numpy as np
 import pandas as pd
 
+from ego4d.internal.s3 import StreamPathMgr
+
 from omegaconf import OmegaConf
 
 from tqdm.auto import tqdm
+
+pathmgr = StreamPathMgr()
 
 
 VRS_BIN = "/private/home/miguelmartin/repos/vrs/build/tools/vrs/vrs"
@@ -33,6 +38,7 @@ class ColmapConfig:
     sync_exo_views: bool
     rot_mode: int
 
+    camera_model: str
     include_aria: bool
 
     exo1_frames: Optional[List[int]] = None
@@ -46,7 +52,7 @@ class ColmapConfig:
 
     exo_from_frame: Optional[int] = None
     exo_to_frame: Optional[int] = None
-    frame_rate: Optional[float] = 1 / 3
+    frame_rate: Optional[float] = 1 / 2
     name: Optional[str] = None
     aria_fps: float = 30
     exo_fps: Optional[float] = None
@@ -56,6 +62,7 @@ class ColmapConfig:
     colmap_bin: Optional[str] = None
     vrs_bin: Optional[str] = None
     force_download: bool = False
+    download_video_files: bool = False  # if false then use presigned urls
 
 
 def get_video_data_dir(config) -> str:
@@ -81,7 +88,7 @@ def frames_for_region(start_frame: int, end_frame: int, skip_frames: int) -> Lis
 
 
 def get_fps(fp: str) -> float:
-    with av.open(fp) as cont:
+    with av.open(pathmgr.open(fp)) as cont:
         return float(cont.streams[0].average_rate)
 
 
@@ -95,9 +102,6 @@ def produce_colmap_script(
         vrs_bin = VRS_BIN
     if colmap_bin is None:
         colmap_bin = COLMAP_BIN
-
-    if config.rot_mode == 1:
-        raise AssertionError("rotate mode (1) not implemented (yet)")
 
     print("Getting data ready...")
     _get_data_ready(config, config.force_download, vrs_bin, skip_frame_gen)
@@ -131,14 +135,17 @@ def _download_data(config, force_download):
 
     by_dev_id = {}
     for v in tqdm(meta["videos"]):
-        path = os.path.join(get_video_data_dir(config), v["device_id"])
-        s3_path = v["s3_path"]
         by_dev_id[v["device_id"]] = v
-        by_dev_id[v["device_id"]]["local_path"] = path
-        if os.path.exists(path) and not force_download:
-            continue
-        print(f"Fetching {s3_path} to {path}")
-        _get_file_from_s3(s3_path, path)
+        s3_path = v["s3_path"]
+        if config.download_video_files or "aria" in v["device_id"]:
+            path = os.path.join(get_video_data_dir(config), v["device_id"])
+            by_dev_id[v["device_id"]]["local_path"] = path
+            if os.path.exists(path) and not force_download:
+                continue
+            print(f"Fetching {s3_path} to {path}")
+            _get_file_from_s3(s3_path, path)
+        else:
+            by_dev_id[v["device_id"]]["local_path"] = s3_path
     return by_dev_id
 
 
@@ -158,25 +165,24 @@ def _extract_frames(config, by_dev_id, vrs_bin):
         synced_df = timesync_df.iloc[fsf_idx:]
 
     if config.include_aria:
-        aria_frame_path = os.path.join(get_video_data_dir(config), "aria01_frames")
-        shutil.rmtree(aria_frame_path, ignore_errors=True)
-        os.makedirs(aria_frame_path, exist_ok=True)
-        # TODO: use input frames to determine this
-        extract_aria_frames(
-            vrs_bin=vrs_bin,
-            aria_vrs_file_path=by_dev_id["aria01"]["local_path"],
-            out_dir=aria_frame_path,
-            synced_df=synced_df,
-            until_point=config.aria_last_walkthrough_sec,
-        )
-        skip_aria = (
-            int(np.round(config.aria_fps * config.frame_rate))
-            if config.aria_fps is not None and config.frame_rate is not None
-            else None
-        )
-        subsample_aria_frames(
-            aria_frame_path, skip_aria, frame_out_dir, config.aria_frames, config
-        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            aria_frame_path = os.path.join(tempdir, "aria01_frames")
+            os.makedirs(aria_frame_path, exist_ok=True)
+            extract_aria_frames(
+                vrs_bin=vrs_bin,
+                aria_vrs_file_path=by_dev_id["aria01"]["local_path"],
+                out_dir=aria_frame_path,
+                synced_df=synced_df,
+                until_point=config.aria_last_walkthrough_sec,
+            )
+            skip_aria = (
+                int(np.round(config.aria_fps * config.frame_rate))
+                if config.aria_fps is not None and config.frame_rate is not None
+                else None
+            )
+            subsample_aria_frames(
+                aria_frame_path, skip_aria, frame_out_dir, config.aria_frames, config
+            )
 
     exo_fps = get_fps(by_dev_id["cam01"]["local_path"])
     if config.sync_exo_views:
@@ -298,7 +304,7 @@ $COLMAP_BIN feature_extractor \\
    --image_path $IN_FRAME_DIR \\
    --SiftExtraction.gpu_index {gpu_idx} \\
    --ImageReader.single_camera_per_folder 1 \\
-   --ImageReader.camera_mode OPENCV_FISHEYE
+   --ImageReader.camera_mode {config.camera_model}
 
 $COLMAP_BIN exhaustive_matcher --database_path $DB_PATH
 
@@ -307,6 +313,11 @@ $COLMAP_BIN mapper \\
     --image_path $IN_FRAME_DIR \\
     --output_path $MODEL_DIR \\
     --Mapper.ba_global_pba_gpu_index {gpu_idx}
+
+$COLMAP_BIN model_converter \
+    --input_path $MODEL_DIR/0 \
+    --output_path $MODEL_DIR/0 \
+    --output_type TXT
 
 $COLMAP_BIN image_undistorter \\
     --image_path $IN_FRAME_DIR \\
@@ -334,7 +345,7 @@ def get_frames_iter(video_path, pts_set):
     min_pts = min(pts_set)
     max_pts = max(pts_set)
 
-    with av.open(video_path) as cont:
+    with av.open(pathmgr.open(video_path)) as cont:
         v_stream = cont.streams.video[0]
         cont.seek(min_pts, stream=v_stream)
         for frame in cont.decode(video=0):
@@ -352,7 +363,7 @@ def get_frames_list(video_path, pts_set):
     max_pts = max(pts_set)
 
     frame_data = {}
-    with av.open(video_path) as cont:
+    with av.open(pathmgr.open(video_path)) as cont:
         v_stream = cont.streams.video[0]
         cont.seek(min_pts, stream=v_stream)
         for frame in cont.decode(video=0):
@@ -373,6 +384,7 @@ def save_off_frames(frames, pts_set, out_dir, rot90):
     for idx, pts in tqdm(enumerate(pts_set), total=len(pts_set)):
         frame_data = frames[pts]
         out_path = os.path.join(out_dir, f"{idx}.jpg")
+
         img = cv2.cvtColor(frame_data, cv2.COLOR_RGB2BGR)
         if rot90:
             img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
@@ -380,7 +392,7 @@ def save_off_frames(frames, pts_set, out_dir, rot90):
 
 
 def get_all_pts(video_path, idx_set=None):
-    with av.open(video_path) as cont:
+    with av.open(pathmgr.open(video_path)) as cont:
         frame_pts = []
         idx = 0
         for frame in cont.demux(video=0):
@@ -454,7 +466,12 @@ def subsample_aria_frames(
         f = aria_frames[idx]
         full_path = os.path.join(input_aria_frame_dir, f)
         out_path = os.path.join(out_frame_dir, f)
-        shutil.copy(full_path, out_path)
+        if config.rot_mode == 1:
+            img = cv2.imread(full_path)
+            img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+            cv2.imwrite(out_path, img)
+        else:
+            shutil.copy(full_path, out_path)
 
 
 def _get_file_from_s3(path: str, out_path: str):
@@ -473,7 +490,7 @@ def create_video(video_path, pts_set, out_path, fps=30, codec="h264", flip_90=Tr
     frames = get_frames_iter(video_path, pts_set)
     print("Received frames")
 
-    with av.open(video_path) as in_container:
+    with av.open(pathmgr.open(video_path)) as in_container:
         in_video_stream = in_container.streams.video[0]
         width, height = in_video_stream.width, in_video_stream.height
         if width % 2 != 0:
@@ -511,7 +528,9 @@ def run_colmap_preprocess(config: ColmapConfig):
     print(f"Working Directory {os.getcwd()} - please make sure you're using abs paths")
     produce_colmap_script(config)
     if config.run_colmap:
-        raise AssertionError("to be implemented")
+        subprocess.run(
+            ["bash", os.path.join(get_colmap_data_dir(config), "run_colmap.sh")]
+        )
 
 
 if __name__ == "__main__":

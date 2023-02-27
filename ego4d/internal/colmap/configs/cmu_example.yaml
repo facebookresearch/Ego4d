@@ -24,3 +24,4 @@ colmap_bin: null
 vrs_bin: null
 run_colmap: false
 force_download: false
+download_video_files: false

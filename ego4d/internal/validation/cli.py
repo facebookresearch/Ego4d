@@ -21,13 +21,8 @@ from ego4d.internal.config import (
     unis,
     validate_config,
 )
+from ego4d.internal.s3 import get_client, get_location
 from ego4d.internal.validate import validate_all
-
-
-def _get_location(bucket_name: str) -> str:
-    client = boto3.client("s3")
-    response = client.get_bucket_location(Bucket=bucket_name)
-    return response["LocationConstraint"]
 
 
 def main_cfg(cfg: Config) -> None:
@@ -41,15 +36,7 @@ def main_cfg(cfg: Config) -> None:
         for u in unis:
             bucket = UNIV_TO_BUCKET[u]
             path = f"s3://{bucket}/{meta_path[u]}"
-            s3 = boto3.client(
-                "s3",
-                config=bclient.Config(
-                    region_name=_get_location(bucket),
-                    connect_timeout=180,
-                    max_pool_connections=validated_cfg.num_workers,
-                    retries={"total_max_attempts": 3},
-                ),
-            )
+            s3 = get_client(bucket, validated_cfg.num_workers)
             validate_all(
                 path,
                 s3,
@@ -70,7 +57,7 @@ def main_cfg(cfg: Config) -> None:
         s3 = boto3.client(
             "s3",
             config=bclient.Config(
-                region_name=_get_location(bucket),
+                region_name=get_location(bucket),
                 connect_timeout=180,
                 max_pool_connections=validated_cfg.num_workers,
                 retries={"total_max_attempts": 3},

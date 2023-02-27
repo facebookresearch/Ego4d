@@ -1,5 +1,5 @@
-uni_name: cmu
-take_id: take_0
+uni_name: sfu
+take_id: 1a69642e-93d6-4faa-93df-72ee253bced5
 data_dir: "/private/home/miguelmartin/ego4d/ego4d_public/data_experiments"
 name: null
 aria_fps: 30
@@ -11,31 +11,16 @@ aria_use_sync_info: false
 aria_last_walkthrough_sec: null
 use_gpu: true
 rot_mode: 0
-exo_from_frame: null
-exo_to_frame: null
+exo_from_frame: 200
+exo_to_frame: 300
 frame_rate: 0.5
-exo1_frames:
-  - 100
-  - 200
-exo2_frames:
-  - 30
-  - 20
-exo3_frames:
-  - 5
-  - 10
-exo4_frames:
-  - 11
-  - 50
-mobile_frames:
-  - 1
-  - 2
-  - 3
-  - 4
-aria_frames:
-  - 100
-  - 500
-run_colmap: false
+exo1_frames: null
+exo2_frames: null
+exo3_frames: null
+exo4_frames: null
+mobile_frames: null
+aria_frames: null
 colmap_bin: null
 vrs_bin: null
+run_colmap: false
 force_download: false
-download_video_files: false
