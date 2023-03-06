@@ -76,7 +76,7 @@ def get_timesync_path(config) -> str:
 def get_colmap_data_dir(config) -> str:
     name = config.name
     if name is None:
-        name = f"g{int(config.use_gpu)}_s{int(config.sync_exo_views)}_r{config.rot_mode}_a{int(config.include_aria)}_fr{config.frame_rate:.3f}"
+        name = f"{config.camera_model}_g{int(config.use_gpu)}_s{int(config.sync_exo_views)}_r{config.rot_mode}_a{int(config.include_aria)}_fr{config.frame_rate:.3f}"  # noqa
     return os.path.join(
         config.data_dir, "colmap", f"{config.uni_name}_{config.take_id}", name
     )
