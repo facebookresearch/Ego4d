@@ -28,9 +28,13 @@ DATASETS_FILE = [
     "av_models",
     "social_test",
     "vq2d_models",
+    "vq2d_detections",
     "sta_models",
     "lta_models",
     "slowfast8x8_r101_k400",
+    "egotracks",
+    "paco_annotations",
+    "paco_frames",
 ]
 DATASETS_ALL = DATASETS_VIDEO + DATASETS_FILE
 DATASET_FILE_EXTENSIONS = [
