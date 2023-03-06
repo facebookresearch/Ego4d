@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="ego4d",
-    version="1.2.5",
+    version="1.3.2",
     author="FAIR",
     author_email="info@ego4d-data.org",
     description="Ego4D Dataset CLI",
@@ -13,6 +13,7 @@ setup(
     install_requires=[
         "boto3",
         "tqdm",
+        "regex",
     ],
     tests_require=[
         "pytest",
