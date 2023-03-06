@@ -1,7 +1,8 @@
-from typing import Any
+from typing import Any, List
 
 import boto3
 import botocore.client as bclient
+from iopath import PathManager
 
 DEFAULT_NUM_WORKERS = 32
 
@@ -51,3 +52,8 @@ class StreamPathMgr:
             )
         else:
             return path
+
+
+def ls_relative(path: str, pathmgr: PathManager) -> List[str]:
+    files = pathmgr.ls(path)
+    return [f.split("/")[-1] for f in files]

@@ -8,12 +8,13 @@ import argparse
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Set
+from typing import List, Optional, Set
 
 import boto3.session
 from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
+# TODO: move/changeme
 unis = [
     "unict",
     "cmu",
@@ -56,7 +57,6 @@ class ValidatedConfig:
     input_directory: str
     validate_all: bool
     metadata_folder: str
-    released_video_path: str
     input_university: str
     error_details_name: str
     error_summary_name: str
@@ -64,6 +64,7 @@ class ValidatedConfig:
     universities: Set[str]
     num_workers: int
     expiry_time_sec: int
+    released_video_path: Optional[str] = None
 
 
 @dataclass
@@ -76,7 +77,6 @@ class Config:
     input_directory: str
     validate_all: bool
     metadata_folder: str
-    released_video_path: str
     input_university: str
     error_details_name: str
     error_summary_name: str
@@ -84,6 +84,7 @@ class Config:
     expiry_time_sec: int
     aws_profile_name: str
     universities: List[str] = field(default_factory=list)
+    released_video_path: Optional[str] = None
 
 
 def validate_config(cfg: Config) -> ValidatedConfig:
@@ -100,12 +101,17 @@ def validate_config(cfg: Config) -> ValidatedConfig:
     except ProfileNotFound:
         raise RuntimeError(f"Could not find AWS profile '{cfg.aws_profile_name}'.")
 
+    def _maybe_fix_s3_folder(path: str) -> str:
+        if path.startswith("s3") and not path.endswith("/"):
+            return path + "/"
+        return path
+
     return ValidatedConfig(
-        input_directory=cfg.input_directory,
+        input_directory=_maybe_fix_s3_folder(cfg.input_directory),
         validate_all=bool(cfg.validate_all),
-        metadata_folder=cfg.metadata_folder,
+        metadata_folder=_maybe_fix_s3_folder(cfg.metadata_folder),
         released_video_path=cfg.released_video_path,
-        input_university=cfg.input_university,
+        input_university=_maybe_fix_s3_folder(cfg.input_university),
         error_details_name=cfg.error_details_name,
         error_summary_name=cfg.error_summary_name,
         aws_profile_name=cfg.aws_profile_name,
@@ -159,7 +165,9 @@ def config_from_args(args=None) -> Config:
     flag_parser.add_argument(
         "-rp",
         "--released_video_path",
-        help="The S3 path where released_videos file is stored",
+        help="The path where released_videos file is stored",
+        default=None,
+        required=False,
     )
     flag_parser.add_argument(
         "-u",
@@ -209,6 +217,7 @@ def config_from_args(args=None) -> Config:
         with open(args.config_path.expanduser()) as f:
             config_contents = json.load(f)
             flag_parser.set_defaults(**config_contents)
+    # args.released_video_path = getattr(args, "released_video_path", None)
 
     parsed_args = flag_parser.parse_args(remaining)
 

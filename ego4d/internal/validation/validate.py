@@ -1,16 +1,18 @@
 import collections
 import csv
 import functools
+import itertools
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import botocore
 from botocore.exceptions import ClientError
 
 from ego4d.cli.manifest import VideoMetadata
-from ego4d.internal.ffmpeg_utils import get_video_info, VideoInfo
-from ego4d.internal.university_files import (
+from ego4d.internal.s3 import ls_relative
+from ego4d.internal.validation.ffmpeg_utils import get_video_info, VideoInfo
+from ego4d.internal.validation.university_files import (
     Annotations,
     AuxiliaryVideoComponentDataFile,
     ComponentType,
@@ -45,10 +47,8 @@ def _validate_vcs(
 ) -> Tuple[List[Tuple[str, str]], List[ErrorMessage]]:
     errors = []
     result = []
-
     video_id, components = video_id_component_pair
     components.sort(key=lambda x: x.component_index)
-
     if video_id not in video_metadata_dict:
         errors.append(
             ErrorMessage(
@@ -95,26 +95,35 @@ def _validate_vcs(
             )
         else:
             if not components[i].is_redacted:
-                s3_path = f"{university_video_folder_path.rstrip('/')}/{components[i].video_component_relative_path}"
-                bucket, key = split_s3_path(s3_path)
-                if bucket != bucket_name:
-                    errors.append(
-                        ErrorMessage(
-                            video_id,
-                            "bucket_name_inconsistent_error",
-                            f"video has bucket_name {bucket_name}"
-                            f" when it should have {bucket}",
+                if bucket_name:
+                    s3_path = f"{university_video_folder_path.rstrip('/')}/{components[i].video_component_relative_path}"
+                    bucket, key = split_s3_path(s3_path)
+                    if bucket != bucket_name:
+                        errors.append(
+                            ErrorMessage(
+                                video_id,
+                                "bucket_name_inconsistent_error",
+                                f"video has bucket_name {bucket_name}"
+                                f" when it should have {bucket}",
+                            )
                         )
-                    )
-                try:
-                    s3.head_object(Bucket=bucket, Key=key)
-                    result.append((video_id, key))
-                except ClientError:
+                    try:
+                        s3.head_object(Bucket=bucket, Key=key)
+                        result.append((video_id, key))
+                    except ClientError:
+                        errors.append(
+                            ErrorMessage(
+                                video_id,
+                                "path_does_not_exist_error",
+                                f"video s3://{bucket}/{key} doesn't exist in bucket",
+                            )
+                        )
+                else:
                     errors.append(
                         ErrorMessage(
-                            video_id,
-                            "path_does_not_exist_error",
-                            f"video s3://{bucket}/{key} doesn't exist in bucket",
+                            "",
+                            "using_local_path_warning",
+                            f"WARNING: Using local path for data validations, skipping video path existence in bucket check",
                         )
                     )
 
@@ -123,7 +132,7 @@ def _validate_vcs(
 
 def _validate_video_components(
     s3,
-    bucket_name: str,
+    bucket_name: Optional[str],
     video_metadata_dict: Dict[str, VideoMetadata],
     video_components_dict: Dict[str, List[VideoComponentFile]],
     error_message: List[ErrorMessage],
@@ -192,7 +201,7 @@ def _check_video(x):
 
 def _get_videos(
     s3,
-    bucket_name: str,
+    bucket_name: Optional[str],
     video_info_param: List[Tuple[str, str]],
     error_message: List[ErrorMessage],
     num_workers: int,
@@ -213,6 +222,7 @@ def _get_videos(
 
     print("Generating presigned urls", flush=True)
     # NOTE: s3 is not thread safe, doing this just incase
+    # TODO: Change url to local url where the videos are located
     fps = [
         (
             x,
@@ -221,7 +231,9 @@ def _get_videos(
                 s3_client=s3,
                 bucket_name=bucket_name,
                 expiration=expiry_time_sec,
-            ),
+            )
+            if bucket_name is not None
+            else x[1],
         )
         for x in tqdm(video_info_param)
     ]
@@ -434,7 +446,7 @@ def _validate_mp4(
 
 def _validate_synchronized_videos(
     video_metadata_dict: Dict[str, VideoMetadata],
-    synchronized_video_dict: Dict[str, List[SynchronizedVideos]],
+    synchronized_video_dict: Dict[str, SynchronizedVideos],
     error_message: List[ErrorMessage],
 ) -> None:
     """
@@ -448,17 +460,16 @@ def _validate_synchronized_videos(
     """
     print("validating syncrhonized videos")
     if synchronized_video_dict:
-        for video_grouping_id, components in synchronized_video_dict.items():
-            for component in components:
-                for video_id, _ in component.associated_videos:
-                    if video_id not in video_metadata_dict:
-                        error_message.append(
-                            ErrorMessage(
-                                video_id,
-                                "video_not_found_in_video_metadata_error",
-                                f"{video_id} in synchronized_video_dict can't be found in video_metadata",
-                            )
+        for video_grouping_id, component in synchronized_video_dict.items():
+            for video_id, _ in component.associated_videos.items():
+                if video_id not in video_metadata_dict:
+                    error_message.append(
+                        ErrorMessage(
+                            video_id,
+                            "video_not_found_in_video_metadata_error",
+                            f"{video_id} in synchronized_video_dict can't be found in video_metadata",
                         )
+                    )
 
 
 def _validate_auxilliary_videos(
@@ -513,26 +524,36 @@ def _validate_auxilliary_videos(
                     for component in video_components_dict[video_id]
                     if not component.is_redacted
                 ]
-                aux_components.sort(key=lambda x: x.component_index)
-                for i in range(len(aux_components)):
-                    component = aux_components[i]
-                    if non_redacted_video_components[i] != component.component_index:
-                        error_message.append(
-                            ErrorMessage(
-                                video_id,
-                                "video_component_wrong_index_error",
-                                f"the video component has auxiliary component index {component.component_index}"
-                                f" when it should have {non_redacted_video_components[i]}",  # noqa
+                for component_type_id, xs in itertools.groupby(
+                    aux_components, lambda x: x.component_type_id
+                ):
+                    xs = list(xs)
+                    xs.sort(key=lambda x: x.component_index)  # pyre-ignore
+                    # TODO: check len(xs) vs len(non_redacted_video_components) ?
+                    for i, component in enumerate(xs):
+                        if (
+                            non_redacted_video_components[i]
+                            != component.component_index
+                        ):
+                            error_message.append(
+                                ErrorMessage(
+                                    video_id,
+                                    "video_component_wrong_index_error",
+                                    "the video component has auxiliary component index",
+                                    f"{component.component_index} (type_id={component_type_id})",
+                                    f" when it should have {non_redacted_video_components[i]}",  # noqa
+                                )
                             )
-                        )
-                    if component.component_type_id not in component_types:
-                        error_message.append(
-                            ErrorMessage(
-                                video_id,
-                                "component_type_id_not_found_error",
-                                f"auxiliary component's component_type_id: '{component.component_type_id} does not exist in component_types'",  # noqa
+                        if component.component_type_id not in component_types:
+                            error_message.append(
+                                ErrorMessage(
+                                    video_id,
+                                    "component_type_id_not_found_error",
+                                    f"auxiliary component's (type_id={component_type_id})",
+                                    f"'{component.component_type_id}",
+                                    "does not exist in component_types'",  # noqa
+                                )
                             )
-                        )
 
 
 def _validate_participant(
@@ -706,7 +727,7 @@ def validate_university_files(  # noqa :C901
     devices: Dict[str, Device],
     component_types: Dict[str, ComponentType],
     scenarios: Dict[str, Scenario],
-    bucket_name: str,
+    bucket_name: Optional[str],
     s3: botocore.client.BaseClient,
     u: str,
     released_videos: Dict[str, List[str]],
@@ -763,7 +784,7 @@ def validate_university_files(  # noqa :C901
 
     error_dict_non_released = collections.defaultdict(int)
     error_dict_released = collections.defaultdict(int)
-    if error_message:
+    if error_message and released_videos is not None:
         for err in error_message:
             if err.uid not in released_videos[u]:
                 error_dict_non_released[err.errorType] += 1
@@ -776,6 +797,8 @@ def validate_university_files(  # noqa :C901
         write = csv.writer(f)
         write.writerow(fields)
         for e in error_message:
+            if released_videos is None:
+                continue
             if e.uid not in released_videos[u]:
                 write.writerow([e.uid, e.errorType, e.description, 0])
             else:
@@ -806,10 +829,13 @@ def validate_all(
 ):
     # get access to metadata_folder
     devices, component_types, scenarios = load_standard_metadata_files(
-        s3, standard_metadata_folder
+        standard_metadata_folder
     )
-    released_videos = load_released_video_files(s3, released_video_path)
-    bucket, path = split_s3_path(path)
+    released_videos = load_released_video_files(released_video_path)
+    if s3:
+        bucket, _ = split_s3_path(path)
+    else:
+        bucket = None
 
     (
         video_metadata_dict,
@@ -819,25 +845,24 @@ def validate_all(
         synchronized_video_dict,
         physical_setting_dict,
         annotations_dict,
-    ) = load_university_files(s3, bucket, path)
-
+    ) = load_university_files(path)
     validate_university_files(
-        video_metadata_dict,
-        video_components_dict,
-        auxiliary_video_component_dict,
-        participant_dict,
-        synchronized_video_dict,
-        physical_setting_dict,
-        annotations_dict,
-        devices,
-        component_types,
-        scenarios,
-        bucket,
-        s3,
-        u,
-        released_videos,
-        error_details_path,
-        error_summary_path,
-        num_workers,
+        video_metadata_dict=video_metadata_dict,
+        video_components_dict=video_components_dict,
+        auxiliary_video_component_dict=auxiliary_video_component_dict,
+        participant_dict=participant_dict,
+        synchronized_video_dict=synchronized_video_dict,
+        physical_setting_dict=physical_setting_dict,
+        annotations_dict=annotations_dict,
+        devices=devices,
+        component_types=component_types,
+        scenarios=scenarios,
+        bucket_name=bucket,
+        s3=s3,
+        u=u,
+        released_videos=released_videos,
+        error_details_path=error_details_path,
+        error_summary_path=error_summary_path,
+        num_workers=num_workers,
         expiry_time_sec=expiry_time_sec,
     )
