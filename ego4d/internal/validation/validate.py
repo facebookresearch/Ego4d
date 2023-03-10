@@ -1,83 +1,97 @@
-import collections
-import csv
+# pyre-strict
 import functools
 import itertools
+import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Tuple
 
-import botocore
-from botocore.exceptions import ClientError
+from typing import Any, Dict, List, Optional, Tuple
 
+import pandas as pd
 from ego4d.cli.manifest import VideoMetadata
-from ego4d.internal.s3 import ls_relative
+
+from ego4d.cli.universities import BUCKET_TO_UNIV
+from ego4d.internal.s3 import StreamPathMgr
 from ego4d.internal.validation.ffmpeg_utils import get_video_info, VideoInfo
-from ego4d.internal.validation.university_files import (
+from ego4d.internal.validation.types import (
     Annotations,
     AuxiliaryVideoComponentDataFile,
     ComponentType,
-    Device,
-    ErrorMessage,
+    Error,
+    ErrorLevel,
+    load_manifest,
     load_released_video_files,
     load_standard_metadata_files,
-    load_university_files,
+    Manifest,
     Particpant,
-    PhysicalSetting,
-    Scenario,
-    split_s3_path,
+    StandardMetadata,
     SynchronizedVideos,
     VideoComponentFile,
 )
+
+from iopath.common.file_io import PathManager
+from iopath.common.s3 import S3PathHandler
 from tqdm import tqdm
 
-"""
--i: The S3 path where the metadata is stored
--a: check all of the latest files for each university
--mf: "./ego4d/internal/standard_metadata_v10"
--ed: "error_details"
--es: "error_summary"
-"""
+stream_path_mgr: Optional[StreamPathMgr] = None  # for streaming video
+pathmgr = PathManager()  # for downloading files
+pathmgr.register_handler(S3PathHandler(profile="default"))
+
+
+def _split_s3_path(s3_path: str) -> Tuple[Optional[str], str]:
+    """
+    Splits a full s3_path of the form "s3://bucket/folder/.../file.ext"
+    into a tuple of ("bucket", "folder/.../file.ext")
+
+    If this doesn't start with s3:// it will assume that the there is no
+    bucket and the path is just returned as the second output
+    """
+    if s3_path[:5] == "s3://":
+        s3_path_components = s3_path[5:].split("/")
+        return s3_path_components[0], "/".join(s3_path_components[1:])
+    # pyre-fixme[7]: Expected `Tuple[str, str]` but got `Tuple[None, str]`.
+    return None, s3_path
 
 
 def _validate_vcs(
     video_id_component_pair: Tuple[str, List[VideoComponentFile]],
-    video_metadata_dict: Dict[str, VideoMetadata],
-    bucket_name: str,
-    s3,
-) -> Tuple[List[Tuple[str, str]], List[ErrorMessage]]:
+    videos: Dict[str, VideoMetadata],
+    university: str,
+) -> List[Error]:
     errors = []
-    result = []
     video_id, components = video_id_component_pair
     components.sort(key=lambda x: x.component_index)
-    if video_id not in video_metadata_dict:
+
+    if video_id not in videos:
         errors.append(
-            ErrorMessage(
+            Error(
+                ErrorLevel.ERROR,
                 video_id,
-                "video_not_found_in_video_metadata_error",
+                "video_not_found_in_video_metadata",
                 f"{video_id} in video_components_dict can't be found in video_metadata",
             )
         )
-        return result, errors
-    elif video_metadata_dict[video_id].number_video_components != len(components):
+        return errors
+    elif videos[video_id].number_video_components != len(components):
         errors.append(
-            ErrorMessage(
+            Error(
+                ErrorLevel.ERROR,
                 video_id,
-                "video_component_length_inconsistent_error",
+                "video_component_length_inconsistent",
                 f"the video has {len(components)} components when it"
-                f" should have {video_metadata_dict[video_id].number_video_components}",
+                f" should have {videos[video_id].number_video_components}",
             )
         )
     components.sort(key=lambda x: x.component_index)
     # check component_index is incremental and starts at 0
-    university_video_folder_path = video_metadata_dict[
-        video_id
-    ].university_video_folder_path
+    university_video_folder_path = videos[video_id].university_video_folder_path
     for i in range(len(components)):
         if components[i].component_index != i:
             errors.append(
-                ErrorMessage(
+                Error(
+                    ErrorLevel.ERROR,
                     video_id,
-                    "video_component_wrong_index_error",
+                    "video_component_wrong_index",
                     f"the video component has index {components[i].component_index}"
                     f" when it should have {i}",
                 )
@@ -87,177 +101,81 @@ def _validate_vcs(
             and not components[i].is_redacted
         ):
             errors.append(
-                ErrorMessage(
+                Error(
+                    ErrorLevel.ERROR,
                     video_id,
-                    "empty_video_component_relative_path_error",
+                    "empty_video_component_relative_path",
                     f"Found an empty relative path for the video_id {video_id}",
                 )
             )
         else:
-            if not components[i].is_redacted:
-                if bucket_name:
-                    s3_path = f"{university_video_folder_path.rstrip('/')}/{components[i].video_component_relative_path}"
-                    bucket, key = split_s3_path(s3_path)
-                    if bucket != bucket_name:
-                        errors.append(
-                            ErrorMessage(
-                                video_id,
-                                "bucket_name_inconsistent_error",
-                                f"video has bucket_name {bucket_name}"
-                                f" when it should have {bucket}",
-                            )
-                        )
-                    try:
-                        s3.head_object(Bucket=bucket, Key=key)
-                        result.append((video_id, key))
-                    except ClientError:
-                        errors.append(
-                            ErrorMessage(
-                                video_id,
-                                "path_does_not_exist_error",
-                                f"video s3://{bucket}/{key} doesn't exist in bucket",
-                            )
-                        )
-                else:
+            if components[i].is_redacted:
+                path = os.path.join(
+                    university_video_folder_path,
+                    components[i].video_component_relative_path,
+                )
+                if not path.startswith("s3://"):
                     errors.append(
-                        ErrorMessage(
-                            "",
-                            "using_local_path_warning",
-                            f"WARNING: Using local path for data validations, skipping video path existence in bucket check",
+                        Error(
+                            ErrorLevel.WARN,
+                            video_id,
+                            "using_local_path",
+                            f"{path} ",
                         )
                     )
 
-    return result, errors
+                if "s3://" in path:
+                    bucket = path.split("s3://")[1].split("/")[0]
+                    assoc_uni = BUCKET_TO_UNIV[bucket]
+                    if assoc_uni != university:
+                        errors.append(
+                            Error(
+                                ErrorLevel.ERROR,
+                                video_id,
+                                "incorrect_bucket_name",
+                                path,
+                            )
+                        )
+
+                if not pathmgr.exists(path):
+                    errors.append(
+                        Error(
+                            ErrorLevel.ERROR,
+                            video_id,
+                            "path_does_not_exist",
+                            path,
+                        )
+                    )
+
+    return errors
 
 
-def _validate_video_components(
-    s3,
-    bucket_name: Optional[str],
-    video_metadata_dict: Dict[str, VideoMetadata],
-    video_components_dict: Dict[str, List[VideoComponentFile]],
-    error_message: List[ErrorMessage],
+def validate_video_components(
+    manifest: Manifest,
+    university: str,
     num_workers: int,
-) -> List[Tuple[str, str]]:
+) -> List[Error]:
     """
-    Args:
-        video_components_dict: Dict[str, List[VideoComponentFile]]:
-        mapping from university_video_id to a list of all VideoComponentFile
-        objects that have equal values at university_video_id
+    This method in parallel (w.r.t num_workers) checks each video component file
+    provided in the manifest.
 
-        error_message: List[ErrorMessage]: a list to store ErrorMessage objects
-        generated when validating video components.
-
-    Returns:
-        List[Tuple[str, str]] a list containing a tuple for each
-        video component's university_video_id and key
+    Refer to _validate_vcs for logic
     """
-    print("validating video components")
     map_fn = functools.partial(
         _validate_vcs,
-        video_metadata_dict=video_metadata_dict,
-        bucket_name=bucket_name,
-        s3=s3,
+        videos=manifest.videos,
+        university=university,
     )
-    video_info_param = []
-    with ThreadPoolExecutor(num_workers) as pool:
-        vals_to_map = list(video_components_dict.items())
-        for res, errs in tqdm(pool.map(map_fn, vals_to_map), total=len(vals_to_map)):
-            video_info_param.extend(res)
-            error_message.extend(errs)
-
-    return video_info_param
-
-
-def _get_presigned_url(
-    video_param: Tuple[str, str],
-    s3_client: botocore.client.BaseClient,
-    bucket_name: str,
-    expiration: int,
-):
     errors = []
-    object_name = video_param[1]
-    try:
-        filename = s3_client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket_name, "Key": object_name},
-            ExpiresIn=expiration,
-        )
-        return filename, errors
-    except ClientError as ex:
-        errors.append(
-            ErrorMessage(
-                video_param[0],
-                "video_does_not_exist_in_bucket_error",
-                f"video s3://{bucket_name}/{object_name} doesn't exist in bucket - {ex}",
-            )
-        )
-        return None, errors
+    with ThreadPoolExecutor(num_workers) as pool:
+        vals_to_map = list(manifest.video_components.items())
+        for errs in tqdm(pool.map(map_fn, vals_to_map), total=len(vals_to_map)):
+            errors.extend(errs)
+
+    return errors
 
 
-def _check_video(x):
-    video_info, errs = get_video_info(x[1], name=x[0][1])
-    return x[0], video_info, errs
-
-
-def _get_videos(
-    s3,
-    bucket_name: Optional[str],
-    video_info_param: List[Tuple[str, str]],
-    error_message: List[ErrorMessage],
-    num_workers: int,
-    expiry_time_sec: int,
-) -> Dict[str, List[VideoInfo]]:
-    """
-    Args:
-        video_info_param: List[Tuple[str, str]]: a list containing tuples for each
-        video component's university_video_id and key
-
-    Returns:
-        Dict[str, List[VideoInfo]]: mapping from university_video_id
-        to a list of all VideoInfo objects that have equal values at university_video_id
-
-    """
-    print("loading and validating videos")
-    video_info_dict = defaultdict(list)
-
-    print("Generating presigned urls", flush=True)
-    # NOTE: s3 is not thread safe, doing this just incase
-    # TODO: Change url to local url where the videos are located
-    fps = [
-        (
-            x,
-            _get_presigned_url(
-                video_param=x,
-                s3_client=s3,
-                bucket_name=bucket_name,
-                expiration=expiry_time_sec,
-            )
-            if bucket_name is not None
-            else x[1],
-        )
-        for x in tqdm(video_info_param)
-    ]
-    for _, (_, errs) in fps:
-        if len(errs) > 0:
-            error_message.extend(errs)
-
-    fps = [(x, filename) for x, (filename, errs) in fps if len(errs) == 0]
-
-    print("Checking URLs", flush=True)
-    with ThreadPoolExecutor(max_workers=num_workers) as pool:
-        for x, video_info, errs in tqdm(
-            pool.map(_check_video, fps),
-            total=len(fps),
-        ):
-            video_info_dict[x[0]].append(video_info)
-            error_message.extend(errs)
-
-    return video_info_dict
-
-
-def _validate_mp4(
-    video_info_dict: Dict[str, List[VideoInfo]], error_message: List[ErrorMessage]
-) -> None:
+def validate_mp4s(video_infos: Dict[str, List[VideoInfo]]) -> List[Error]:  # noqa
     """
     This function checks a set of MP4 files on S3 for the following properties:
     - null fps
@@ -271,16 +189,9 @@ def _validate_mp4(
     - video fps consistent
     - SAR consistent
     - FPS consistent
-
-    Args:
-        video_info_dict: Dict[str, List[VideoInfo]]: mapping from university_video_id
-        to a list of all VideoInfo objects that have equal values at university_video_id
-
-        error_message: List[ErrorMessage]: a list to store ErrorMessage objects
-        generated when validating mp4 files in s3.
     """
-    print("validating mp4")
-    for video_id, video_infos in tqdm(video_info_dict.items()):
+    errors = []
+    for video_id, vis in video_infos.items():
         total_vcodec = set()
         total_acodec = set()
         total_rotate = set()
@@ -289,10 +200,11 @@ def _validate_mp4(
         total_sar = set()
         total_fps = set()
 
-        for i, video_info in enumerate(video_infos):
+        for i, video_info in enumerate(vis):
             if video_info is None:
-                error_message.append(
-                    ErrorMessage(
+                errors.append(
+                    Error(
+                        ErrorLevel.ERROR,
                         video_id,
                         "no_video_info_for_component",
                         f"component {i} has no metadata",
@@ -312,35 +224,40 @@ def _validate_mp4(
             total_rotate.add(video_info.rotate)
 
             # check consistent width and height
-            if video_info.sample_width != None and video_info.sample_height != None:
+            if (
+                video_info.sample_width is not None
+                and video_info.sample_height is not None
+            ):
                 total_size.add((video_info.sample_width, video_info.sample_height))
 
                 if (
                     video_info.sample_width < video_info.sample_height
-                    and video_info.rotate == None
+                    and video_info.rotate is None
                 ):
-                    error_message.append(
-                        ErrorMessage(
+                    errors.append(
+                        Error(
+                            ErrorLevel.ERROR,
                             video_id,
-                            "component_having_width_lt_height_error",
+                            "component_having_width_lt_height",
                             f"component {i} has width < height without rotation",
                         )
                     )
 
             # check consistent video time base
-            if video_info.video_time_base != None:
+            if video_info.video_time_base is not None:
                 total_vtb.add(video_info.video_time_base)
 
             # check consistent sar
-            if video_info.sar != None:
+            if video_info.sar is not None:
                 total_sar.add(video_info.sar)
 
             # check null/inconsistent video fps
-            if video_info.fps == None:
-                error_message.append(
-                    ErrorMessage(
+            if video_info.fps is None:
+                errors.append(
+                    Error(
+                        ErrorLevel.WARN,
                         video_id,
-                        "missing_fps_info_warning",
+                        "missing_fps_info",
                         f"component {i} has null fps value",
                     )
                 )
@@ -349,10 +266,11 @@ def _validate_mp4(
 
             # check null mp4 duration
             if video_info.mp4_duration is None:
-                error_message.append(
-                    ErrorMessage(
+                errors.append(
+                    Error(
+                        ErrorLevel.WARN,
                         video_id,
-                        "missing_mp4_duration_info_warning",
+                        "missing_mp4_duration_info",
                         f"component {i} has no mp4 duration",
                     )
                 )
@@ -368,8 +286,9 @@ def _validate_mp4(
                     else video_info.aduration
                 )
                 if video_length is None and audio_length is None:
-                    error_message.append(
-                        ErrorMessage(
+                    errors.append(
+                        Error(
+                            ErrorLevel.WARN,
                             video_id,
                             "no_video_or_audio_stream_duration",
                             f"component {i} has no video or audio stream duration metadata",
@@ -386,483 +305,526 @@ def _validate_mp4(
                 threshold = 2 / (video_info.fps or 30)
                 delta = abs(video_stream_length - video_info.mp4_duration)
                 if delta >= threshold:
-                    error_message.append(
-                        ErrorMessage(
+                    errors.append(
+                        Error(
+                            ErrorLevel.WARN,
                             video_id,
-                            "mp4_duration_too_large_or_small_warning",
+                            "mp4_duration_too_large_or_small",
                             f"component {i}: mp4_duration={video_info.mp4_duration}, stream_duration={video_stream_length}, vsd={video_length}, asd={audio_length}",  # noqa
                         )
                     )
 
         if len(total_vcodec) > 1:
-            error_message.append(
-                ErrorMessage(
+            errors.append(
+                Error(
+                    ErrorLevel.ERROR,
                     video_id,
-                    "inconsistent_video_codec_error",
-                    "inconsistent video codec",
+                    "inconsistent_video_codec",
+                    "",
                 )
             )
         if len(total_acodec) > 1:
-            error_message.append(
-                ErrorMessage(
+            errors.append(
+                Error(
+                    ErrorLevel.WARN,
                     video_id,
-                    "inconsistent_audio_codec_error",
-                    "inconsistent audio codec",
+                    "inconsistent_audio_codec",
+                    "",
                 )
             )
         if len(total_rotate) > 1:
-            error_message.append(
-                ErrorMessage(
-                    video_id, "inconsistent_rotation_error", "inconsistent rotation"
-                )
+            errors.append(
+                Error(ErrorLevel.ERROR, video_id, "inconsistent_rotation", "")
             )
         if len(total_size) > 1:
-            error_message.append(
-                ErrorMessage(
+            errors.append(
+                Error(
+                    ErrorLevel.ERROR,
                     video_id,
-                    "inconsistent_width_height_pair_error",
+                    "inconsistent_width_height_pair",
                     "components with inconsistent width x height",
                 )
             )
         if len(total_vtb) > 1:
-            error_message.append(
-                ErrorMessage(
+            errors.append(
+                Error(
+                    ErrorLevel.ERROR,
                     video_id,
-                    "inconsistent_video_time_base_error",
-                    "inconsistent video time base",
+                    "inconsistent_video_time_base",
+                    "",
                 )
             )
         if len(total_sar) > 1:
-            error_message.append(
-                ErrorMessage(video_id, "inconsistent_sar_warning", "inconsistent sar")
-            )
+            errors.append(Error(ErrorLevel.WARN, video_id, "inconsistent_sar", ""))
         if len(total_fps) > 1:
-            error_message.append(
-                ErrorMessage(
-                    video_id, "inconsistent_video_fps_warning", "inconsistent video fps"
-                )
+            errors.append(
+                Error(ErrorLevel.WARN, video_id, "inconsistent_video_fps", "")
             )
+    return errors
 
 
-def _validate_synchronized_videos(
+def validate_synchronized_metadata(
     video_metadata_dict: Dict[str, VideoMetadata],
     synchronized_video_dict: Dict[str, SynchronizedVideos],
-    error_message: List[ErrorMessage],
-) -> None:
+) -> List[Error]:
     """
     Args:
         synchronized_video_dict: Dict[str, SynchronizedVideos]: mapping from
         video_grouping_id  to a list of all SynchronizedVideos objects that
         have equal values at video_grouping_id
 
-        error_message: List[ErrorMessage]: a list to store ErrorMessage objects
+        error_message: List[Error]: a list to store Error objects
         generated when validating synchronized_videos.csv.
     """
-    print("validating syncrhonized videos")
+    errors = []
     if synchronized_video_dict:
         for video_grouping_id, component in synchronized_video_dict.items():
             for video_id, _ in component.associated_videos.items():
                 if video_id not in video_metadata_dict:
-                    error_message.append(
-                        ErrorMessage(
+                    errors.append(
+                        Error(
+                            ErrorLevel.ERROR,
                             video_id,
-                            "video_not_found_in_video_metadata_error",
-                            f"{video_id} in synchronized_video_dict can't be found in video_metadata",
+                            "video_not_found_in_video_metadata",
+                            f"({video_id}, {video_grouping_id}) in synchronized_video_dict can't be found in video_metadata",  # noqa
                         )
                     )
+    return errors
 
 
-def _validate_auxilliary_videos(
+def validate_auxilliary_videos(
     video_metadata_dict: Dict[str, VideoMetadata],
     video_components_dict: Dict[str, List[VideoComponentFile]],
     auxiliary_video_component_dict: Dict[str, List[AuxiliaryVideoComponentDataFile]],
     component_types: Dict[str, ComponentType],
-    error_message: List[ErrorMessage],
-) -> None:
+) -> List[Error]:
     """
     Args:
         auxiliary_video_component_dict: Dict[str, List[AuxiliaryVideoComponentDataFile]]:
         mapping from university_video_id to a list of all AuxiliaryVideoComponentDataFile
         objects that have equal values at university_video_id
 
-        error_message: List[ErrorMessage]: a list to store ErrorMessage objects
+        error_message: List[Error]: a list to store Error objects
         generated when validating auxilliary_videos.csv.
     """
     # Check ids in auxiliary_video_component_dict are in video_metadata_dict
     # and that the component_type is valid
-    print("validating auxiliary videos")
+    errors = []
     if auxiliary_video_component_dict:
         for video_id, aux_components in auxiliary_video_component_dict.items():
             if video_id not in video_metadata_dict:
-                error_message.append(
-                    ErrorMessage(
+                errors.append(
+                    Error(
+                        ErrorLevel.ERROR,
                         video_id,
-                        "video_not_found_in_video_metadata_error",
-                        f"{video_id} in auxiliary_video_component_dict can't be found in video_metadata",
+                        "video_not_found_in_video_metadata",
+                        f"{video_id} in auxiliary_video_component_dict can't be found in video_metadata",  # noqa
                     )
                 )
 
             else:
-                redacted_video_components = [
-                    component
-                    for component in video_components_dict[video_id]
-                    if component.is_redacted
-                ]
-                if video_metadata_dict[video_id].number_video_components - len(
-                    redacted_video_components
-                ) != len(aux_components):
-                    error_message.append(
-                        ErrorMessage(
-                            video_id,
-                            "video_component_length_inconsistent_error",
-                            f"the video has {len(aux_components)} auxiliary components when it"
-                            f" should have {video_metadata_dict[video_id].number_video_components}",  # noqa
-                        )
-                    )
-                non_redacted_video_components = [
+                vcs = [
                     component.component_index
                     for component in video_components_dict[video_id]
-                    if not component.is_redacted
                 ]
+
                 for component_type_id, xs in itertools.groupby(
                     aux_components, lambda x: x.component_type_id
                 ):
                     xs = list(xs)
+                    if video_metadata_dict[video_id].number_video_components != len(xs):
+                        errors.append(
+                            Error(
+                                ErrorLevel.ERROR,
+                                video_id,
+                                "video_component_length_inconsistent",
+                                f"the video has {len(aux_components)} auxiliary components when it"  # noqa
+                                f" should have {video_metadata_dict[video_id].number_video_components}",  # noqa
+                            )
+                        )
+                        continue
+
                     xs.sort(key=lambda x: x.component_index)  # pyre-ignore
-                    # TODO: check len(xs) vs len(non_redacted_video_components) ?
                     for i, component in enumerate(xs):
-                        if (
-                            non_redacted_video_components[i]
-                            != component.component_index
-                        ):
-                            error_message.append(
-                                ErrorMessage(
+                        if vcs[i] != component.component_index:
+                            errors.append(
+                                Error(
+                                    ErrorLevel.ERROR,
                                     video_id,
-                                    "video_component_wrong_index_error",
+                                    "video_component_wrong_index",
                                     "the video component has auxiliary component index",
-                                    f"{component.component_index} (type_id={component_type_id})",
-                                    f" when it should have {non_redacted_video_components[i]}",  # noqa
+                                    f"{component.component_index} (type_id={component_type_id})",  # noqa
+                                    f" when it should have {vcs[i]}",  # noqa
                                 )
                             )
                         if component.component_type_id not in component_types:
-                            error_message.append(
-                                ErrorMessage(
+                            errors.append(
+                                Error(
+                                    ErrorLevel.ERROR,
                                     video_id,
-                                    "component_type_id_not_found_error",
+                                    "component_type_id_not_found",
                                     f"auxiliary component's (type_id={component_type_id})",
                                     f"'{component.component_type_id}",
                                     "does not exist in component_types'",  # noqa
                                 )
                             )
+    return errors
 
 
-def _validate_participant(
+def validate_participant(
     video_metadata_dict: Dict[str, VideoMetadata],
     participant_dict: Dict[str, List[Particpant]],
-    error_message: List[ErrorMessage],
-) -> None:
+) -> List[Error]:
     """
     Args:
         participant_dict: Dict[str, Particpant]: mapping from participant_id
         to Participant objects that have equal values at participant_id
 
-        error_message: List[ErrorMessage]: a list to store ErrorMessage objects
+        error_message: List[Error]: a list to store Error objects
         generated when validating participants.csv.
     """
-    print("validating participants")
+    errors = []
     if participant_dict:
-        for participant_id, _ in participant_dict.items():
-            if participant_id not in video_metadata_dict:
-                error_message.append(
-                    ErrorMessage(
+        ps_in_video_metadata = {
+            x.recording_participant_id for x in video_metadata_dict.values()
+        }
+        ps_in_meta = set(participant_dict.keys())
+
+        wrong_ps = ps_in_video_metadata - ps_in_meta
+
+        if len(wrong_ps) > 0:
+            for participant_id in wrong_ps:
+                errors.append(
+                    Error(
+                        ErrorLevel.ERROR,
                         participant_id,
-                        "participant_not_found_error",
-                        f"participant '{participant_id}' does not exist in video metadata",
+                        "participant_metadata_not_found",
+                        f"participant '{participant_id}' does not exist in participant metadata",  # noqa
                     )
                 )
 
+    else:
+        errors.append(Error(ErrorLevel.WARN, "general", "no_participant_metadata", ""))
+    return errors
 
-def _validate_annotations(
+
+def validate_annotations(
     video_metadata_dict: Dict[str, VideoMetadata],
     annotations_dict: Dict[str, Annotations],
-    error_message: List[ErrorMessage],
-) -> None:
+) -> List[Error]:
     """
     Args:
         annotations_dict: Dict[str, Annotations]: mapping from participant_id
         to Participant objects that have equal values at participant_id
 
-        error_message: List[ErrorMessage]: a list to store ErrorMessage objects
+        error_message: List[Error]: a list to store Error objects
         generated when validating participants.csv.
     """
     print("validating annotations")
+    errors = []
     if annotations_dict:
         for video_id in annotations_dict:
             if video_id not in video_metadata_dict:
-                error_message.append(
-                    ErrorMessage(
+                errors.append(
+                    Error(
+                        ErrorLevel.ERROR,
                         video_id,
-                        "video_not_found_in_video_metadata_error",
+                        "video_not_found_in_video_metadata",
                         f"{video_id} in annotations_dict can't be found in video_metadata",
                     )
                 )
+    return errors
 
 
-def _validate_video_metadata(
-    video_metadata_dict: Dict[str, VideoMetadata],
-    video_components_dict: Dict[str, List[VideoComponentFile]],
-    participant_dict: Dict[str, Particpant],
-    physical_setting_dict: Dict[str, PhysicalSetting],
-    devices: Dict[str, Device],
-    component_types: Dict[str, ComponentType],
-    scenarios: Dict[str, Scenario],
-    error_message: List[ErrorMessage],
-) -> None:
-    """
-    Args:
-        video_metadata_dict: Dict[str, VideoMetadata]: mapping from
-        university_video_id to a list of all VideoMetaData objects that
-        have equal values at university_video_id
-
-        video_components_dict: Dict[str, List[VideoComponentFile]]:
-        mapping from university_video_id to a list of all VideoComponentFile
-        objects that have equal values at university_video_id
-
-        participant_dict: Dict[str, Particpant]: mapping from participant_id
-        to Participant objects that have equal values at participant_id
-
-        physical_setting_dict: Dict[str, PhysicalSetting],
-        devices: Dict[str, Device],
-        component_types: Dict[str, ComponentType],
-        scenarios: Dict[str, Scenario],
-
-        error_message: List[ErrorMessage]: a list to store ErrorMessage objects
-        generated when validating video_metadata.csv.
-    """
-    print("validating video metadata")
+def validate_video_metadata(
+    manifest: Manifest,
+    standard_metadata: StandardMetadata,
+) -> List[Error]:
     # Check from video_metadata:
+    errors = []
     video_ids = set()
-    for video_id, video_metadata in video_metadata_dict.items():
-        #   0. check no duplicate university_video_id
+    for video_id, video_metadata in manifest.videos.items():
+        # 0. check no duplicate university_video_id
         if video_id in video_ids:
-            error_message.append(
-                ErrorMessage(
+            errors.append(
+                Error(
+                    ErrorLevel.ERROR,
                     video_id,
-                    "duplicate_video_id_error",
-                    f"duplicate video id in metadata",
+                    "duplicate_video_id",
+                    "duplicate video id in metadata",
                 )
             )
         video_ids.add(video_id)
-        #   1. participant_ids are in participant_dict
-        if participant_dict:
-            if video_metadata.recording_participant_id not in participant_dict:
-                error_message.append(
-                    ErrorMessage(
-                        video_id,
-                        "participant_id_not_found_error",
-                        f"recording_participant_id '{video_metadata.recording_participant_id}' not in participant_dict",
-                    )
-                )
+        # 1. participant_ids are in participant_dict
+        if manifest.participants is not None:
             if video_metadata.recording_participant_id is None:
-                error_message.append(
-                    ErrorMessage(
-                        video_id, "null_participant_id_warning", "null participant_id"
+                errors.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        video_id,
+                        "null_participant_id",
+                        "",
                     )
                 )
 
-        #   2. scenario_ids are in scenarios
-        for scenario_id in video_metadata.video_scenario_ids:
-            if scenario_id not in scenarios:
-                error_message.append(
-                    ErrorMessage(
+        # 2. scenario_ids are in scenarios
+        for scenario_id in standard_metadata.scenarios:
+            if scenario_id not in standard_metadata.scenarios:
+                errors.append(
+                    Error(
+                        ErrorLevel.ERROR,
                         video_id,
-                        "scenario_id_not_found_error",
+                        "scenario_id_not_found",
                         f"video_scenario_id: '{scenario_id}' not in scenarios.csv",
                     )
                 )
 
-        #   3. device_ids are in devices
-        if video_metadata.device_id and video_metadata.device_id not in devices:
-            error_message.append(
-                ErrorMessage(
+        # 3. device_ids are in devices
+        if video_metadata.device_id is None:
+            errors.append(Error(ErrorLevel.WARN, video_id, "device_id_null", ""))
+        elif video_metadata.device_id not in standard_metadata.devices:
+            errors.append(
+                Error(
+                    ErrorLevel.ERROR,
                     video_id,
-                    "device_id_not_found_error",
+                    "device_id_not_found",
                     f"device_id '{video_metadata.device_id}' not in devices.csv",
                 )
             )
 
-        #   4. physical_settings are in physical_setting
-        if physical_setting_dict:
-            if (
-                video_metadata.physical_setting_id
-                and video_metadata.physical_setting_id not in physical_setting_dict
-            ):
-                error_message.append(
-                    ErrorMessage(
-                        video_id,
-                        "physical_setting_id_not_found_error",
-                        f"physical_setting_id '{video_metadata.physical_setting_id}' not in physical_setting.csv",
-                    )
-                )
-
-        #   5. university_video_ids are in components
-        if video_id not in video_components_dict:
-            error_message.append(
-                ErrorMessage(
+        # 4. physical_settings are in physical_setting
+        if (
+            video_metadata.physical_setting_id
+            and video_metadata.physical_setting_id not in manifest.physical_setting
+        ):
+            errors.append(
+                Error(
+                    ErrorLevel.ERROR,
                     video_id,
-                    "video_not_found_in_video_components_error",
-                    f"{video_id} in video_metadata can't be found in video_components_dict",
+                    "physical_setting_id_not_found",
+                    f"physical_setting_id '{video_metadata.physical_setting_id}' not in physical_setting.csv",  # noqa
                 )
             )
 
+        # 5. university_video_ids are in components
+        if video_id not in manifest.video_components:
+            errors.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    video_id,
+                    "video_not_found_in_video_components",
+                    f"{video_id} in video_metadata can't be found in video_components_dict",
+                )
+            )
+    return errors
+
+
+def _get_video_metadata_map_fn(
+    uid_path_pair: Tuple[str, str],
+) -> Tuple[str, Optional[VideoInfo], Optional[Error]]:
+    assert stream_path_mgr is not None
+    uid, path = uid_path_pair
+    metadata, errs = get_video_info(path, name=uid)
+    return uid, metadata, errs
+
+
+def get_video_metadata(
+    video_paths: Dict[Any, str],
+    num_workers: int,
+) -> Tuple[Dict[str, VideoMetadata], List[Error]]:
+    errors = []
+    metadata = {}
+
+    # prefetch the presigned URLs
+    paths_to_check = {}
+    for k, path in video_paths.items():
+        paths_to_check[k] = stream_path_mgr.open(path)
+
+    iterables = list(paths_to_check.items())
+    with ThreadPoolExecutor(max_workers=num_workers) as pool:
+        for uid, m, errs in tqdm(
+            pool.map(_get_video_metadata_map_fn, iterables), total=len(iterables)
+        ):
+            metadata[uid] = m
+            if errs is not None:
+                errors.append(errs)
+    return metadata, errors
+
 
 def validate_university_files(  # noqa :C901
-    video_metadata_dict: Dict[str, VideoMetadata],
-    video_components_dict: Dict[str, List[VideoComponentFile]],
-    auxiliary_video_component_dict: Dict[str, List[AuxiliaryVideoComponentDataFile]],
-    participant_dict: Dict[str, Particpant],
-    synchronized_video_dict: Dict[str, SynchronizedVideos],
-    physical_setting_dict: Dict[str, PhysicalSetting],
-    annotations_dict: Dict[str, Annotations],
-    devices: Dict[str, Device],
-    component_types: Dict[str, ComponentType],
-    scenarios: Dict[str, Scenario],
-    bucket_name: Optional[str],
-    s3: botocore.client.BaseClient,
-    u: str,
-    released_videos: Dict[str, List[str]],
-    error_details_path: str,
-    error_summary_path: str,
+    university: str,
+    manifest: Manifest,
+    metadata: StandardMetadata,
     num_workers: int,
-    expiry_time_sec: int,
-) -> List[ErrorMessage]:
-    error_message = []
-    # Check ids in video_components_dict are in video_metadata_dict
-    # and the # of components is correct
-    video_info_param = []
-    video_info_param = _validate_video_components(
-        s3=s3,
-        bucket_name=bucket_name,
-        video_metadata_dict=video_metadata_dict,
-        video_components_dict=video_components_dict,
-        error_message=error_message,
-        num_workers=num_workers,
-    )
-    video_info_dict = _get_videos(
-        s3=s3,
-        bucket_name=bucket_name,
-        video_info_param=video_info_param,
-        error_message=error_message,
-        num_workers=num_workers,
-        expiry_time_sec=expiry_time_sec,
-    )
-    _validate_mp4(video_info_dict, error_message)
-    _validate_synchronized_videos(
-        video_metadata_dict=video_metadata_dict,
-        synchronized_video_dict=synchronized_video_dict,
-        error_message=error_message,
-    )
-    _validate_auxilliary_videos(
-        video_metadata_dict=video_metadata_dict,
-        video_components_dict=video_components_dict,
-        auxiliary_video_component_dict=auxiliary_video_component_dict,
-        component_types=component_types,
-        error_message=error_message,
-    )
-    _validate_participant(video_metadata_dict, participant_dict, error_message)
-    _validate_annotations(video_metadata_dict, annotations_dict, error_message)
-    _validate_video_metadata(
-        video_metadata_dict=video_metadata_dict,
-        video_components_dict=video_components_dict,
-        participant_dict=participant_dict,
-        scenarios=scenarios,
-        devices=devices,
-        physical_setting_dict=physical_setting_dict,
-        component_types=component_types,
-        error_message=error_message,
+) -> List[Error]:
+    errors = []
+    errors.extend(
+        validate_video_components(
+            manifest=manifest,
+            university=university,
+            num_workers=num_workers,
+        )
     )
 
-    error_dict_non_released = collections.defaultdict(int)
-    error_dict_released = collections.defaultdict(int)
-    if error_message and released_videos is not None:
-        for err in error_message:
-            if err.uid not in released_videos[u]:
+    vps = {
+        (vc.university_video_id, vc.component_index): os.path.join(
+            manifest.videos[video_id].university_video_folder_path,
+            vc.video_component_relative_path,
+        )
+        for video_id, vcs in manifest.video_components.items()
+        for vc in vcs
+    }
+    print("Obtaining MP4 metadata")
+    video_infos, video_errs = get_video_metadata(vps, num_workers)
+    errors.extend(video_errs)
+
+    video_infos_by_video_id = defaultdict(list)
+    for (v_uid, comp_idx), vi in video_infos.items():
+        video_infos_by_video_id[v_uid].append((comp_idx, vi))
+
+    for vs in video_infos_by_video_id.values():
+        vs.sort(key=lambda x: x[0])
+
+    print("Validating MP4 files")
+    errors.extend(
+        validate_mp4s(
+            {k: [x[1] for x in vs] for k, vs in video_infos_by_video_id.items()}
+        )
+    )
+    print("Validating synchronized video metadata")
+    errors.extend(
+        validate_synchronized_metadata(
+            video_metadata_dict=manifest.videos,
+            synchronized_video_dict=manifest.sync_videos,
+        )
+    )
+    print("Validating auxiliary video metadata")
+    errors.extend(
+        validate_auxilliary_videos(
+            video_metadata_dict=manifest.videos,
+            video_components_dict=manifest.video_components,
+            auxiliary_video_component_dict=manifest.aux_components,
+            component_types=metadata.component_types,
+        )
+    )
+    print("Validating participant metadata")
+    errors.extend(
+        validate_participant(
+            manifest.videos,
+            manifest.participants,
+        )
+    )
+    print("validating annotations")
+    errors.extend(
+        validate_annotations(
+            manifest.videos,
+            manifest.annotations,
+        )
+    )
+    print("validating video metadata")
+    errors.extend(
+        validate_video_metadata(
+            manifest=manifest,
+            standard_metadata=metadata,
+        )
+    )
+    return errors
+
+
+def summarize_errors(
+    errors: List[Error],
+    released_videos: Optional[Dict[str, List[str]]],
+    university: str,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    error_dict_non_released = defaultdict(int)
+    error_dict_released = defaultdict(int)
+    if len(errors) > 0 and released_videos is not None:
+        for err in errors:
+            if err.uid not in released_videos[university]:
                 error_dict_non_released[err.errorType] += 1
             else:
                 error_dict_released[err.errorType] += 1
 
-    fields = ["univeristy_video_id", "errorType", "description", "is_released"]
-    with open(error_details_path, "w") as f:
-        # using csv.writer method from CSV package
-        write = csv.writer(f)
-        write.writerow(fields)
-        for e in error_message:
-            if released_videos is None:
-                continue
-            if e.uid not in released_videos[u]:
-                write.writerow([e.uid, e.errorType, e.description, 0])
-            else:
-                write.writerow([e.uid, e.errorType, e.description, 1])
-    with open(error_summary_path, "w") as f:
-        write = csv.writer(f)
-        write.writerow(["Not Yet Released Videos"])
-        write.writerow(["error_type", "num_of_occurrences"])
-        for error_type, error_counts in error_dict_non_released.items():
-            write.writerow([error_type, error_counts])
-        write.writerow(["Released Videos"])
-        write.writerow(["error_type", "num_of_occurrences"])
-        for error_type, error_counts in error_dict_released.items():
-            write.writerow([error_type, error_counts])
-    return error_message
+    errors_dict = {
+        "uid": [],
+        "error_type": [],
+        "description": [],
+        "is_released": [],
+    }
+
+    err_by_type_in_release = defaultdict(int)
+    err_by_type_total = defaultdict(int)
+    for e in errors:
+        errors_dict["uid"].append(e.uid)
+        errors_dict["error_type"].append(e.type)
+        errors_dict["description"].append(e.description)
+        errors_dict["is_released"].append(
+            e.uid in released_videos if released_videos is not None else None
+        )
+
+        if released_videos is not None and e.uid in released_videos:
+            err_by_type_in_release[e.type] += 1
+        err_by_type_total[e.type] += 1
+
+    summary_dict = {
+        "error_type": [],
+        "num_total": [],
+        "num_in_release": [],
+    }
+
+    for et, t in err_by_type_total.items():
+        summary_dict["error_type"].append(et)
+        summary_dict["num_total"].append(t)
+        summary_dict["num_in_release"].append(err_by_type_in_release.get(et, None))
+
+    errors_df = pd.DataFrame(errors_dict)
+    summary_df = pd.DataFrame(summary_dict)
+    return errors_df, summary_df
 
 
-def validate_all(
-    path,
-    s3,
-    u,
-    released_video_path,
-    standard_metadata_folder,
-    error_details_path,
-    error_summary_path,
-    num_workers,
-    expiry_time_sec,
+def run_validation(
+    manifest_dir: str,
+    standard_metadata_folder: str,
+    input_university: str,
+    num_workers: int,
+    expiry_time_sec: int,
+    released_video_path: str,
+    output_dir: str,
 ):
-    # get access to metadata_folder
-    devices, component_types, scenarios = load_standard_metadata_files(
-        standard_metadata_folder
-    )
-    released_videos = load_released_video_files(released_video_path)
-    if s3:
-        bucket, _ = split_s3_path(path)
-    else:
-        bucket = None
+    global stream_path_mgr
+    if stream_path_mgr is not None:
+        raise AssertionError(
+            "Don't use this method in multi-threaded contexts. Use processes instead."
+        )
 
-    (
-        video_metadata_dict,
-        video_components_dict,
-        auxiliary_video_component_dict,
-        participant_dict,
-        synchronized_video_dict,
-        physical_setting_dict,
-        annotations_dict,
-    ) = load_university_files(path)
-    validate_university_files(
-        video_metadata_dict=video_metadata_dict,
-        video_components_dict=video_components_dict,
-        auxiliary_video_component_dict=auxiliary_video_component_dict,
-        participant_dict=participant_dict,
-        synchronized_video_dict=synchronized_video_dict,
-        physical_setting_dict=physical_setting_dict,
-        annotations_dict=annotations_dict,
-        devices=devices,
-        component_types=component_types,
-        scenarios=scenarios,
-        bucket_name=bucket,
-        s3=s3,
-        u=u,
-        released_videos=released_videos,
-        error_details_path=error_details_path,
-        error_summary_path=error_summary_path,
+    stream_path_mgr = StreamPathMgr(expiration_sec=expiry_time_sec)
+
+    # get access to metadata_folder
+    metadata = load_standard_metadata_files(standard_metadata_folder)
+    manifest = load_manifest(manifest_dir)
+    released_videos = load_released_video_files(released_video_path)
+
+    errors = validate_university_files(
+        university=input_university,
+        manifest=manifest,
+        metadata=metadata,
         num_workers=num_workers,
-        expiry_time_sec=expiry_time_sec,
     )
+    errors_df, summary_df = summarize_errors(
+        errors=errors,
+        released_videos=released_videos,
+        university=input_university,
+    )
+    if len(summary_df) > 0:
+        summary_df.to_csv("/dev/stdout", index=False)
+    else:
+        print("No errors")
+
+    print(f"Writing to directory: {output_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    errors_df.to_csv(os.path.join(output_dir, "errors.csv"), index=False)
+    summary_df.to_csv(os.path.join(output_dir, "summary.csv"), index=False)
+
+    # NOTE: this is not the best solution, but we're likely going to be running
+    # this once per python interpreter context
+    stream_path_mgr = None

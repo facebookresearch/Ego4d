@@ -1,4 +1,5 @@
-from university_files import *
+from types import AuxiliaryVideoComponentDataFile, VideoComponentFile, VideoMetadata
+
 import boto3
 import validate
 from ffmpeg_utils import VideoInfo

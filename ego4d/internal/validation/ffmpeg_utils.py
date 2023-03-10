@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Dict, List, Optional, Tuple
 
-from ego4d.internal.validation.university_files import ErrorMessage
+from ego4d.internal.validation.types import Error, ErrorLevel
 
 
 @dataclass(frozen=True)
@@ -44,13 +44,12 @@ class VideoInfo:
 def get_video_info(
     filename: str,
     name: Optional[str] = None,
-) -> Tuple[Optional[VideoInfo], List[ErrorMessage]]:
+) -> Tuple[Optional[VideoInfo], Optional[Error]]:
     """
     Return:
         VideoInfo: information of the video stored in bucket_name specified by the object_name
         If error, returns None and log the error.
     """
-    error_message = []
     name = name if name is not None else filename
 
     cmd = [
@@ -81,30 +80,27 @@ def get_video_info(
         try:
             result = subprocess.run(cmd, encoding="utf-8", capture_output=True)
         except Exception as ex:
-            error_message.append(
-                ErrorMessage(
-                    name,
-                    "ffmpeg_cannot_read_error",
-                    f"{ex}",
-                )
+            return None, Error(
+                ErrorLevel.ERROR,
+                name,
+                "ffmpeg_cannot_read_error",
+                f"{ex}",
             )
-            return None, error_message
 
         if result.stderr:
             if "tls" in result.stderr:
-                x *= 2
+                x *= 2.5
                 continue
             if "http" in result.stderr:
-                x *= 2
+                x *= 2.5
                 continue
-            error_message.append(
-                ErrorMessage(
-                    name,
-                    "ffmpeg_cannot_read_error",
-                    f"{result.stderr}",
-                )
+            return None, Error(
+                ErrorLevel.ERROR,
+                name,
+                "ffmpeg_cannot_read_error",
+                f"{result.stderr}",
             )
-            return None, error_message
+
         break
 
     assert result is not None
@@ -204,4 +200,4 @@ def get_video_info(
         video_time_base=vtb,
         mp4_duration=mp4_duration,
     )
-    return video_info, error_message
+    return video_info, None

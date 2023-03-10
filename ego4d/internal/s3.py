@@ -1,10 +1,13 @@
-from typing import Any, List
+from typing import List
 
 import boto3
 import botocore.client as bclient
 from iopath import PathManager
 
 DEFAULT_NUM_WORKERS = 32
+
+
+S3Client = bclient.BaseClient
 
 
 def _get_location(bucket_name: str) -> str:
@@ -18,7 +21,7 @@ def get_client(
     num_workers: int,
     connect_timeout: int = 180,
     max_attempts: int = 3,
-) -> Any:
+) -> S3Client:
     return boto3.client(
         "s3",
         config=bclient.Config(
@@ -31,10 +34,15 @@ def get_client(
 
 
 class StreamPathMgr:
-    def __init__(self):
+    def __init__(self, expiration_sec: int = 7200):
         self.clients = {}
+        self.expr_sec = expiration_sec
+        self.cached_paths = {}
 
-    def open(self, path: str, expiration_sec: int = 7200) -> str:
+    def open(self, path: str) -> str:
+        if path in self.cached_paths:
+            return self.cached_paths[path]
+
         if path.startswith("s3"):
             temp = path.split("s3://")[1].split("/")
             bucket_name = temp[0]
@@ -45,11 +53,13 @@ class StreamPathMgr:
                 self.clients[bucket_name] = get_client(bucket_name, DEFAULT_NUM_WORKERS)
 
             client = self.clients[bucket_name]
-            return client.generate_presigned_url(
+            ret = client.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": bucket_name, "Key": object_name},
-                ExpiresIn=expiration_sec,
+                ExpiresIn=self.expr_sec,
             )
+            self.cached_paths[path] = ret
+            return ret
         else:
             return path
 
