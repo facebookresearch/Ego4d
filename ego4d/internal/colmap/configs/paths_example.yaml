@@ -1,0 +1,35 @@
+in_metadata_path: null
+in_videos: {
+  aria01: "s3://ego4d-penn/data/0303_Violin_2/ego/aria/c2e4b041-4e68-4b75-8338-f8c625429e75.vrs",
+  cam01: "s3://ego4d-penn/data/0303_Violin_2/exo/gp01/GX010190.MP4",
+  cam02: "s3://ego4d-penn/data/0303_Violin_2/exo/gp02/GX010175.MP4",
+  cam03: "s3://ego4d-penn/data/0303_Violin_2/exo/gp03/GX010012.MP4",
+  cam04: "s3://ego4d-penn/data/0303_Violin_2/exo/gp04/GX010195.MP4",
+  mobile: "s3://ego4d-penn/data/0303_Violin_2/exo/mobile/GX010020.MP4",
+}
+output_dir: "/private/home/miguelmartin/ego4d/ego4d_public/colmap_outputs"
+name: null
+aria_fps: 30
+exo_fps: null
+mobile_fps: null
+include_aria: true
+sync_exo_views: false
+aria_use_sync_info: false
+aria_walkthrough_start_sec: 30.0
+aria_walkthrough_end_sec: 500.0
+use_gpu: true
+rot_mode: 1
+camera_model: "OPENCV_FISHEYE"
+exo_from_frame: 200
+exo_to_frame: 300
+frame_rate: 0.25
+exo_frames: null
+mobile_frames: null
+aria_frames: null
+colmap_bin: null
+vrs_bin: null
+run_colmap: false
+force_download: false
+download_video_files: true
+take_id: "0303_Violin_2"
+video_source: "penn"

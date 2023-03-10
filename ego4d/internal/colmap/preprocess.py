@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import av
 
@@ -16,11 +16,17 @@ import pandas as pd
 
 from ego4d.internal.s3 import StreamPathMgr
 
+from iopath.common.file_io import PathManager
+from iopath.common.s3 import S3PathHandler
+
 from omegaconf import OmegaConf
 
 from tqdm.auto import tqdm
 
-pathmgr = StreamPathMgr()
+stream_pathmgr = StreamPathMgr()
+
+pathmgr = PathManager()
+pathmgr.register_handler(S3PathHandler(profile="default"))
 
 
 VRS_BIN = "/private/home/miguelmartin/repos/vrs/build/tools/vrs/vrs"
@@ -29,27 +35,24 @@ COLMAP_BIN = "/private/home/miguelmartin/repos/colmap/build/src/exe/colmap"
 
 @dataclass
 class ColmapConfig:
-    # TODO: more COLMAP hparams
-    uni_name: str
-    take_id: str
-    data_dir: str
+    in_metadata_path: Optional[str]
+    in_videos: Optional[Dict[str, str]]  # device_id -> path
+    output_dir: str
+    download_video_files: bool
 
-    use_gpu: bool
     sync_exo_views: bool
     rot_mode: int
 
     camera_model: str
     include_aria: bool
 
-    exo1_frames: Optional[List[int]] = None
-    exo2_frames: Optional[List[int]] = None
-    exo3_frames: Optional[List[int]] = None
-    exo4_frames: Optional[List[int]] = None
     mobile_frames: Optional[List[int]] = None
-    aria_frames: Optional[List[int]] = None
-    aria_last_walkthrough_sec: Optional[float] = None
+    aria_frames: Optional[Dict[str, List[int]]] = None
+    aria_walkthrough_start_sec: Optional[float] = None
+    aria_walkthrough_end_sec: Optional[float] = None
     aria_use_sync_info: bool = False
 
+    exo_frames: Optional[Dict[str, List[int]]] = None
     exo_from_frame: Optional[int] = None
     exo_to_frame: Optional[int] = None
     frame_rate: Optional[float] = 1 / 2
@@ -61,24 +64,39 @@ class ColmapConfig:
     run_colmap: bool = False
     colmap_bin: Optional[str] = None
     vrs_bin: Optional[str] = None
-    force_download: bool = False
-    download_video_files: bool = False  # if false then use presigned urls
+
+    force_download: Optional[bool] = False
+    take_id: Optional[str] = None
+    video_source: Optional[str] = None
 
 
-def get_video_data_dir(config) -> str:
-    return os.path.join(config.data_dir, f"{config.uni_name}_{config.take_id}")
+def get_uniq_cache_root_dir(config) -> str:
+    assert (
+        config.video_source is not None and config.take_id is not None
+    ), "need video source and take_id to set unique output dir for COLMAP data"
+    assert config.output_dir is not None, "need cache root dir"
+    return os.path.join(
+        config.output_dir, "cache", f"{config.video_source}_{config.take_id}"
+    )
 
 
 def get_timesync_path(config) -> str:
-    return os.path.join(get_video_data_dir(config), "timesync.csv")
+    return os.path.join(get_uniq_cache_root_dir(config), "timesync.csv")
+
+
+def pilot_video_metadata(uni_name: str, take_id: str) -> str:
+    return f"s3://ego4d-consortium-sharing/internal/egoexo_pilot/{uni_name}/{take_id}/metadata.json"  # noqa
 
 
 def get_colmap_data_dir(config) -> str:
+    assert (
+        config.video_source is not None and config.take_id is not None
+    ), "need video source and take_id to set unique output dir for COLMAP data"
     name = config.name
     if name is None:
-        name = f"{config.camera_model}_g{int(config.use_gpu)}_s{int(config.sync_exo_views)}_r{config.rot_mode}_a{int(config.include_aria)}_fr{config.frame_rate:.3f}"  # noqa
+        name = f"{config.camera_model}_s{int(config.sync_exo_views)}_r{config.rot_mode}_a{int(config.include_aria)}_fr{config.frame_rate:.3f}"  # noqa
     return os.path.join(
-        config.data_dir, "colmap", f"{config.uni_name}_{config.take_id}", name
+        config.output_dir, "output", f"{config.video_source}_{config.take_id}", name
     )
 
 
@@ -88,14 +106,14 @@ def frames_for_region(start_frame: int, end_frame: int, skip_frames: int) -> Lis
 
 
 def get_fps(fp: str) -> float:
-    with av.open(pathmgr.open(fp)) as cont:
+    with av.open(stream_pathmgr.open(fp)) as cont:
         return float(cont.streams[0].average_rate)
 
 
 def produce_colmap_script(
     config: ColmapConfig,
     skip_frame_gen: bool = False,
-):
+) -> ColmapConfig:
     vrs_bin = config.vrs_bin
     colmap_bin = config.colmap_bin
     if vrs_bin is None:
@@ -103,11 +121,18 @@ def produce_colmap_script(
     if colmap_bin is None:
         colmap_bin = COLMAP_BIN
 
+    if not os.path.exists(colmap_bin) and config.run_colmap:
+        raise AssertionError(f"colmap binary does not exist: {colmap_bin}")
+
+    if not os.path.exists(vrs_bin):
+        raise AssertionError(f"vrs binary does not exist: {colmap_bin}")
+
     print("Getting data ready...")
     _get_data_ready(config, config.force_download, vrs_bin, skip_frame_gen)
     print(f"Writing colmap script using {colmap_bin}")
     _write_colmap_file(config, colmap_bin)
     print(f"Please run {os.path.join(get_colmap_data_dir(config), 'run_colmap.sh')}")
+    return config
 
 
 def _get_data_ready(
@@ -118,32 +143,50 @@ def _get_data_ready(
         _extract_frames(config, by_dev_id, vrs_bin)
 
 
-def _download_data(config, force_download):
-    os.makedirs(get_video_data_dir(config), exist_ok=True)
+def _download_data(config: ColmapConfig, force_download: bool) -> Dict[str, Any]:
+    assert config.output_dir is not None, "Please set the output directory"
 
-    metadata_path_local = os.path.join(get_video_data_dir(config), "metadata.json")
-    _get_file_from_s3(
-        f"s3://ego4d-consortium-sharing/internal/egoexo_pilot/{config.uni_name}/{config.take_id}/metadata.json",
-        metadata_path_local,
-    )
-    meta = json.load(open(metadata_path_local))
+    if config.in_metadata_path is None:
+        assert (
+            config.in_videos is not None
+        ), "require input video paths if metdata path is None"
+        assert not config.sync_exo_views, "cannot sync videos without metadata"
 
-    timesync_dl_path = meta["timesync_csv_path"]
-    if timesync_dl_path is not None:
-        print("timesync path=", timesync_dl_path)
-        _get_file_from_s3(timesync_dl_path, get_timesync_path(config))
+        print("WARNING: using input video paths. This should only be used for TESTING")
+        meta = {"videos": [], "timesync_csv_path": None}
+        for dev_id, path in config.in_videos.items():
+            meta["videos"].append(
+                {
+                    "device_id": dev_id,
+                    "s3_path": path,  # may actually be a local path
+                }
+            )
+    else:
+        assert (
+            config.in_videos is None
+        ), "cannot use input videos if metadata is not None"
+        meta = json.load(pathmgr.open(config.in_metadata_path))
+        if config.take_id is None or config.video_source is None:
+            config.take_id = meta["take_id"]
+            config.video_source = meta["video_source"]
+
+    os.makedirs(get_uniq_cache_root_dir(config), exist_ok=True)
+    if meta["timesync_csv_path"] is not None:
+        _download_s3_path(meta["timesync_csv_path"], get_timesync_path(config))
 
     by_dev_id = {}
     for v in tqdm(meta["videos"]):
         by_dev_id[v["device_id"]] = v
         s3_path = v["s3_path"]
-        if config.download_video_files or "aria" in v["device_id"]:
-            path = os.path.join(get_video_data_dir(config), v["device_id"])
-            by_dev_id[v["device_id"]]["local_path"] = path
-            if os.path.exists(path) and not force_download:
+        if s3_path.startswith("s3://") and (
+            config.download_video_files or "aria" in v["device_id"]
+        ):
+            local_path = os.path.join(get_uniq_cache_root_dir(config), v["device_id"])
+            by_dev_id[v["device_id"]]["local_path"] = local_path
+            if os.path.exists(local_path) and not force_download:
                 continue
-            print(f"Fetching {s3_path} to {path}")
-            _get_file_from_s3(s3_path, path)
+            print(f"Fetching {s3_path} to {local_path}")
+            _download_s3_path(s3_path, local_path)
         else:
             by_dev_id[v["device_id"]]["local_path"] = s3_path
     return by_dev_id
@@ -154,8 +197,18 @@ def _extract_frames(config, by_dev_id, vrs_bin):
     shutil.rmtree(frame_out_dir, ignore_errors=True)
     os.makedirs(frame_out_dir, exist_ok=True)
 
+    aria_keys = [k for k in by_dev_id.keys() if "aria" in k]
+    exo_keys = [k for k in by_dev_id.keys() if "cam" in k]
+
     synced_df = None
-    if config.sync_exo_views or config.aria_last_walkthrough_sec is None:
+    if config.sync_exo_views or (
+        config.aria_walkthrough_start_sec is None
+        and config.aria_walkthrough_end_sec is None
+        and config.in_metadata_path is not None
+    ):
+        assert (
+            config.aria_walkthrough_start_sec is None
+        ), "If not providing end sec of walkthrough time, please set start to none for timesync option"  # noqa
         timesync_df = pd.read_csv(get_timesync_path(config))
         cam01_idx = timesync_df.cam01_global_time.first_valid_index()
         cam02_idx = timesync_df.cam02_global_time.first_valid_index()
@@ -165,32 +218,46 @@ def _extract_frames(config, by_dev_id, vrs_bin):
         synced_df = timesync_df.iloc[fsf_idx:]
 
     if config.include_aria:
-        with tempfile.TemporaryDirectory() as tempdir:
-            aria_frame_path = os.path.join(tempdir, "aria01_frames")
-            os.makedirs(aria_frame_path, exist_ok=True)
-            extract_aria_frames(
-                vrs_bin=vrs_bin,
-                aria_vrs_file_path=by_dev_id["aria01"]["local_path"],
-                out_dir=aria_frame_path,
-                synced_df=synced_df,
-                until_point=config.aria_last_walkthrough_sec,
-            )
-            skip_aria = (
-                int(np.round(config.aria_fps * config.frame_rate))
-                if config.aria_fps is not None and config.frame_rate is not None
-                else None
-            )
-            subsample_aria_frames(
-                aria_frame_path, skip_aria, frame_out_dir, config.aria_frames, config
-            )
+        if config.aria_frames is None:
+            config.aria_frames = {k: None for k in aria_keys}
+        for k in aria_keys:
+            with tempfile.TemporaryDirectory() as tempdir:
+                aria_frame_path = os.path.join(tempdir, "aria01_frames")
+                os.makedirs(aria_frame_path, exist_ok=True)
+                extract_aria_frames(
+                    vrs_bin=vrs_bin,
+                    aria_vrs_file_path=by_dev_id[k]["local_path"],
+                    out_dir=aria_frame_path,
+                    synced_df=synced_df,
+                    from_point=config.aria_walkthrough_start_sec,
+                    to_point=config.aria_walkthrough_end_sec,
+                )
+                skip_aria = (
+                    int(np.round(config.aria_fps * config.frame_rate))
+                    if config.aria_fps is not None and config.frame_rate is not None
+                    else None
+                )
+                subsample_aria_frames(
+                    aria_frame_path,
+                    skip_aria,
+                    frame_out_dir,
+                    config.aria_frames[k],
+                    config,
+                    aria_key=k,
+                )
 
     exo_fps = get_fps(by_dev_id["cam01"]["local_path"])
+    pts_by_key = {}
     if config.sync_exo_views:
+        assert set(exo_keys) == {"cam01", "cam02", "cam03", "cam04"}, (
+            "for sync_mode, exo cameras needed: {cam01, cam02, cam03, cam04}, but got "
+            + f"{set(exo_keys)}"
+        )
         f1 = config.exo_from_frame
         f2 = config.exo_to_frame
         skip_num_frames = int(np.round(exo_fps * config.frame_rate))
-        if config.exo1_frames is not None:
-            raise AssertionError("cannot use exo1_frames in sync mode")
+        if config.exo_frames is not None:
+            raise AssertionError("cannot use exo_frames in sync mode")
         cam01_pts = [
             int(x) for x in synced_df.cam01_pts.iloc[f1:f2:skip_num_frames].tolist()
         ]
@@ -203,13 +270,14 @@ def _extract_frames(config, by_dev_id, vrs_bin):
         cam04_pts = [
             int(x) for x in synced_df.cam04_pts.iloc[f1:f2:skip_num_frames].tolist()
         ]
+        pts_by_key["cam01"] = cam01_pts
+        pts_by_key["cam02"] = cam02_pts
+        pts_by_key["cam03"] = cam03_pts
+        pts_by_key["cam04"] = cam04_pts
     else:
         if config.exo_from_frame is not None:
             assert (
-                config.exo1_frames is None
-                and config.exo2_frames is None
-                and config.exo3_frames is None
-                and config.exo4_frames is None
+                config.exo_frames is None
             ), "if given exo_from_frame and exo_to_frame - you cannot supply frames"
             assert config.exo_to_frame is not None, "need to_frame"
             assert config.frame_rate is not None, "need frame rate"
@@ -218,34 +286,13 @@ def _extract_frames(config, by_dev_id, vrs_bin):
             skip_num_frames = int(np.round(exo_fps * config.frame_rate))
 
             frames = list(range(f1, f2))[::skip_num_frames]
-            config.exo1_frames = frames
-            config.exo2_frames = frames
-            config.exo3_frames = frames
-            config.exo4_frames = frames
-        elif config.exo1_frames is not None:
-            assert (
-                config.exo1_frames is not None
-                and config.exo2_frames is not None
-                and config.exo3_frames is not None
-                and config.exo4_frames is not None
-            ), "if given exo1_frames, assume you to give all other frames"
+            config.exo_frames = {k: frames for k in exo_keys}
 
-        print(f"exo1_frames=\n{config.exo1_frames}")
-        print(f"exo2_frames=\n{config.exo2_frames}")
-        print(f"exo3_frames=\n{config.exo3_frames}")
-        print(f"exo4_frames=\n{config.exo4_frames}")
-        cam01_pts = get_all_pts(
-            by_dev_id["cam01"]["local_path"], idx_set=config.exo1_frames
-        )
-        cam02_pts = get_all_pts(
-            by_dev_id["cam02"]["local_path"], idx_set=config.exo2_frames
-        )
-        cam03_pts = get_all_pts(
-            by_dev_id["cam03"]["local_path"], idx_set=config.exo3_frames
-        )
-        cam04_pts = get_all_pts(
-            by_dev_id["cam04"]["local_path"], idx_set=config.exo4_frames
-        )
+        for k in exo_keys:
+            assert config.exo_frames[k] is not None, f"exo_frames have frames for {k}"
+            print(f"{k}_frames=\n{config.exo_frames[k]}")
+            pts = get_all_pts(by_dev_id[k]["local_path"], idx_set=config.exo_frames[k])
+            pts_by_key[k] = pts
 
     mobile_frames = config.mobile_frames
     if mobile_frames is not None:
@@ -265,29 +312,28 @@ def _extract_frames(config, by_dev_id, vrs_bin):
             by_dev_id["mobile"]["local_path"], config.mobile_frames
         )
 
-    assert issorted(cam01_pts)
-    assert issorted(cam02_pts)
-    assert issorted(cam03_pts)
-    assert issorted(cam04_pts)
-    assert issorted(mobile_pts)
-
-    devices = ["cam01", "cam02", "cam03", "cam04", "mobile"]
-    pts_data = [cam01_pts, cam02_pts, cam03_pts, cam04_pts, mobile_pts]
-    for dev_name, pts_set in tqdm(zip(devices, pts_data)):
+    pts_by_key["mobile"] = mobile_pts
+    for dev_name, pts_set in tqdm(pts_by_key.items()):
+        assert issorted(pts_set)
         print(dev_name, len(pts_set))
         frames = get_frames_list(by_dev_id[dev_name]["local_path"], pts_set)
+
         save_off_frames(
             frames, pts_set, f"{frame_out_dir}/{dev_name}", config.rot_mode == 2
         )
 
 
 def _write_colmap_file(config: ColmapConfig, colmap_bin: str):
-    gpu_idx = 0 if config.use_gpu else -1
     colmap_bin_str = "${1:-" + colmap_bin + "}"
+    gpu_idx_str = "${2:-0}"
     script = f"""
 COLMAP_BIN={colmap_bin_str}
+GPU_IDX={gpu_idx_str}
 echo "Using $COLMAP_BIN"
-echo "You can provide your own COLMAP binary by providing it as an arg to this script"
+echo "You can provide your own COLMAP binary by providing it as the first arg to this script"
+
+echo "Using GPU: $GPU_IDX"
+echo "You can provide -1 for CPU or another index as the second arg to this script"
 
 SCRIPT_DIR=$(dirname -- $0)
 DB_PATH=$SCRIPT_DIR/colmap.db
@@ -302,7 +348,7 @@ mkdir $UNDIST_DIR
 $COLMAP_BIN feature_extractor \\
    --database_path $DB_PATH \\
    --image_path $IN_FRAME_DIR \\
-   --SiftExtraction.gpu_index {gpu_idx} \\
+   --SiftExtraction.gpu_index $GPU_IDX \\
    --ImageReader.single_camera_per_folder 1 \\
    --ImageReader.camera_mode {config.camera_model}
 
@@ -312,7 +358,7 @@ $COLMAP_BIN mapper \\
     --database_path $DB_PATH \\
     --image_path $IN_FRAME_DIR \\
     --output_path $MODEL_DIR \\
-    --Mapper.ba_global_pba_gpu_index {gpu_idx}
+    --Mapper.ba_global_pba_gpu_index $GPU_IDX
 
 $COLMAP_BIN model_converter \
     --input_path $MODEL_DIR/0 \
@@ -345,7 +391,7 @@ def get_frames_iter(video_path, pts_set):
     min_pts = min(pts_set)
     max_pts = max(pts_set)
 
-    with av.open(pathmgr.open(video_path)) as cont:
+    with av.open(stream_pathmgr.open(video_path)) as cont:
         v_stream = cont.streams.video[0]
         cont.seek(min_pts, stream=v_stream)
         for frame in cont.decode(video=0):
@@ -363,7 +409,7 @@ def get_frames_list(video_path, pts_set):
     max_pts = max(pts_set)
 
     frame_data = {}
-    with av.open(pathmgr.open(video_path)) as cont:
+    with av.open(stream_pathmgr.open(video_path)) as cont:
         v_stream = cont.streams.video[0]
         cont.seek(min_pts, stream=v_stream)
         for frame in cont.decode(video=0):
@@ -392,7 +438,7 @@ def save_off_frames(frames, pts_set, out_dir, rot90):
 
 
 def get_all_pts(video_path, idx_set=None):
-    with av.open(pathmgr.open(video_path)) as cont:
+    with av.open(stream_pathmgr.open(video_path)) as cont:
         frame_pts = []
         idx = 0
         for frame in cont.demux(video=0):
@@ -412,11 +458,15 @@ def extract_aria_frames(
     out_dir: str,
     synced_df: Optional[pd.DataFrame],
     stream_name="214-1",
-    until_point: Optional[float] = None,
+    from_point: Optional[float] = None,
+    to_point: Optional[float] = None,
 ):
-    if synced_df is not None and until_point is None:
+    if synced_df is not None:
+        assert from_point is None and to_point is None
+        # TODO: get a better estimate for this
         t_end = synced_df["aria01_1201-2_capture_timestamp_ns"].iloc[0] / 10**9
-        # !$vrs extract-images $data_path/aria01.mp4 + "214-1" --before $t_end --to $input_aria_frames
+        # !$vrs extract-images $data_path/aria01.mp4 + "214-1
+        # " --before $t_end --to $input_aria_frames
         subprocess.run(
             [
                 vrs_bin,
@@ -431,25 +481,35 @@ def extract_aria_frames(
             ]
         )
     else:
-        assert until_point is not None, "will not exact all aria frames"
-        t_end = until_point
-        subprocess.run(
-            [
-                vrs_bin,
-                "extract-images",
-                aria_vrs_file_path,
-                "+",
-                stream_name,
+        assert (
+            to_point is not None or from_point is not None
+        ), "will not exact all aria frames, please specify a region"
+        cmd = [
+            vrs_bin,
+            "extract-images",
+            aria_vrs_file_path,
+            "+",
+            stream_name,
+        ]
+        if to_point is not None:
+            cmd += [
                 "--before",
-                f"{t_end}",
-                "--to",
-                out_dir,
+                f"{to_point}",
             ]
-        )
+        if from_point is not None:
+            cmd += ["--after", f"{from_point}"]
+
+        cmd += ["--to", out_dir]
+        subprocess.run(cmd)
 
 
 def subsample_aria_frames(
-    input_aria_frame_dir, skip_num_frames, frame_out_dir, aria_frames_subset, config
+    input_aria_frame_dir,
+    skip_num_frames,
+    frame_out_dir,
+    aria_frames_subset,
+    config,
+    aria_key,
 ):
     aria_frames = os.listdir(input_aria_frame_dir)
     out_frame_dir = os.path.join(frame_out_dir, "aria01")
@@ -460,7 +520,7 @@ def subsample_aria_frames(
     if f_idx is None:
         f_idx = list(range(len(aria_frames)))[::skip_num_frames]
 
-    config.aria_frames = f_idx
+    config.aria_frames[aria_key] = f_idx
 
     for idx in f_idx:
         f = aria_frames[idx]
@@ -474,9 +534,10 @@ def subsample_aria_frames(
             shutil.copy(full_path, out_path)
 
 
-def _get_file_from_s3(path: str, out_path: str):
+def _download_s3_path(s3_path: str, out_path: str):
+    assert s3_path.startswith("s3://")
     s3 = boto3.client("s3")
-    no_s3_path = path.split("s3://")[1]
+    no_s3_path = s3_path.split("s3://")[1]
     temp = no_s3_path.split("/")
     bucket_name = temp[0]
     key = "/".join(temp[1:])
@@ -490,7 +551,7 @@ def create_video(video_path, pts_set, out_path, fps=30, codec="h264", flip_90=Tr
     frames = get_frames_iter(video_path, pts_set)
     print("Received frames")
 
-    with av.open(pathmgr.open(video_path)) as in_container:
+    with av.open(stream_pathmgr.open(video_path)) as in_container:
         in_video_stream = in_container.streams.video[0]
         width, height = in_video_stream.width, in_video_stream.height
         if width % 2 != 0:
@@ -510,7 +571,7 @@ def create_video(video_path, pts_set, out_path, fps=30, codec="h264", flip_90=Tr
             video_stream.height = height
         video_stream.pix_fmt = pix_fmt
         out_cont.start_encoding()
-        for _, frame in tqdm(frames, total=len(pts_set)):
+        for _, frame in frames:
             img = frame[0:height, 0:width, :]
             if flip_90:
                 img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
@@ -526,11 +587,12 @@ def create_video(video_path, pts_set, out_path, fps=30, codec="h264", flip_90=Tr
 @hydra.main(config_path="configs", config_name=None)
 def run_colmap_preprocess(config: ColmapConfig):
     print(f"Working Directory {os.getcwd()} - please make sure you're using abs paths")
-    produce_colmap_script(config)
+    ret = produce_colmap_script(config)
     if config.run_colmap:
         subprocess.run(
             ["bash", os.path.join(get_colmap_data_dir(config), "run_colmap.sh")]
         )
+    return ret
 
 
 if __name__ == "__main__":

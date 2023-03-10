@@ -60,6 +60,11 @@ conda activate colmap
 pip install -r ego4d/internal/colmap/requirements.txt
 ```
 
+### Setting up Aria Data Tool's: VRS
+
+Please install vrs via following the instructions [here](https://github.com/facebookresearch/vrs#instructions-macos-and-ubuntu-and-container).
+
+Once you have set this up you can set your vrs_bin in your configuration to use this.
 
 ### (Optional) Setting up COLMAP
 Please see my

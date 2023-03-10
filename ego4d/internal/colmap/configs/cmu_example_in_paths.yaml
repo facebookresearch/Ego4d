@@ -1,0 +1,35 @@
+in_metadata_path: null
+in_videos: {
+  cam01: "/private/home/miguelmartin/ego4d/ego4d_public/unc_T1_data/cam01.mp4",
+  cam02: "/private/home/miguelmartin/ego4d/ego4d_public/unc_T1_data/cam02.mp4",
+  cam03: "/private/home/miguelmartin/ego4d/ego4d_public/unc_T1_data/cam03.mp4",
+  cam04: "/private/home/miguelmartin/ego4d/ego4d_public/unc_T1_data/cam04.mp4",
+  mobile: "/private/home/miguelmartin/ego4d/ego4d_public/unc_T1_data/mobile.mp4",
+  aria01: "/private/home/miguelmartin/ego4d/ego4d_public/unc_T1_data/aria01.vrs",
+}
+output_dir: "/private/home/miguelmartin/ego4d/ego4d_public/colmap_outputs"
+name: null
+aria_fps: 30
+exo_fps: null
+mobile_fps: null
+include_aria: true
+sync_exo_views: false
+aria_use_sync_info: false
+aria_walkthrough_start_sec: 50.0
+aria_walkthrough_end_sec: 600.0
+use_gpu: true
+rot_mode: 1
+camera_model: "OPENCV_FISHEYE"
+exo_from_frame: 200
+exo_to_frame: 300
+frame_rate: 0.25
+exo_frames: null
+mobile_frames: null
+aria_frames: null
+colmap_bin: null
+vrs_bin: null
+run_colmap: false
+force_download: false
+download_video_files: true
+take_id: "T1"
+video_source: "unc"

@@ -1,5 +1,7 @@
 in_metadata_path: "s3://ego4d-consortium-sharing/internal/egoexo_pilot/unc/T1/metadata.json"
 in_videos: null
+take_id: null
+video_source: null
 output_dir: "/private/home/miguelmartin/ego4d/ego4d_public/colmap_outputs"
 name: null
 aria_fps: 30
@@ -10,19 +12,27 @@ sync_exo_views: false
 aria_use_sync_info: false
 aria_walkthrough_start_sec: null
 aria_walkthrough_end_sec: null
-use_gpu: true
 rot_mode: 1
 camera_model: "OPENCV_FISHEYE"
-exo_from_frame: 200
-exo_to_frame: 300
-frame_rate: 0.25
-exo_frames: null
-mobile_frames: null
-aria_frames: null
+frame_rate: 0.5
+exo_from_frame: null
+exo_to_frame: null
+exo_frames: {
+  cam01: [100, 200],
+  cam02: [30, 20],
+  cam03: [5, 10],
+  cam04: [11, 50],
+}
+mobile_frames:
+  - 1
+  - 2
+  - 3
+  - 4
+aria_frames: {
+  aria01: [100, 500]
+}
+run_colmap: false
 colmap_bin: null
 vrs_bin: null
-run_colmap: false
 force_download: false
 download_video_files: true
-take_id: null
-video_source: null
