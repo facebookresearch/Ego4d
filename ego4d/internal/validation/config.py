@@ -5,46 +5,13 @@ A data object for storing user options, along with utilities for parsing input o
 from command line flags and a configuration file.
 """
 import argparse
+import datetime
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Optional
 
-import boto3.session
-from botocore.exceptions import ProfileNotFound
-from ego4d.cli.universities import UNIV_TO_BUCKET
-
-# TODO: move/changeme
-unis = [
-    "unict",
-    "cmu",
-    "iiith",
-    "minnesota",
-    "utokyo",
-    "kaust",
-    "indiana",
-    "nus",
-    "bristol",
-    "georgiatech",
-    "frl_track_1_public",
-    "cmu_africa",
-    "uniandes",
-]
-meta_path = [
-    "metadata_v5",
-    "metadata_v27",
-    "2021-08-29_august_fixed",
-    "metadata_v10",
-    "metadata_v3",
-    "metadata_v7",
-    "metadata-v4",
-    "metadata_v1.2",
-    "metadata-v3",
-    "metadata_v3",
-    "track1/metadata_v0",
-    "metadata_v3",
-    "metadata_v0",
-]
+from ego4d.cli.universities import BUCKET_TO_UNIV, UNIV_TO_BUCKET
 
 
 @dataclass
@@ -58,10 +25,8 @@ class ValidatedConfig:
     validate_all: bool
     metadata_folder: str
     input_university: str
-    error_details_name: str
-    error_summary_name: str
+    output_dir: str
     aws_profile_name: str
-    universities: Set[str]
     num_workers: int
     expiry_time_sec: int
     released_video_path: Optional[str] = None
@@ -77,14 +42,12 @@ class Config:
     input_directory: str
     validate_all: bool
     metadata_folder: str
-    input_university: str
-    error_details_name: str
-    error_summary_name: str
     num_workers: int
     expiry_time_sec: int
     aws_profile_name: str
-    universities: List[str] = field(default_factory=list)
     released_video_path: Optional[str] = None
+    input_university: Optional[str] = None
+    output_dir: Optional[str] = None
 
 
 def validate_config(cfg: Config) -> ValidatedConfig:
@@ -96,26 +59,39 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         A ValidatedConfig if all user-supplied options appear valid
     """
 
-    try:
-        boto3.session.Session(profile_name=cfg.aws_profile_name)
-    except ProfileNotFound:
-        raise RuntimeError(f"Could not find AWS profile '{cfg.aws_profile_name}'.")
-
     def _maybe_fix_s3_folder(path: str) -> str:
         if path.startswith("s3") and not path.endswith("/"):
             return path + "/"
         return path
+
+    if cfg.input_directory.startswith("s3://"):
+        if cfg.input_university is not None:
+            raise AssertionError("please do not provide a university name")
+
+        bucket = cfg.input_directory.split("s3://")[1].split("/")[0]
+        cfg.input_university = BUCKET_TO_UNIV[bucket]
+
+    if cfg.input_university not in set(UNIV_TO_BUCKET.keys()):
+        raise AssertionError(f"{cfg.input_university} is not a valid university")
+
+    if cfg.aws_profile_name != "default":
+        raise AssertionError(
+            "aws profile!=default: other profiles not currently supported"
+        )
+
+    if cfg.output_dir is None:
+        time_now = f"{datetime.datetime.now().strftime('%d%m%y_%H%M%S')}"
+        cfg.output_dir = f"s3://ego4d-consortium-sharing/internal/validation/{cfg.input_university}/{time_now}"  # noqa
+        print(f"Using output directory: {cfg.output_dir}")
 
     return ValidatedConfig(
         input_directory=_maybe_fix_s3_folder(cfg.input_directory),
         validate_all=bool(cfg.validate_all),
         metadata_folder=_maybe_fix_s3_folder(cfg.metadata_folder),
         released_video_path=cfg.released_video_path,
-        input_university=_maybe_fix_s3_folder(cfg.input_university),
-        error_details_name=cfg.error_details_name,
-        error_summary_name=cfg.error_summary_name,
+        input_university=cfg.input_university,
+        output_dir=cfg.output_dir,
         aws_profile_name=cfg.aws_profile_name,
-        universities=set(cfg.universities) if cfg.universities else {},
         num_workers=cfg.num_workers,
         expiry_time_sec=cfg.expiry_time_sec,
     )
@@ -161,32 +137,31 @@ def config_from_args(args=None) -> Config:
         "-mf",
         "--metadata_folder",
         help="The S3 path where the device/component_type/scenario metadata is stored",
+        default="ego4d/internal/validation/standard_metadata/ego4d",
     )
     flag_parser.add_argument(
         "-rp",
         "--released_video_path",
         help="The path where released_videos file is stored",
         default=None,
-        required=False,
     )
     flag_parser.add_argument(
         "-u",
         "--input_university",
         help="The university name we're checking data on",
+        default=None,
     )
     flag_parser.add_argument(
-        "-ed", "--error_details_name", help="output file name for error details"
-    )
-    flag_parser.add_argument(
-        "-es", "--error_summary_name", help="output file name for error summary"
+        "-o",
+        "--output_dir",
+        help="output directory",
     )
     flag_parser.add_argument(
         "-nw",
         "--num_workers",
         type=int,
         help="number of workers",
-        default=25,
-        required=False,
+        default=10,
     )
     flag_parser.add_argument(
         "-expiry",
@@ -194,21 +169,12 @@ def config_from_args(args=None) -> Config:
         type=int,
         help="default expiry for presigned URLs (in seconds)",
         default=3600,
-        required=False,
     )
     flag_parser.add_argument(
         "--aws_profile_name",
         help="Defaults to 'default'. Specifies the AWS profile name from "
         "~/.aws/credentials to use for the download",
         default="default",
-    )
-    flag_parser.add_argument(
-        "--universities",
-        nargs="+",
-        choices=UNIV_TO_BUCKET.keys(),
-        help="List of university IDs. If specified, only UIDs from the S3 buckets "
-        "belonging to the listed universities will be downloaded. A full list of "
-        "university IDs can be found in the ego4d/cli/universities.py file.",
     )
 
     # Use the values in the config file, but set them as defaults to flag_parser so they
@@ -217,7 +183,6 @@ def config_from_args(args=None) -> Config:
         with open(args.config_path.expanduser()) as f:
             config_contents = json.load(f)
             flag_parser.set_defaults(**config_contents)
-    # args.released_video_path = getattr(args, "released_video_path", None)
 
     parsed_args = flag_parser.parse_args(remaining)
 
@@ -226,18 +191,6 @@ def config_from_args(args=None) -> Config:
     # Note: Since the flags from the config file are being used as default argparse
     # values, we can't set required=True. Doing so would mean that the user couldn't
     # leave them unspecified when invoking the CLI.
-
     config = Config(**flags)
-
-    # We need to check the universities values here since they might have been set
-    # through the JSON config file, in which case the argparse checks won't validate
-    # them
-    universities = set(UNIV_TO_BUCKET.keys())
-    unrecognized = set(config.universities) - universities
-    if unrecognized:
-        raise RuntimeError(
-            f"Unrecognized universities: {unrecognized}. Please choose "
-            f"from: {universities}"
-        )
 
     return config
