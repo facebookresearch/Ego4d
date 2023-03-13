@@ -19,12 +19,16 @@ from ego4d.internal.validation.types import (
     ComponentType,
     Error,
     ErrorLevel,
+    load_egoexo_manifest,
     load_manifest,
     load_released_video_files,
     load_standard_metadata_files,
+    load_standard_metadata_files_egoexo,
     Manifest,
+    ManifestEgoExo,
     Particpant,
     StandardMetadata,
+    StandardMetadataEgoExo,
     SynchronizedVideos,
     VideoComponentFile,
 )
@@ -651,7 +655,7 @@ def get_video_metadata(
     return metadata, errors
 
 
-def validate_university_files(  # noqa :C901
+def validate_ego4d_files(  # noqa :C901
     university: str,
     manifest: Manifest,
     metadata: StandardMetadata,
@@ -782,6 +786,17 @@ def summarize_errors(
     return errors_df, summary_df
 
 
+def validate_egoexo_files(
+    university: str,
+    manifest: ManifestEgoExo,
+    metadata: StandardMetadataEgoExo,
+    num_workers: int,
+) -> List[Error]:
+    errors = []
+
+    return errors
+
+
 def run_validation(
     manifest_dir: str,
     standard_metadata_folder: str,
@@ -789,6 +804,7 @@ def run_validation(
     num_workers: int,
     expiry_time_sec: int,
     released_video_path: str,
+    version: str,
     output_dir: str,
 ):
     global stream_path_mgr
@@ -800,16 +816,30 @@ def run_validation(
     stream_path_mgr = StreamPathMgr(expiration_sec=expiry_time_sec)
 
     # get access to metadata_folder
-    metadata = load_standard_metadata_files(standard_metadata_folder)
-    manifest = load_manifest(manifest_dir)
-    released_videos = load_released_video_files(released_video_path)
+    if version.lower() == "egoexo":
+        metadata = load_standard_metadata_files_egoexo(standard_metadata_folder)
+        manifest = load_egoexo_manifest(manifest_dir)
+        released_videos = None  # TODO: load ingested videos here
 
-    errors = validate_university_files(
-        university=input_university,
-        manifest=manifest,
-        metadata=metadata,
-        num_workers=num_workers,
-    )
+        errors = validate_egoexo_files(
+            university=input_university,
+            manifest=manifest,
+            metadata=metadata,
+            num_workers=num_workers,
+        )
+    else:
+        assert version.lower() == "ego4d", "expected ego4d as version"
+        metadata = load_standard_metadata_files(standard_metadata_folder)
+        manifest = load_manifest(manifest_dir)
+        released_videos = load_released_video_files(released_video_path)
+
+        errors = validate_ego4d_files(
+            university=input_university,
+            manifest=manifest,
+            metadata=metadata,
+            num_workers=num_workers,
+        )
+
     errors_df, summary_df = summarize_errors(
         errors=errors,
         released_videos=released_videos,

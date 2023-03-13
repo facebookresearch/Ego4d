@@ -29,6 +29,7 @@ class ValidatedConfig:
     aws_profile_name: str
     num_workers: int
     expiry_time_sec: int
+    version: str
     released_video_path: Optional[str] = None
 
 
@@ -45,6 +46,7 @@ class Config:
     num_workers: int
     expiry_time_sec: int
     aws_profile_name: str
+    version: str
     released_video_path: Optional[str] = None
     input_university: Optional[str] = None
     output_dir: Optional[str] = None
@@ -84,6 +86,13 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         cfg.output_dir = f"s3://ego4d-consortium-sharing/internal/validation/{cfg.input_university}/{time_now}"  # noqa
         print(f"Using output directory: {cfg.output_dir}")
 
+    if cfg.metadata_folder is None:
+        cfg.metadata_folder = (
+            "ego4d/internal/validation/standard_metadata/egoexo"
+            if cfg.version == "egoexo"
+            else "ego4d/internal/validation/standard_metadata/ego4d/"
+        )
+
     return ValidatedConfig(
         input_directory=_maybe_fix_s3_folder(cfg.input_directory),
         validate_all=bool(cfg.validate_all),
@@ -94,6 +103,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         aws_profile_name=cfg.aws_profile_name,
         num_workers=cfg.num_workers,
         expiry_time_sec=cfg.expiry_time_sec,
+        version=cfg.version,
     )
 
 
@@ -137,7 +147,7 @@ def config_from_args(args=None) -> Config:
         "-mf",
         "--metadata_folder",
         help="The S3 path where the device/component_type/scenario metadata is stored",
-        default="ego4d/internal/validation/standard_metadata/ego4d",
+        default=None,
     )
     flag_parser.add_argument(
         "-rp",
@@ -176,6 +186,11 @@ def config_from_args(args=None) -> Config:
         "~/.aws/credentials to use for the download",
         default="default",
     )
+    flag_parser.add_argument(
+        "--version",
+        help="EgoExo validation or Ego4D validation?",
+        default="egoexo",
+    )
 
     # Use the values in the config file, but set them as defaults to flag_parser so they
     # can be overridden by command line flags
@@ -186,7 +201,7 @@ def config_from_args(args=None) -> Config:
 
     parsed_args = flag_parser.parse_args(remaining)
 
-    flags = {k: v for k, v in vars(parsed_args).items() if v is not None}
+    flags = {k: v for k, v in vars(parsed_args).items()}
 
     # Note: Since the flags from the config file are being used as default argparse
     # values, we can't set required=True. Doing so would mean that the user couldn't

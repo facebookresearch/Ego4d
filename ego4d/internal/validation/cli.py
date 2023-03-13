@@ -34,6 +34,7 @@ def main_cfg(cfg: Config) -> None:
         output_dir=validated_cfg.output_dir,
         num_workers=validated_cfg.num_workers,
         expiry_time_sec=validated_cfg.expiry_time_sec,
+        version=validated_cfg.version,
     )
 
 
