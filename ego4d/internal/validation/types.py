@@ -133,6 +133,126 @@ class Manifest:
     annotations: Dict[str, List[Annotations]]
 
 
+# new EgoExo types
+
+
+@dataclass
+class CaptureMetadataEgoExo:
+    university_capture_id: str
+    university_video_folder_path: str
+    number_videos: int
+    number_takes: int
+    post_surveys_relative_path: str
+    physical_setting_id: int
+    start_date_recorded_utc: datetime
+    additional_metadata: dict
+
+
+@dataclass
+class TakeMetadataEgoExo:
+    university_capture_id: str
+    take_id: str
+    scenario_id: int
+    is_narrated: bool
+    is_dropped: bool
+    take_start_seconds_aria: float
+    object_ids: List[str]
+    recording_participant_id: str
+    additional_metadata: dict
+
+
+@dataclass
+class VideoMetadataEgoExo:
+    university_capture_id: str
+    university_video_id: str
+    number_video_components: int
+    is_ego: str
+    has_walkaround: str
+    includes_audio: str
+    device_type: int
+    device_id: str
+    video_device_settings: dict
+    additional_metadata: dict
+    is_redacted: bool
+
+
+@dataclass
+class VideoComponentFileEgoExo:
+    university_capture_id: str
+    university_video_id: str
+    video_component_relative_path: str
+    component_index: int
+    is_redacted: bool
+
+
+@dataclass
+class ColmapMetadataEgoExo:
+    university_capture_id: str
+    colmap_configuration_id: str
+    config_relative_path: str
+    colmap_ran: bool
+    was_inspected: bool
+    is_final_configuration: bool
+    version: str
+    notes: str
+
+
+@dataclass
+class ObjectMetadataEgoExo:
+    university_object_id: str
+    object_name: str
+    object_relative_path: str
+    physical_setting_id: str
+    additional_metadata: dict
+
+
+@dataclass
+class ParticipantMetadataEgoExo:
+    participant_id: str
+    participant_metadata: dict
+    collection_date: datetime
+    pre_survey_data: dict
+    participant_metadata: dict
+
+
+@dataclass
+class PhysicalSettingEgoExo:
+    setting_id: str
+    name: str
+
+
+@dataclass
+class ExtraDataEgoExo:
+    university_capture_id: str
+    take_id: str
+    annotation_data: dict
+
+
+@dataclass
+class ScenarioEgoExo:
+    scenario_id: int
+    name: str
+
+
+@dataclass
+class StandardMetadataEgoExo:
+    devices: Dict[str, Device]
+    scenarios: Dict[str, ScenarioEgoExo]
+
+
+@dataclass
+class ManifestEgoExo:
+    captures: Dict[str, CaptureMetadataEgoExo]  # by capture id
+    takes: Dict[str, List[TakeMetadataEgoExo]]  # by capture id
+    videos: Dict[str, List[VideoMetadataEgoExo]]  # by capture id
+    video_components: Dict[str, List[VideoComponentFileEgoExo]]  # by video id
+    colmap: Optional[Dict[str, List[ColmapMetadataEgoExo]]]  # by capture id
+    physical_setting: Dict[str, PhysicalSettingEgoExo]  # by setting id
+    objects: Optional[Dict[str, ObjectMetadataEgoExo]]  # by object id
+    participants: Optional[Dict[str, ParticipantMetadataEgoExo]]  # by participant id
+    extra_data: Optional[List[ExtraDataEgoExo]]
+
+
 def default_decode(value: str, datatype: type) -> Any:
     if datatype in (dict, defaultdict):
         if len(value) == 0:
@@ -149,6 +269,8 @@ def default_decode(value: str, datatype: type) -> Any:
             else datetime(1900, 1, 1)
         )
     elif datatype in (int, float, str, bool):
+        if len(value) == 0:
+            return None
         return datatype(value)
 
 
@@ -196,7 +318,7 @@ def load_dataclass_dict_from_csv(
                     if "csv_decode_fn" in f.metadata
                     else default_decode_fn
                 ),
-                "column_index": column_index[f.name],
+                "column_index": column_index.get(f.name, None),
                 "type": f.type,
             }
             for f in fields(dataclass_class)
@@ -292,6 +414,167 @@ def load_standard_metadata_files(
         devices={k: vs[0] for k, vs in devices.items()},
         component_types={k: vs[0] for k, vs in component_types.items()},
         scenarios={k: vs[0] for k, vs in scenarios.items()},
+    )
+
+
+def load_standard_metadata_files_egoexo(
+    standard_metadata_folder: str,
+) -> StandardMetadataEgoExo:
+    if not pathmgr.exists(standard_metadata_folder):
+        raise AssertionError(f"{standard_metadata_folder} does not exist")
+    available_files = ls_relative(standard_metadata_folder, pathmgr)
+
+    file_name = "device.csv"
+    if file_name not in available_files:
+        raise AssertionError(
+            f"required file {file_name} not found in {standard_metadata_folder}"
+        )
+
+    file_path = os.path.join(standard_metadata_folder, file_name)
+    devices = load_dataclass_dict_from_csv(
+        file_path,
+        Device,
+        "device_id",
+        unique_per_key=True,
+    )
+
+    file_name = "scenario.csv"
+    if file_name not in available_files:
+        raise AssertionError(
+            f"required file {file_name} not found in {standard_metadata_folder}"
+        )
+    file_path = os.path.join(standard_metadata_folder, file_name)
+    scenarios = load_dataclass_dict_from_csv(
+        file_path,
+        ScenarioEgoExo,
+        "scenario_id",
+        unique_per_key=True,
+    )
+
+    # TODO: fixme to updated stats
+    assert len(scenarios) > 0
+    assert len(devices) > 0
+
+    return StandardMetadataEgoExo(
+        devices={k: vs[0] for k, vs in devices.items()},
+        scenarios={k: vs[0] for k, vs in scenarios.items()},
+    )
+
+
+def load_egoexo_manifest(manifest_dir: str) -> ManifestEgoExo:
+    available_files = ls_relative(manifest_dir, pathmgr)
+
+    def _check_file_exists():
+        if file_name not in available_files:
+            raise AssertionError(
+                f"required file {file_name} not found in {manifest_dir}"
+            )
+
+    file_name = "capture_metadata.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    _check_file_exists()
+    capture_metadata = load_dataclass_dict_from_csv(
+        file_path,
+        CaptureMetadataEgoExo,
+        "university_capture_id",
+        unique_per_key=True,
+    )
+
+    file_name = "take_metadata.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    _check_file_exists()
+    take_metadata = load_dataclass_dict_from_csv(
+        file_path,
+        TakeMetadataEgoExo,
+        "university_capture_id",
+        unique_per_key=False,
+    )
+
+    file_name = "video_metadata.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    _check_file_exists()
+    video_metadata = load_dataclass_dict_from_csv(
+        file_path,
+        VideoMetadataEgoExo,
+        "university_capture_id",
+        unique_per_key=False,
+    )
+
+    file_name = "video_component_file.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    _check_file_exists()
+    video_component_metadata = load_dataclass_dict_from_csv(
+        file_path,
+        VideoComponentFileEgoExo,
+        "university_capture_id",
+        unique_per_key=False,
+    )
+
+    file_name = "colmap_metadata.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    colmap_metadata = None
+    if file_name in available_files:
+        colmap_metadata = load_dataclass_dict_from_csv(
+            file_path,
+            ColmapMetadataEgoExo,
+            "university_capture_id",
+            unique_per_key=False,
+        )
+
+    file_name = "object_metadata.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    object_metadata = None
+    if file_name in available_files:
+        object_metadata = load_dataclass_dict_from_csv(
+            file_path,
+            ObjectMetadataEgoExo,
+            "university_object_id",
+            unique_per_key=True,
+        )
+
+    file_name = "physical_setting.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    physical_setting = None
+    if file_name in available_files:
+        physical_setting = load_dataclass_dict_from_csv(
+            file_path,
+            PhysicalSettingEgoExo,
+            "setting_id",
+            unique_per_key=True,
+        )
+
+    file_name = "participant_metadata.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    participant_metadata = None
+    if file_name in available_files:
+        participant_metadata = load_dataclass_dict_from_csv(
+            file_path,
+            ParticipantMetadataEgoExo,
+            "participant_id",
+            unique_per_key=True,
+        )
+
+    file_name = "extra_data.csv"
+    file_path = os.path.join(manifest_dir, file_name)
+    extra_data = None
+    if file_name in available_files:
+        extra_data = load_dataclass_dict_from_csv(
+            file_path,
+            ExtraDataEgoExo,
+            "university_capture_id",
+            unique_per_key=False,
+        )
+
+    return ManifestEgoExo(
+        captures=capture_metadata,
+        takes=take_metadata,
+        videos=video_metadata,
+        video_components=video_component_metadata,
+        colmap=colmap_metadata,
+        physical_setting=physical_setting,
+        objects=object_metadata,
+        participants=participant_metadata,
+        extra_data=extra_data,
     )
 
 

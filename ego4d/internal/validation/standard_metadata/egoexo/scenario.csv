@@ -1,0 +1,50 @@
+scenario_id,name
+000,Unknown
+100,Cooking
+101,Cooking an Omelet
+102,Cooking Scrambled Eggs
+103,Cooking Tomato & Eggs
+104,Cooking Noodles
+105,Cooking Dumplings
+106,Cooking Noodles
+107,Cooking Pasta
+108,Cooking Sushi Rolls
+109,Cooking Samosas
+110,Making Cucumber & Tomato Salad
+111,Making Sesame-Ginger Asian Salad
+112,Making Greek Salad
+113,Making Coffee latte
+114,Making Chai Tea
+115,Making Milk Tea
+116,Cooking Cookies
+117,Cooking Brownies
+200,Health
+201,Covid-19 Rapid Antigen Test
+202,Medical Checkup - Blood Pressure Monitor
+203,Medical Checkup - Oximeter
+204,Health Checkup - Thermometer
+205,First Aid - CPR
+300,Campsite
+301,Set up a Tent
+302,Disassemble a Tent
+400,Bike Repair
+401,Remove a Wheel
+402,Install a Wheel
+403,Fix a Flat Tire - Replace a Bike Tube
+404,Clean and Lubricate the Chain
+405,Overhaul the Headset
+406,Adjust a Rear Derailueur
+500,Music
+501,Playing Guitar
+502,Playing Violin
+503,Playing Piano
+600,Basketball
+601,Basketball Drills - Mikan Layup
+602,Basketball Drills - Reverse Layup
+603,Basketball Drills - Mid-Range Jump Shooting
+700,Bouldering
+800,Soccer
+801,Soccer Drills - Inside Trap and Outside Play
+802,Soccer Drills - Outside Trap and Outside Play
+803,Soccer Drills - Dribbling
+900,Dance
