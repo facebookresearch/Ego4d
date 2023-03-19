@@ -852,8 +852,12 @@ def run_validation(
 
     print(f"Writing to directory: {output_dir}")
     os.makedirs(output_dir, exist_ok=True)
-    errors_df.to_csv(os.path.join(output_dir, "errors.csv"), index=False)
-    summary_df.to_csv(os.path.join(output_dir, "summary.csv"), index=False)
+    errors_df.to_csv(
+        pathmgr.open(os.path.join(output_dir, "errors.csv"), "w"), index=False
+    )
+    summary_df.to_csv(
+        pathmgr.open(os.path.join(output_dir, "summary.csv"), "w"), index=False
+    )
 
     # NOTE: this is not the best solution, but we're likely going to be running
     # this once per python interpreter context

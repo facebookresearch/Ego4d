@@ -137,6 +137,12 @@ class Manifest:
 
 
 @dataclass
+class DeviceEgoExo:
+    device_id: str
+    name: str
+
+
+@dataclass
 class CaptureMetadataEgoExo:
     university_capture_id: str
     university_video_folder_path: str
@@ -169,7 +175,7 @@ class VideoMetadataEgoExo:
     is_ego: str
     has_walkaround: str
     includes_audio: str
-    device_type: int
+    device_type: str
     device_id: str
     video_device_settings: dict
     additional_metadata: dict
@@ -209,7 +215,7 @@ class ObjectMetadataEgoExo:
 @dataclass
 class ParticipantMetadataEgoExo:
     participant_id: str
-    participant_metadata: dict
+    scenario_id: int
     collection_date: datetime
     pre_survey_data: dict
     participant_metadata: dict
@@ -309,7 +315,11 @@ def load_dataclass_dict_from_csv(
     output = defaultdict(list)
     with pathmgr.open(input_csv_file_path) as csvfile:
         reader = csv.reader(csvfile, delimiter=",", quotechar='"')  # pyre-ignore
-        column_index = {header: i for i, header in enumerate(next(reader))}
+        try:
+            column_index = {header: i for i, header in enumerate(next(reader))}
+        except StopIteration:
+            # there's no column
+            return output
 
         field_name_to_metadata = {
             f.name: {
@@ -433,7 +443,7 @@ def load_standard_metadata_files_egoexo(
     file_path = os.path.join(standard_metadata_folder, file_name)
     devices = load_dataclass_dict_from_csv(
         file_path,
-        Device,
+        DeviceEgoExo,
         "device_id",
         unique_per_key=True,
     )

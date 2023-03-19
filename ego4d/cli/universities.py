@@ -18,6 +18,7 @@ UNIV_TO_BUCKET = {
     "utokyo": "ego4d-utokyo",
     "uniandes": "ego4d-university-sa",
     "cmu_africa": "ego4d-universityaf",
+    "upenn": "ego4d-penn",
 }
 
 BUCKET_TO_UNIV = {v: k for k, v in UNIV_TO_BUCKET.items()}
