@@ -143,6 +143,36 @@ def _get_data_ready(
         _extract_frames(config, by_dev_id, vrs_bin)
 
 
+def download_andor_generate_streams(
+    metadata: Dict[str, Any],
+    download_video_files: bool,
+    force_download: bool,
+    output_dir: str,
+) -> Dict[str, Any]:
+    os.makedirs(output_dir, exist_ok=True)
+    if metadata["timesync_csv_path"] is not None:
+        _download_s3_path(
+            metadata["timesync_csv_path"], os.path.join(output_dir, "timesync.csv")
+        )
+
+    by_dev_id = {}
+    for v in tqdm(metadata["videos"]):
+        by_dev_id[v["device_id"]] = v
+        s3_path = v["s3_path"]
+        if s3_path.startswith("s3://") and (
+            download_video_files or "aria" in v["device_id"]
+        ):
+            local_path = os.path.join(output_dir, v["device_id"])
+            by_dev_id[v["device_id"]]["local_path"] = local_path
+            if os.path.exists(local_path) and not force_download:
+                continue
+            print(f"Fetching {s3_path} to {local_path}")
+            _download_s3_path(s3_path, local_path)
+        else:
+            by_dev_id[v["device_id"]]["local_path"] = s3_path
+    return by_dev_id
+
+
 def _download_data(config: ColmapConfig, force_download: bool) -> Dict[str, Any]:
     assert config.output_dir is not None, "Please set the output directory"
 
@@ -170,26 +200,13 @@ def _download_data(config: ColmapConfig, force_download: bool) -> Dict[str, Any]
             config.take_id = meta["take_id"]
             config.video_source = meta["video_source"]
 
-    os.makedirs(get_uniq_cache_root_dir(config), exist_ok=True)
-    if meta["timesync_csv_path"] is not None:
-        _download_s3_path(meta["timesync_csv_path"], get_timesync_path(config))
-
-    by_dev_id = {}
-    for v in tqdm(meta["videos"]):
-        by_dev_id[v["device_id"]] = v
-        s3_path = v["s3_path"]
-        if s3_path.startswith("s3://") and (
-            config.download_video_files or "aria" in v["device_id"]
-        ):
-            local_path = os.path.join(get_uniq_cache_root_dir(config), v["device_id"])
-            by_dev_id[v["device_id"]]["local_path"] = local_path
-            if os.path.exists(local_path) and not force_download:
-                continue
-            print(f"Fetching {s3_path} to {local_path}")
-            _download_s3_path(s3_path, local_path)
-        else:
-            by_dev_id[v["device_id"]]["local_path"] = s3_path
-    return by_dev_id
+    output_dir = get_uniq_cache_root_dir(config)
+    return download_andor_generate_streams(
+        metadata=meta,
+        output_dir=output_dir,
+        download_video_files=config.download_video_files,
+        force_download=force_download,
+    )
 
 
 def _extract_frames(config, by_dev_id, vrs_bin):
@@ -220,7 +237,9 @@ def _extract_frames(config, by_dev_id, vrs_bin):
     if config.include_aria:
         if config.aria_frames is None:
             config.aria_frames = {k: None for k in aria_keys}
+        print("aria used", aria_keys)
         for k in aria_keys:
+            print(k, config.aria_walkthrough_start_sec, config.aria_walkthrough_end_sec)
             with tempfile.TemporaryDirectory() as tempdir:
                 aria_frame_path = os.path.join(tempdir, "aria01_frames")
                 os.makedirs(aria_frame_path, exist_ok=True)
@@ -467,19 +486,20 @@ def extract_aria_frames(
         t_end = synced_df["aria01_1201-2_capture_timestamp_ns"].iloc[0] / 10**9
         # !$vrs extract-images $data_path/aria01.mp4 + "214-1
         # " --before $t_end --to $input_aria_frames
-        subprocess.run(
-            [
-                vrs_bin,
-                "extract-images",
-                aria_vrs_file_path,
-                "+",
-                stream_name,
-                "--before",
-                f"{t_end}",
-                "--to",
-                out_dir,
-            ]
-        )
+        cmd = [
+            vrs_bin,
+            "extract-images",
+            aria_vrs_file_path,
+            "+",
+            stream_name,
+            "--before",
+            f"{t_end}",
+            "--to",
+            out_dir,
+        ]
+        print("Running:")
+        print(" ".join(cmd))
+        subprocess.run(cmd)
     else:
         assert (
             to_point is not None or from_point is not None
@@ -500,6 +520,8 @@ def extract_aria_frames(
             cmd += ["--after", f"{from_point}"]
 
         cmd += ["--to", out_dir]
+        print("Running:")
+        print(" ".join(cmd))
         subprocess.run(cmd)
 
 
