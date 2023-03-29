@@ -21,20 +21,27 @@ from tqdm import tqdm
 
 ##------------------------------------------------------------------------------------
 class DetectorModel:
-    def __init__(self, detector_config=None, detector_checkpoint=None):
+    def __init__(
+        self, detector_config=None, detector_checkpoint=None, min_bbox_score=0.7
+    ):
         self.detector_config = detector_config
         self.detector_checkpoint = detector_checkpoint
         self.detector = init_detector(
             self.detector_config, self.detector_checkpoint, device="cuda:0".lower()
         )
-        return
+        self.min_bbox_score = min_bbox_score
 
     ## iou_threshold: the threshold to decide whether to use the offshelf bbox or not
     def get_bboxes(self, image_name, bboxes, iou_threshold=0.3):
+        refined_bboxes = bboxes.copy()
+
         det_results = inference_detector(self.detector, image_name)
         person_results = process_mmdet_results(
             det_results, 1
         )  # keep the person class bounding boxes.
+        person_results = [
+            bbox for bbox in person_results if bbox["bbox"][4] > self.min_bbox_score
+        ]
 
         refined_bboxes = bboxes.copy()
         is_offshelf_valid = [True] * len(person_results)

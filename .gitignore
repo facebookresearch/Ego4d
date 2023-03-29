@@ -13,6 +13,5 @@ tp/*
 *.mp4
 *.json
 **/outputs/**
-
-# Jupyter Notebook
 .ipynb_checkpoints
+ego4d/internal/human_pose/outputs/*
