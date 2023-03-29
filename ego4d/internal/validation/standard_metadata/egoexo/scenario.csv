@@ -1,50 +1,59 @@
 scenario_id,name
-000,Unknown
-100,Cooking
-101,Cooking an Omelet
-102,Cooking Scrambled Eggs
-103,Cooking Tomato & Eggs
-104,Cooking Noodles
-105,Cooking Dumplings
-106,Cooking Noodles
-107,Cooking Pasta
-108,Cooking Sushi Rolls
-109,Cooking Samosas
-110,Making Cucumber & Tomato Salad
-111,Making Sesame-Ginger Asian Salad
-112,Making Greek Salad
-113,Making Coffee latte
-114,Making Chai Tea
-115,Making Milk Tea
-116,Cooking Cookies
-117,Cooking Brownies
-200,Health
-201,Covid-19 Rapid Antigen Test
-202,Medical Checkup - Blood Pressure Monitor
-203,Medical Checkup - Oximeter
-204,Health Checkup - Thermometer
-205,First Aid - CPR
-300,Campsite
-301,Set up a Tent
-302,Disassemble a Tent
-400,Bike Repair
-401,Remove a Wheel
-402,Install a Wheel
-403,Fix a Flat Tire - Replace a Bike Tube
-404,Clean and Lubricate the Chain
-405,Overhaul the Headset
-406,Adjust a Rear Derailueur
-500,Music
-501,Playing Guitar
-502,Playing Violin
-503,Playing Piano
-600,Basketball
-601,Basketball Drills - Mikan Layup
-602,Basketball Drills - Reverse Layup
-603,Basketball Drills - Mid-Range Jump Shooting
-700,Bouldering
-800,Soccer
-801,Soccer Drills - Inside Trap and Outside Play
-802,Soccer Drills - Outside Trap and Outside Play
-803,Soccer Drills - Dribbling
-900,Dance
+0,Unknown
+1000,Cooking
+1001,Cooking an Omelet
+1002,Cooking Scrambled Eggs
+1003,Cooking Tomato & Eggs
+1004,Cooking Noodles
+1005,Cooking Dumplings
+1006,Cooking Noodles
+1007,Cooking Pasta
+1008,Cooking Sushi Rolls
+1009,Cooking Samosas
+1010,Making Cucumber & Tomato Salad
+1011,Making Sesame-Ginger Asian Salad
+1012,Making Greek Salad
+1013,Making Coffee latte
+1014,Making Chai Tea
+1015,Making Milk Tea
+1016,Cooking Cookies
+1017,Cooking Brownies
+2000,Health
+2001,Covid-19 Rapid Antigen Test
+2002,Medical Checkup - Blood Pressure Monitor
+2003,Medical Checkup - Oximeter
+2004,Health Checkup - Thermometer
+2005,First Aid - CPR
+3000,Campsite
+3001,Set up a Tent
+3002,Disassemble a Tent
+4000,Bike Repair
+4001,Remove a Wheel
+4002,Install a Wheel
+4003,Fix a Flat Tire - Replace a Bike Tube
+4004,Clean and Lubricate the Chain
+4005,Overhaul the Headset
+4006,Adjust a Rear Derailueur
+5000,Music
+5001,Playing Guitar
+5002,Playing Guitar - Scales and Arpeggios
+5003,Playing Guitar - Suzuki Books
+5004,Playing Guitar - Freeplaying
+5005,Playing Violin
+5006,Playing Violin - Scales and Arpeggios
+5007,Playing Violin - Suzuki Books
+5008,Playing Violin - Freeplaying
+5009,Playing Piano
+5010,Playing Piano - Scales and Arpeggios
+5011,Playing Piano - Suzuki Books
+5012,Playing Piano - Freeplaying
+6000,Basketball
+6001,Basketball Drills - Mikan Layup
+6002,Basketball Drills - Reverse Layup
+6003,Basketball Drills - Mid-Range Jump Shooting
+7000,Rock Climbing
+8000,Soccer
+8001,Soccer Drills - Inside Trap and Outside Play
+8002,Soccer Drills - Outside Trap and Outside Play
+8003,Soccer Drills - Dribbling
+9000,Dance

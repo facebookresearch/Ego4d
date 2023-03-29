@@ -24,5 +24,12 @@ output directory via `--output` or `-o`
 
 ## Example
 ```
-python -m ego4d.internal.cli -i "s3://ego4d-unict/metadata_v7"
+python ego4d/internal/validation/cli.py -i s3://ego4d-penn/egoexo/metadata_v1
+python ego4d/internal/validation/cli.py -i s3://ego4d-utokyo/egoexo/metadata_v1
+```
+
+## Debugging
+
+```
+ipython --pdb ego4d/internal/validation/cli.py -- -i s3://ego4d-utokyo/egoexo/metadata_v1
 ```
