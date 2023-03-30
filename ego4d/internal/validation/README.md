@@ -36,3 +36,12 @@ ipython --pdb ego4d/internal/validation/cli.py -- -i s3://ego4d-iiith/egoexo/man
 ipython --pdb ego4d/internal/validation/cli.py -- -i ./iiith_manifest_v1 -u iiith -o errors_temp
 python ego4d/internal/validation/cli.py -i ./iiith_manifest_v1 -u iiith -o errors_temp
 ```
+
+## Skipping MP4 File Checks
+
+You may skip mp4 file checks with `--skip_mp4_check`, since this is the slowest
+step.
+
+```
+python ego4d/internal/validation/cli.py -i s3://ego4d-penn/egoexo/metadata_v2 --skip_mp4_check
+```

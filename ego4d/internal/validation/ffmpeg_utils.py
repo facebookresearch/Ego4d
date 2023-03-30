@@ -91,9 +91,6 @@ def get_video_info(
             if "tls" in result.stderr:
                 x *= 2.5
                 continue
-            if "http" in result.stderr:
-                x *= 2.5
-                continue
             return None, Error(
                 ErrorLevel.ERROR,
                 name,

@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from ego4d.internal.s3 import ls_relative
 
@@ -251,7 +251,9 @@ class ManifestEgoExo:
     captures: Dict[str, CaptureMetadataEgoExo]  # by capture id
     takes: Dict[str, List[TakeMetadataEgoExo]]  # by capture id
     videos: Dict[str, List[VideoMetadataEgoExo]]  # by capture id
-    video_components: Dict[str, List[VideoComponentFileEgoExo]]  # by video id
+    video_components: Dict[
+        Tuple[str, str], List[VideoComponentFileEgoExo]
+    ]  # by (capture_id, video_id)
     colmap: Optional[Dict[str, List[ColmapMetadataEgoExo]]]  # by capture id
     physical_setting: Dict[str, PhysicalSettingEgoExo]  # by setting id
     objects: Optional[Dict[str, ObjectMetadataEgoExo]]  # by object id
