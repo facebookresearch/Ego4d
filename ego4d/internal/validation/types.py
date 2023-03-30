@@ -63,7 +63,7 @@ class VideoMetadata:
     device_id: int
     video_device_settings: dict
     physical_setting_id: str
-    video_scenario_ids: List[int]
+    video_scenario_ids: list
 
 
 @dataclass
@@ -162,7 +162,7 @@ class TakeMetadataEgoExo:
     is_narrated: bool
     is_dropped: bool
     take_start_seconds_aria: float
-    object_ids: List[str]
+    object_ids: list
     recording_participant_id: str
     additional_metadata: dict
 
@@ -261,7 +261,7 @@ class ManifestEgoExo:
     extra_data: Optional[List[ExtraDataEgoExo]]
 
 
-def default_decode(value: str, datatype: type) -> Any:
+def default_decode(value: str, datatype: type, name: str) -> Any:
     if datatype in (dict, defaultdict):
         if len(value) == 0:
             return {}
@@ -363,6 +363,7 @@ Additional fields in CSV:
                     constructor_params[name] = meta["decode_fn"](
                         line[meta["column_index"]],
                         meta["type"],
+                        name,
                     )
                 except Exception as e:
                     print(
