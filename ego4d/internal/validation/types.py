@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from ego4d.internal.s3 import ls_relative
 
@@ -63,7 +63,7 @@ class VideoMetadata:
     device_id: int
     video_device_settings: dict
     physical_setting_id: str
-    video_scenario_ids: List[int]
+    video_scenario_ids: list
 
 
 @dataclass
@@ -162,7 +162,7 @@ class TakeMetadataEgoExo:
     is_narrated: bool
     is_dropped: bool
     take_start_seconds_aria: float
-    object_ids: List[str]
+    object_ids: list
     recording_participant_id: str
     additional_metadata: dict
 
@@ -251,7 +251,9 @@ class ManifestEgoExo:
     captures: Dict[str, CaptureMetadataEgoExo]  # by capture id
     takes: Dict[str, List[TakeMetadataEgoExo]]  # by capture id
     videos: Dict[str, List[VideoMetadataEgoExo]]  # by capture id
-    video_components: Dict[str, List[VideoComponentFileEgoExo]]  # by video id
+    video_components: Dict[
+        Tuple[str, str], List[VideoComponentFileEgoExo]
+    ]  # by (capture_id, video_id)
     colmap: Optional[Dict[str, List[ColmapMetadataEgoExo]]]  # by capture id
     physical_setting: Dict[str, PhysicalSettingEgoExo]  # by setting id
     objects: Optional[Dict[str, ObjectMetadataEgoExo]]  # by object id
@@ -259,7 +261,7 @@ class ManifestEgoExo:
     extra_data: Optional[List[ExtraDataEgoExo]]
 
 
-def default_decode(value: str, datatype: type) -> Any:
+def default_decode(value: str, datatype: type, name: str) -> Any:
     if datatype in (dict, defaultdict):
         if len(value) == 0:
             return {}
@@ -361,6 +363,7 @@ Additional fields in CSV:
                     constructor_params[name] = meta["decode_fn"](
                         line[meta["column_index"]],
                         meta["type"],
+                        name,
                     )
                 except Exception as e:
                     print(

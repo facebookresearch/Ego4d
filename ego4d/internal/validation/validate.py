@@ -5,6 +5,7 @@ import os
 import traceback
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -44,19 +45,12 @@ pathmgr = PathManager()  # for downloading files
 pathmgr.register_handler(S3PathHandler(profile="default"))
 
 
-def _split_s3_path(s3_path: str) -> Tuple[Optional[str], str]:
-    """
-    Splits a full s3_path of the form "s3://bucket/folder/.../file.ext"
-    into a tuple of ("bucket", "folder/.../file.ext")
-
-    If this doesn't start with s3:// it will assume that the there is no
-    bucket and the path is just returned as the second output
-    """
-    if s3_path[:5] == "s3://":
-        s3_path_components = s3_path[5:].split("/")
-        return s3_path_components[0], "/".join(s3_path_components[1:])
-    # pyre-fixme[7]: Expected `Tuple[str, str]` but got `Tuple[None, str]`.
-    return None, s3_path
+@dataclass
+class ReferencedFile:
+    source_id: str
+    source_location: str
+    root_dir: str
+    relative_path: str
 
 
 def _validate_vcs(
@@ -181,7 +175,7 @@ def validate_video_components(
     return errors
 
 
-def validate_mp4s(video_infos: Dict[str, List[VideoInfo]]) -> List[Error]:  # noqa
+def validate_mp4s(video_infos: Dict[Any, List[VideoInfo]]) -> List[Error]:  # noqa
     """
     This function checks a set of MP4 files on S3 for the following properties:
     - null fps
@@ -329,6 +323,7 @@ def validate_mp4s(video_infos: Dict[str, List[VideoInfo]]) -> List[Error]:  # no
                     "",
                 )
             )
+
         if len(total_acodec) > 1:
             errors.append(
                 Error(
@@ -338,10 +333,12 @@ def validate_mp4s(video_infos: Dict[str, List[VideoInfo]]) -> List[Error]:  # no
                     "",
                 )
             )
+
         if len(total_rotate) > 1:
             errors.append(
                 Error(ErrorLevel.ERROR, video_id, "inconsistent_rotation", "")
             )
+
         if len(total_size) > 1:
             errors.append(
                 Error(
@@ -351,6 +348,7 @@ def validate_mp4s(video_infos: Dict[str, List[VideoInfo]]) -> List[Error]:  # no
                     "components with inconsistent width x height",
                 )
             )
+
         if len(total_vtb) > 1:
             errors.append(
                 Error(
@@ -360,8 +358,10 @@ def validate_mp4s(video_infos: Dict[str, List[VideoInfo]]) -> List[Error]:  # no
                     "",
                 )
             )
+
         if len(total_sar) > 1:
             errors.append(Error(ErrorLevel.WARN, video_id, "inconsistent_sar", ""))
+
         if len(total_fps) > 1:
             errors.append(
                 Error(ErrorLevel.WARN, video_id, "inconsistent_video_fps", "")
@@ -752,6 +752,7 @@ def summarize_errors(
                 error_dict_released[err.errorType] += 1
 
     errors_dict = {
+        "error_class": [],
         "uid": [],
         "error_type": [],
         "description": [],
@@ -761,6 +762,8 @@ def summarize_errors(
     err_by_type_in_release = defaultdict(int)
     err_by_type_total = defaultdict(int)
     for e in errors:
+        clazz = "error" if e.level == ErrorLevel.ERROR else "warning"
+        errors_dict["error_class"].append(clazz)
         errors_dict["uid"].append(e.uid)
         errors_dict["error_type"].append(e.type)
         errors_dict["description"].append(e.description)
@@ -769,16 +772,18 @@ def summarize_errors(
         )
 
         if released_videos is not None and e.uid in released_videos:
-            err_by_type_in_release[e.type] += 1
-        err_by_type_total[e.type] += 1
+            err_by_type_in_release[(clazz, e.type)] += 1
+        err_by_type_total[(clazz, e.type)] += 1
 
     summary_dict = {
+        "error_class": [],
         "error_type": [],
         "num_total": [],
         "num_in_release": [],
     }
 
-    for et, t in err_by_type_total.items():
+    for (clazz, et), t in err_by_type_total.items():
+        summary_dict["error_class"].append(clazz)
         summary_dict["error_type"].append(et)
         summary_dict["num_total"].append(t)
         summary_dict["num_in_release"].append(err_by_type_in_release.get(et, None))
@@ -869,16 +874,6 @@ def _check_capture_metadata(
 ) -> List[Error]:
     ret = []
     capture = manifest.captures[capture_uid]
-    if capture.post_surveys_relative_path is None:
-        ret.append(
-            Error(
-                ErrorLevel.ERROR,
-                capture_uid,
-                "capture_missing_post_surveys",
-                f"capture {capture_uid} has no post survey data",
-            )
-        )
-
     if capture.start_date_recorded_utc is None:
         ret.append(
             Error(
@@ -1280,11 +1275,12 @@ def _check_video_components(manifest: ManifestEgoExo) -> List[Error]:
     for (capture_uid, video_id), vcs in manifest.video_components.items():
         next_expected_idx = 0
         for vc in sorted(vcs, key=lambda x: x.component_index):
+            key_str = f"(capture={capture_uid}, video_id={video_id}, component_idx={vc.component_index})"
             if video_id not in all_video_ids:
                 ret.append(
                     Error(
                         ErrorLevel.ERROR,
-                        vc.video_component_relative_path,
+                        key_str,
                         "video_component_wrong_video_fk",
                         f"video component has incorrect video id: {video_id}",
                     )
@@ -1296,7 +1292,7 @@ def _check_video_components(manifest: ManifestEgoExo) -> List[Error]:
                 ret.append(
                     Error(
                         ErrorLevel.ERROR,
-                        vc.video_component_relative_path,
+                        key_str,
                         "video_component_wrong_capture_uid_fk",
                         f"video component has incorrect university_capture_id: {vc.university_capture_id}",
                     )
@@ -1307,7 +1303,7 @@ def _check_video_components(manifest: ManifestEgoExo) -> List[Error]:
                 ret.append(
                     Error(
                         ErrorLevel.ERROR,
-                        vc.video_component_relative_path,
+                        key_str,
                         "video_component_incorrect_index",
                         f"expected index: {next_expected_idx}, got {vc.component_index}",
                     )
@@ -1316,11 +1312,192 @@ def _check_video_components(manifest: ManifestEgoExo) -> List[Error]:
     return ret
 
 
+def _get_referenced_files(manifest: ManifestEgoExo) -> List[ReferencedFile]:
+    ret = []
+    for capture in manifest.captures.values():
+        ret.append(
+            ReferencedFile(
+                source_id=capture.university_capture_id,
+                source_location="capture_post_survey",
+                root_dir=capture.university_video_folder_path,
+                relative_path=capture.post_surveys_relative_path,
+            )
+        )
+
+    for vcs in manifest.video_components.values():
+        for vc in vcs:
+            if vc.university_capture_id not in manifest.captures:
+                continue
+
+            root_dir = manifest.captures[
+                vc.university_capture_id
+            ].university_video_folder_path
+            ret.append(
+                ReferencedFile(
+                    source_id=f"(capture={vc.university_capture_id}, video_id={vc.university_video_id}, idx={vc.component_index})",
+                    source_location="video_component",
+                    root_dir=root_dir,
+                    relative_path=vc.video_component_relative_path,
+                )
+            )
+
+    if manifest.colmap:
+        for capture_uid, cs in manifest.colmap.items():
+            if capture_uid not in manifest.captures:
+                continue
+            for c in cs:
+                root_dir = manifest.captures[capture_uid].university_video_folder_path
+                ret.append(
+                    ReferencedFile(
+                        source_id=f"(capture={c.university_capture_id}, colmap_id={c.colmap_configuration_id})",
+                        source_location="colmap_config_dir",
+                        root_dir=root_dir,
+                        relative_path=c.config_relative_path,
+                    )
+                )
+    if manifest.objects:
+        for object_id, obj in manifest.objects.items():
+            if obj.university_object_id not in manifest.captures:
+                continue
+            root_dir = manifest.captures[
+                obj.university_object_id
+            ].university_video_folder_path
+            ret.append(
+                ReferencedFile(
+                    source_id=f"(object_id={object_id})",
+                    source_location="object",
+                    root_dir=root_dir,
+                    relative_path=obj.object_relative_path,
+                )
+            )
+    return ret
+
+
+def _check_files_exist(
+    files: List[ReferencedFile], num_workers: int, university: str
+) -> List[Error]:
+    ret = []
+
+    def _maybe_strip_last_slash(path: str) -> str:
+        if path.endswith("/"):
+            return path[0:-1]
+        return path
+
+    def _check_file(f: ReferencedFile) -> List[Error]:
+        errs = []
+        assert f.root_dir is not None
+        path = os.path.join(f.root_dir, f.relative_path or "")
+        if _maybe_strip_last_slash(f.root_dir) == _maybe_strip_last_slash(path):
+            errs.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    f.source_id,
+                    "path_is_empty_or_null",
+                    f"source=(location={f.source_location}, id={f.source_id})",
+                )
+            )
+            return errs
+
+        if not pathmgr.exists(path):
+            errs.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    f.source_id,
+                    "path_does_not_exist",
+                    f"{path}; source=(location={f.source_location}, id={f.source_id})",
+                )
+            )
+            return errs
+
+        if not path.startswith("s3://"):
+            errs.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    f.source_id,
+                    "path_not_s3_path",
+                    f"{path} is not on S3 - please fix this before uploading",
+                )
+            )
+        else:
+            bucket = path.split("s3://")[1].split("/")[0]
+            univ_from_path = BUCKET_TO_UNIV[bucket]
+            if univ_from_path != university:
+                errs.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        f.source_id,
+                        "s3_path_not_in_university_bucket",
+                        f"{path} is not in {university}'s bucket ({BUCKET_TO_UNIV[university]})",
+                    )
+                )
+        return errs
+
+    with ThreadPoolExecutor(num_workers) as pool:
+        for errs in tqdm(pool.map(_check_file, files), total=len(files)):
+            ret.extend(errs)
+    return ret
+
+
+def _check_mp4_files(manifest: ManifestEgoExo, num_workers: int) -> List[Error]:
+    ret = []
+    vps = {
+        (
+            vc.university_capture_id,
+            vc.university_video_id,
+            vc.component_index,
+        ): os.path.join(
+            manifest.captures[vc.university_capture_id].university_video_folder_path,
+            vc.video_component_relative_path,
+        )
+        for vcs in manifest.video_components.values()
+        for vc in vcs
+        if vc.university_capture_id in manifest.captures
+        and vc.video_component_relative_path.lower().endswith(".mp4")
+    }
+
+    # prefetch the presigned URLs
+    print("Fetching pre-signed urls")
+    assert stream_path_mgr is not None
+    paths_to_check = {}
+    for k, path in vps.items():
+        paths_to_check[k] = stream_path_mgr.open(path)
+
+    print(f"Obtaining metadata, using {num_workers} workers")
+    metadata = {}
+    iterables = list(paths_to_check.items())
+    with ThreadPoolExecutor(max_workers=num_workers) as pool:
+        for k, m, errs in tqdm(
+            pool.map(_get_video_metadata_map_fn, iterables), total=len(iterables)
+        ):
+            metadata[k] = m
+            if errs is not None:
+                ret.append(errs)
+
+    video_infos_by_video_id = defaultdict(list)
+    for (capture_uid, v_uid, comp_idx), vi in metadata.items():
+        video_infos_by_video_id[(capture_uid, v_uid)].append((comp_idx, vi))
+
+    for vs in video_infos_by_video_id.values():
+        vs.sort(key=lambda x: x[0])
+
+    print("Validating metadata")
+    ret.extend(
+        validate_mp4s(
+            {
+                f"(capture_uid={k[0]},video_id={k[1]})": [x[1] for x in vs]
+                for k, vs in video_infos_by_video_id.items()
+            }
+        )
+    )
+    return ret
+
+
 def validate_egoexo_files(
     university: str,
     manifest: ManifestEgoExo,
     metadata: StandardMetadataEgoExo,
     num_workers: int,
+    skip_mp4_check: bool,
 ) -> List[Error]:
     ret = []
 
@@ -1391,7 +1568,15 @@ def validate_egoexo_files(
 
     ret.extend(_check_video_metadata(manifest, metadata))
     ret.extend(_check_video_components(manifest))
-    # TODO ret.extend(_check_files_exist(manfiest))
+
+    all_references_files = _get_referenced_files(manifest)
+    print("Checking whether files exist")
+    ret.extend(_check_files_exist(all_references_files, num_workers, university))
+    if skip_mp4_check:
+        print("Skipping MP4 file checks")
+    else:
+        print("Checking MP4 files")
+        ret.extend(_check_mp4_files(manifest, num_workers))
     return ret
 
 
@@ -1404,6 +1589,7 @@ def run_validation(
     released_video_path: str,
     version: str,
     output_dir: str,
+    skip_mp4_check: bool,
 ):
     global stream_path_mgr
     if stream_path_mgr is not None:
@@ -1424,6 +1610,7 @@ def run_validation(
             manifest=manifest,
             metadata=metadata,
             num_workers=num_workers,
+            skip_mp4_check=skip_mp4_check,
         )
     else:
         assert version.lower() == "ego4d", "expected ego4d as version"

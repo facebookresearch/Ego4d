@@ -35,6 +35,7 @@ def main_cfg(cfg: Config) -> None:
         num_workers=validated_cfg.num_workers,
         expiry_time_sec=validated_cfg.expiry_time_sec,
         version=validated_cfg.version,
+        skip_mp4_check=validated_cfg.skip_mp4_check,
     )
 
 

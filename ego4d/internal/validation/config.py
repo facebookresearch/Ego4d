@@ -30,6 +30,7 @@ class ValidatedConfig:
     num_workers: int
     expiry_time_sec: int
     version: str
+    skip_mp4_check: bool
     released_video_path: Optional[str] = None
 
 
@@ -47,6 +48,7 @@ class Config:
     expiry_time_sec: int
     aws_profile_name: str
     version: str
+    skip_mp4_check: bool
     released_video_path: Optional[str] = None
     input_university: Optional[str] = None
     output_dir: Optional[str] = None
@@ -104,6 +106,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         num_workers=cfg.num_workers,
         expiry_time_sec=cfg.expiry_time_sec,
         version=cfg.version,
+        skip_mp4_check=cfg.skip_mp4_check,
     )
 
 
@@ -190,6 +193,12 @@ def config_from_args(args=None) -> Config:
         "--version",
         help="EgoExo validation or Ego4D validation?",
         default="egoexo",
+    )
+    flag_parser.add_argument(
+        "--skip_mp4_check",
+        default=False,
+        help="skip checking mp4 files with ffprobe",
+        action="store_true",
     )
 
     # Use the values in the config file, but set them as defaults to flag_parser so they
