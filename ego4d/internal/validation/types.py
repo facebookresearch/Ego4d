@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass, fields
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from ego4d.internal.s3 import ls_relative
 
@@ -149,7 +149,7 @@ class CaptureMetadataEgoExo:
     number_videos: int
     number_takes: int
     post_surveys_relative_path: str
-    physical_setting_id: int
+    physical_setting_id: str
     start_date_recorded_utc: datetime
     additional_metadata: dict
 
@@ -173,8 +173,8 @@ class VideoMetadataEgoExo:
     university_video_id: str
     number_video_components: int
     is_ego: str
-    has_walkaround: str
-    includes_audio: str
+    has_walkaround: bool
+    includes_audio: bool
     device_type: str
     device_id: str
     video_device_settings: dict
@@ -272,8 +272,9 @@ def default_decode(value: str, datatype: type) -> Any:
         return (
             datetime.strptime(value.split(".")[0], DEFAULT_DATE_FORMAT_STR)
             if len(value) > 0
-            else datetime(1900, 1, 1)
+            else None
         )
+
     elif datatype in (int, float, str, bool):
         if len(value) == 0:
             return None
@@ -283,7 +284,7 @@ def default_decode(value: str, datatype: type) -> Any:
 def load_dataclass_dict_from_csv(
     input_csv_file_path: str,
     dataclass_class: type,
-    dict_key_field: str,
+    dict_key_field: Union[str, List[str]],
     unique_per_key: bool,
     default_decode_fn: Callable[[str, type], Any] = default_decode,
 ) -> Dict[Any, List[Any]]:
@@ -318,7 +319,11 @@ def load_dataclass_dict_from_csv(
         try:
             column_index = {header: i for i, header in enumerate(next(reader))}
         except StopIteration:
-            # there's no column
+            # there's no column information
+            return output
+
+        if len(column_index) == 0:
+            # there's no column information
             return output
 
         field_name_to_metadata = {
@@ -347,23 +352,38 @@ Additional fields in CSV:
 """
             )
 
+        duplicate_keys = []
+        lineno = 0
         for line in reader:
-            obj = dataclass_class(
-                **{
-                    name: meta["decode_fn"](
+            constructor_params = {}
+            for name, meta in field_name_to_metadata.items():
+                try:
+                    constructor_params[name] = meta["decode_fn"](
                         line[meta["column_index"]],
                         meta["type"],
                     )
-                    for name, meta in field_name_to_metadata.items()
-                }
+                except Exception as e:
+                    print(
+                        f"Could not decode column: '{name}' for input file: {input_csv_file_path}. Will not decode. Line: {lineno + 1}"
+                    )
+                    raise e
+
+            obj = dataclass_class(**constructor_params)
+            dict_key = (
+                getattr(obj, dict_key_field)
+                if isinstance(dict_key_field, str)
+                else tuple(getattr(obj, k) for k in dict_key_field)
             )
-            dict_key = getattr(obj, dict_key_field)
             output[dict_key].append(obj)
             if unique_per_key:
                 if len(output[dict_key]) != 1:
-                    raise AssertionError(
-                        f"Multiple entries for same PK: {dict_key_field}: {dict_key}"
-                    )
+                    duplicate_keys.append(dict_key)
+            lineno += 1
+
+        if len(duplicate_keys) > 0:
+            raise AssertionError(
+                f"Multiple Primary Keys/IDs found for file {input_csv_file_path}:\n{duplicate_keys}"
+            )
     return output
 
 
@@ -516,7 +536,7 @@ def load_egoexo_manifest(manifest_dir: str) -> ManifestEgoExo:
     video_component_metadata = load_dataclass_dict_from_csv(
         file_path,
         VideoComponentFileEgoExo,
-        "university_capture_id",
+        ["university_capture_id", "university_video_id"],
         unique_per_key=False,
     )
 
@@ -576,15 +596,21 @@ def load_egoexo_manifest(manifest_dir: str) -> ManifestEgoExo:
         )
 
     return ManifestEgoExo(
-        captures=capture_metadata,
+        captures={k: v[0] for k, v in capture_metadata.items()},
         takes=take_metadata,
         videos=video_metadata,
         video_components=video_component_metadata,
         colmap=colmap_metadata,
-        physical_setting=physical_setting,
-        objects=object_metadata,
-        participants=participant_metadata,
-        extra_data=extra_data,
+        physical_setting={k: v[0] for k, v in physical_setting.items()}
+        if physical_setting is not None
+        else None,
+        objects={k: v[0] for k, v in object_metadata.items()}
+        if object_metadata is not None
+        else None,
+        participants={k: v[0] for k, v in participant_metadata.items()}
+        if participant_metadata is not None
+        else None,
+        extra_data=extra_data,  # pyre-ignore
     )
 
 

@@ -24,7 +24,7 @@ output directory via `--output` or `-o`
 
 ## Example
 ```
-python ego4d/internal/validation/cli.py -i s3://ego4d-penn/egoexo/metadata_v1
+python ego4d/internal/validation/cli.py -i s3://ego4d-penn/egoexo/metadata_v2
 python ego4d/internal/validation/cli.py -i s3://ego4d-utokyo/egoexo/metadata_v1
 ```
 
@@ -32,4 +32,7 @@ python ego4d/internal/validation/cli.py -i s3://ego4d-utokyo/egoexo/metadata_v1
 
 ```
 ipython --pdb ego4d/internal/validation/cli.py -- -i s3://ego4d-utokyo/egoexo/metadata_v1
+ipython --pdb ego4d/internal/validation/cli.py -- -i s3://ego4d-iiith/egoexo/manifest_v1/ -o errors_temp
+ipython --pdb ego4d/internal/validation/cli.py -- -i ./iiith_manifest_v1 -u iiith -o errors_temp
+python ego4d/internal/validation/cli.py -i ./iiith_manifest_v1 -u iiith -o errors_temp
 ```
