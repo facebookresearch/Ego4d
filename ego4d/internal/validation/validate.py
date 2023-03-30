@@ -752,6 +752,7 @@ def summarize_errors(
                 error_dict_released[err.errorType] += 1
 
     errors_dict = {
+        "error_class": [],
         "uid": [],
         "error_type": [],
         "description": [],
@@ -761,6 +762,8 @@ def summarize_errors(
     err_by_type_in_release = defaultdict(int)
     err_by_type_total = defaultdict(int)
     for e in errors:
+        clazz = "error" if e.level == ErrorLevel.ERROR else "warning"
+        errors_dict["error_class"].append(clazz)
         errors_dict["uid"].append(e.uid)
         errors_dict["error_type"].append(e.type)
         errors_dict["description"].append(e.description)
@@ -769,16 +772,18 @@ def summarize_errors(
         )
 
         if released_videos is not None and e.uid in released_videos:
-            err_by_type_in_release[e.type] += 1
-        err_by_type_total[e.type] += 1
+            err_by_type_in_release[(clazz, e.type)] += 1
+        err_by_type_total[(clazz, e.type)] += 1
 
     summary_dict = {
+        "error_class": [],
         "error_type": [],
         "num_total": [],
         "num_in_release": [],
     }
 
-    for et, t in err_by_type_total.items():
+    for (clazz, et), t in err_by_type_total.items():
+        summary_dict["error_class"].append(clazz)
         summary_dict["error_type"].append(et)
         summary_dict["num_total"].append(t)
         summary_dict["num_in_release"].append(err_by_type_in_release.get(et, None))
