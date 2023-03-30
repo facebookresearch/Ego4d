@@ -2,6 +2,7 @@
 import functools
 import itertools
 import os
+import traceback
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
@@ -16,6 +17,7 @@ from ego4d.internal.validation.ffmpeg_utils import get_video_info, VideoInfo
 from ego4d.internal.validation.types import (
     Annotations,
     AuxiliaryVideoComponentDataFile,
+    CaptureMetadataEgoExo,
     ComponentType,
     Error,
     ErrorLevel,
@@ -786,15 +788,611 @@ def summarize_errors(
     return errors_df, summary_df
 
 
+def _check_associated_takes_metadata(
+    manifest: ManifestEgoExo,
+    metadata: StandardMetadataEgoExo,
+    capture: CaptureMetadataEgoExo,
+    capture_uid: str,
+) -> List[Error]:
+    ret = []
+    if capture_uid not in manifest.takes:
+        ret.append(
+            Error(
+                ErrorLevel.ERROR,
+                capture_uid,
+                "no_takes_for_capture",
+                f"capture {capture_uid} has no associated takes",
+            )
+        )
+        return ret
+
+    takes = manifest.takes[capture_uid]
+    if len(takes) != capture.number_takes:
+        ret.append(
+            Error(
+                ErrorLevel.ERROR,
+                capture_uid,
+                "incorrect_number_takes_for_capture",
+                f"capture {capture_uid} has {capture.number_takes} specified but only recieved {len(takes)} takes",
+            )
+        )
+
+    for take in takes:
+        if take.scenario_id not in metadata.scenarios:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    take.take_id,
+                    "take_has_incorrect_scenario_id",
+                    f"take {take.take_id} for capture {capture_uid} has incorrect scenario ID {take.scenario_id}",
+                )
+            )
+        if take.recording_participant_id is None:
+            ret.append(
+                Error(
+                    ErrorLevel.WARN,
+                    take.take_id,
+                    "take_missing_participant",
+                    f"take {take.take_id} for capture {capture_uid} has missing participant ID",
+                )
+            )
+
+        if take.object_ids is None:
+            ret.append(
+                Error(
+                    ErrorLevel.WARN,
+                    take.take_id,
+                    "take_missing_objects",
+                    f"take {take.take_id} has no objects provided. Provide an empty list to silence warning",
+                )
+            )
+
+        additional_objects = set(take.object_ids or {}) - set(manifest.objects or {})
+        if len(additional_objects) > 0:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    take.take_id,
+                    "take_has_unspecified_objects",
+                    f"take {take.take_id} for capture {capture_uid} has unspecified objects: {additional_objects}",
+                )
+            )
+
+    return ret
+
+
+def _check_capture_metadata(
+    manifest: ManifestEgoExo,
+    metadata: StandardMetadataEgoExo,
+    capture: CaptureMetadataEgoExo,
+    capture_uid: str,
+) -> List[Error]:
+    ret = []
+    capture = manifest.captures[capture_uid]
+    if capture.post_surveys_relative_path is None:
+        ret.append(
+            Error(
+                ErrorLevel.ERROR,
+                capture_uid,
+                "capture_missing_post_surveys",
+                f"capture {capture_uid} has no post survey data",
+            )
+        )
+
+    if capture.start_date_recorded_utc is None:
+        ret.append(
+            Error(
+                ErrorLevel.WARN,
+                capture_uid,
+                "capture_missing_recording_date",
+                f"capture {capture_uid} has no recording date",
+            )
+        )
+
+    return ret
+
+
+def _check_colmap(
+    manifest: ManifestEgoExo,
+) -> List[Error]:
+    all_colmap = manifest.colmap
+    assert all_colmap is not None
+
+    ret = []
+    for capture_uid, colmap in all_colmap.items():
+        for c in colmap:
+            if capture_uid not in manifest.captures:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        c.colmap_configuration_id,
+                        "colmap_configuration_invalid_capture_uid_fk",
+                        f"colmap configuration links to non-existent capture_uid: {capture_uid}",
+                    )
+                )
+
+            if c.colmap_ran and not c.was_inspected:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        c.colmap_configuration_id,
+                        "colmap_ran_but_not_inspected",
+                        f"colmap configuration for {c.colmap_configuration_id} was not inspected but ran",
+                    )
+                )
+
+        vers_for_capture = set(c.version for c in colmap)
+        if len(vers_for_capture) != len(colmap):
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    capture_uid,
+                    "colmap_duplicate_versions",
+                    f"Duplicate colmap versions found for capture uid: {capture_uid}",
+                )
+            )
+
+    return ret
+
+
+def _check_objects(manifest: ManifestEgoExo) -> List[Error]:
+    ret = []
+    physical_setting_ids = (
+        set(manifest.physical_setting) if manifest.physical_setting is not None else {}
+    )
+    assert manifest.objects is not None
+    for object_id, obj in manifest.objects.items():
+        if obj.physical_setting_id not in physical_setting_ids:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    object_id,
+                    "object_links_to_invalid_physical_setting_id",
+                    f"phyiscal setting {obj.physical_setting_id} does not exist",
+                )
+            )
+    return ret
+
+
+def _check_participants(
+    manifest: ManifestEgoExo, metadata: StandardMetadataEgoExo
+) -> List[Error]:
+    ret = []
+    assert manifest.participants is not None
+    for participant_id, p in manifest.participants.items():
+        if p.scenario_id not in metadata.scenarios:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    participant_id,
+                    "participant_links_to_invalid_scenario",
+                    "scenario {p.scenario_id} does not exist",
+                )
+            )
+        if len(p.pre_survey_data) == 0:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    participant_id,
+                    "participant_has_empty_pre_survey_data",
+                    "participants should have pre survey data populated",
+                )
+            )
+        else:
+            ks = {
+                "recording_location",
+                "scenario_num_iterations",
+                "scenario_frequency",
+                "scenario_experience_years",
+                "has_taught_scenario",
+                "has_recorded_scenario_howto",
+                "typical_time_to_complete_scenario_minutes",
+            }
+            given_ks = set(p.pre_survey_data.keys())
+
+            missing_ks = ks - given_ks
+            aux_ks = given_ks - ks
+            if len(missing_ks) > 0 or len(aux_ks) > 0:
+                ret.append(
+                    Error(
+                        ErrorLevel.WARN,
+                        participant_id,
+                        "participant_pre_survey_data_contraints",
+                        f"auxiliary keys: {aux_ks}, missing keys: {missing_ks}",
+                    )
+                )
+
+            if "recording_location" in given_ks:
+                v = p.pre_survey_data["recording_location"]
+                valid_vs = {
+                    "typical",
+                    "familiar",
+                    "unfamiliar",
+                }
+                if v not in valid_vs:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_pre_survey_data_contraints",
+                            f"recording_location scenario_num_iterations {v} not one of: {valid_vs}",
+                        )
+                    )
+
+            if "scenario_num_iterations" in given_ks:
+                v = p.pre_survey_data["scenario_num_iterations"]
+                valid_vs = {
+                    "1-10",
+                    "10-100",
+                    "100-500",
+                    "500-1000",
+                    "1000+",
+                }
+                if v not in valid_vs:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_pre_survey_data_contraints",
+                            f"scenario_num_iterations {v} not one of: {valid_vs}",
+                        )
+                    )
+
+            if "scenario_frequency" in given_ks:
+                v = p.pre_survey_data["scenario_frequency"]
+                valid_vs = {
+                    "daily",
+                    "weekly",
+                    "monthly",
+                    "rarely",
+                    "never",
+                }
+                if v not in valid_vs:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_pre_survey_data_contraints",
+                            f"scenario_frequency {v} not one of: {valid_vs}",
+                        )
+                    )
+
+            if "scenario_experience_years" in given_ks:
+                v = p.pre_survey_data["scenario_experience_years"]
+                valid_vs = {
+                    "1 year",
+                    "1-3 years",
+                    "3-5 years",
+                    "5-10 years",
+                    "10+ years",
+                }
+                if v not in valid_vs:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_pre_survey_data_contraints",
+                            f"scenario_experience_years {v} not one of: {valid_vs}",
+                        )
+                    )
+            if "has_taught_scenario" in given_ks:
+                v = p.pre_survey_data["has_taught_scenario"]
+                try:
+                    _ = bool(v)
+                except Exception:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_pre_survey_data_contraints",
+                            f"has_taught_scenario could not be converted to boolean: {traceback.format_exc()}",
+                        )
+                    )
+            if "has_recorded_scenario_howto" in given_ks:
+                v = p.pre_survey_data["has_recorded_scenario_howto"]
+                try:
+                    _ = bool(v)
+                except Exception:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_pre_survey_data_contraints",
+                            f"has_recorded_scenario_howto could not be converted to boolean: {traceback.format_exc()}",
+                        )
+                    )
+
+            if "typical_time_to_complete_scenario_minutes" in given_ks:
+                v = p.pre_survey_data["typical_time_to_complete_scenario_minutes"]
+                try:
+                    _ = int(v)
+                except Exception:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_pre_survey_data_contraints",
+                            f"typical_time_to_complete_scenario_minutes could not be converted to integer: {traceback.format_exc()}",
+                        )
+                    )
+
+        if len(p.participant_metadata) == 0:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    participant_id,
+                    "participant_empty_metadata",
+                    "participant has empty metadata for demographics, etc.",
+                )
+            )
+        else:
+            ks = {
+                "age_range",
+                "gender",
+                "race_ethnicity",
+                "country_born",
+                "native_language",
+                "home_language",
+                "education_completed",
+                "current_student",
+                "field",
+            }
+            given_ks = set(p.participant_metadata.keys())
+            missing_ks = ks - given_ks
+            aux_ks = given_ks - ks
+            if len(missing_ks) > 0 or len(aux_ks) > 0:
+                ret.append(
+                    Error(
+                        ErrorLevel.WARN,
+                        participant_id,
+                        "participant_metadata_constraints",
+                        f"auxiliary keys: {aux_ks}, missing keys: {missing_ks}",
+                    )
+                )
+
+            if "gender" in p.participant_metadata:
+                v = p.participant_metadata["gender"]
+                valid_vs = {
+                    "female",
+                    "male",
+                    "non_binary",
+                    "prefer_not_to_disclose",
+                    "prefer_to_self_describe",
+                }
+                if v not in valid_vs:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_metadata_constraints",
+                            f"gender '{v}' not one of: {valid_vs}",
+                        )
+                    )
+
+    return ret
+
+
+def _check_video_metadata(
+    manifest: ManifestEgoExo, metadata: StandardMetadataEgoExo
+) -> List[Error]:
+    ret = []
+    for capture_uid, videos in manifest.videos.items():
+        any_has_walkaround = any(v.has_walkaround for v in videos)
+        any_is_ego = any(v.is_ego for v in videos)
+        if not any_has_walkaround:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    capture_uid,
+                    "capture_missing_walkaround",
+                    "capture does not have walkaround (from video metadata)",
+                )
+            )
+
+        if not any_is_ego:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    capture_uid,
+                    "capture_missing_ego",
+                    "capture does not have ego view",
+                )
+            )
+
+        seen_devices = set()
+        for video in videos:
+            video_uid = (capture_uid, video.university_video_id)
+            video_uid_str = (
+                f"capture_uid={capture_uid},video_id={video.university_video_id}"
+            )
+            if capture_uid not in manifest.captures:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        video_uid_str,
+                        "video_invalid_capture_uid_fk",
+                        f"video links to invalid capture_uid {capture_uid}",
+                    )
+                )
+            if video_uid not in manifest.video_components:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        video_uid_str,
+                        "video_has_no_linked_components",
+                        "video has no associated video components",
+                    )
+                )
+            else:
+                vcs = manifest.video_components[video_uid]  # pyre-ignore
+                if len(vcs) != video.number_video_components:
+                    ret.append(
+                        Error(
+                            ErrorLevel.ERROR,
+                            video_uid_str,
+                            "video_has_incorrect_num_components",
+                            f"video specified {video.number_video_components} linked components but has {len(vcs)} in metadata",
+                        )
+                    )
+
+                all_comps_red = all(vc.is_redacted for vc in vcs)
+                if video.is_redacted and not all_comps_red:
+                    ret.append(
+                        Error(
+                            ErrorLevel.ERROR,
+                            video_uid_str,
+                            "video_associated_components_not_redacted",
+                            f"video flagged as redacted but components are not all redacted",
+                        )
+                    )
+
+            if video.device_type not in metadata.devices:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        video_uid_str,
+                        "video_invalid_device",
+                        f"video has invalid device_type: {video.device_type}",
+                    )
+                )
+            device_uid = (video.device_type, video.device_id)
+            if device_uid in seen_devices:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        video_uid_str,
+                        "video_duplicate_device",
+                        f"video has duplicate device type and instance: device_type={video.device_type}, device_id (instance)={video.device_id}",
+                    )
+                )
+            seen_devices.add(device_uid)
+    return ret
+
+
+def _check_video_components(manifest: ManifestEgoExo) -> List[Error]:
+    ret = []
+    all_video_ids = set(
+        v.university_video_id
+        for vs in manifest.videos.values()
+        for v in vs
+        if v.number_video_components > 0
+    )
+    for (capture_uid, video_id), vcs in manifest.video_components.items():
+        next_expected_idx = 0
+        for vc in sorted(vcs, key=lambda x: x.component_index):
+            if video_id not in all_video_ids:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        vc.video_component_relative_path,
+                        "video_component_wrong_video_fk",
+                        f"video component has incorrect video id: {video_id}",
+                    )
+                )
+                continue
+
+            if capture_uid not in manifest.captures:
+                assert capture_uid == vc.university_capture_id
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        vc.video_component_relative_path,
+                        "video_component_wrong_capture_uid_fk",
+                        f"video component has incorrect university_capture_id: {vc.university_capture_id}",
+                    )
+                )
+                continue
+
+            if vc.component_index != next_expected_idx:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        vc.video_component_relative_path,
+                        "video_component_incorrect_index",
+                        f"expected index: {next_expected_idx}, got {vc.component_index}",
+                    )
+                )
+            next_expected_idx += 1
+    return ret
+
+
 def validate_egoexo_files(
     university: str,
     manifest: ManifestEgoExo,
     metadata: StandardMetadataEgoExo,
     num_workers: int,
 ) -> List[Error]:
-    errors = []
+    ret = []
 
-    return errors
+    for capture_uid, capture in manifest.captures.items():
+        ret.extend(_check_capture_metadata(manifest, metadata, capture, capture_uid))
+        ret.extend(
+            _check_associated_takes_metadata(manifest, metadata, capture, capture_uid)
+        )
+
+    if not manifest.colmap:
+        ret.append(
+            Error(
+                ErrorLevel.WARN,
+                "colmap",
+                "no_colmap_metadata_provided",
+                "missing colmap metadata (null or empty)",
+            )
+        )
+    else:
+        ret.extend(_check_colmap(manifest))
+
+    if not manifest.participants:
+        ret.append(
+            Error(
+                ErrorLevel.WARN,
+                "participants",
+                "no_participant_metadata",
+                "missing participant metadata (null or empty)",
+            )
+        )
+    else:
+        ret.extend(_check_participants(manifest, metadata))
+
+    if not manifest.physical_setting:
+        ret.append(
+            Error(
+                ErrorLevel.WARN,
+                "physical_setting",
+                "no_physical_setting_metadata",
+                "missing physical setting metadata (null or empty)",
+            )
+        )
+
+    if not manifest.objects:
+        ret.append(
+            Error(
+                ErrorLevel.WARN,
+                "objects",
+                "no_objects_metadata",
+                "missing object metadata (null or empty)",
+            )
+        )
+    else:
+        ret.extend(_check_objects(manifest))
+
+    provided_capture_uids = set(manifest.captures.keys())
+    for capture_uid, takes in manifest.takes.items():
+        take = takes[0]
+        if capture_uid not in provided_capture_uids:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    take.take_id,
+                    "take_has_incorrect_capture_uid",
+                    f"take {take.take_id} has incorrect capture uid: {capture_uid} (typo or misisng capture in metadata?)",
+                )
+            )
+
+    ret.extend(_check_video_metadata(manifest, metadata))
+    ret.extend(_check_video_components(manifest))
+    # TODO ret.extend(_check_files_exist(manfiest))
+    return ret
 
 
 def run_validation(
