@@ -347,7 +347,7 @@ def load_dataclass_dict_from_csv(
             additional_str = "\n".join([f"- {x}" for x in (csv_names - dn_names)])
             raise AssertionError(
                 f"""
-Missing fields from CSV:
+Missing fields from CSV {input_csv_file_path}:
 {missing_str}
 Additional fields in CSV:
 {additional_str}
@@ -355,7 +355,7 @@ Additional fields in CSV:
             )
 
         duplicate_keys = []
-        lineno = 0
+        lineno = 2
         for line in reader:
             constructor_params = {}
             for name, meta in field_name_to_metadata.items():
@@ -367,7 +367,7 @@ Additional fields in CSV:
                     )
                 except Exception as e:
                     print(
-                        f"Could not decode column: '{name}' for input file: {input_csv_file_path}. Will not decode. Line: {lineno + 1}"
+                        f"Could not decode column: '{name}' for input file: {input_csv_file_path} Will not decode. Line: {lineno}"
                     )
                     raise e
 
