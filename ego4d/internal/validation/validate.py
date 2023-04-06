@@ -954,8 +954,8 @@ def _check_participants(
 ) -> List[Error]:
     ret = []
     assert manifest.participants is not None
-    for participant_id, p in manifest.participants.items():
-        if p.scenario_id not in metadata.scenarios:
+    for (participant_id, scenario_id, _), p in manifest.participants.items():
+        if scenario_id not in metadata.scenarios:
             ret.append(
                 Error(
                     ErrorLevel.ERROR,
@@ -1636,13 +1636,12 @@ def run_validation(
         print("No errors")
 
     print(f"Writing to directory: {output_dir}")
-    os.makedirs(output_dir, exist_ok=True)
-    errors_df.to_csv(
-        pathmgr.open(os.path.join(output_dir, "errors.csv"), "w"), index=False
-    )
-    summary_df.to_csv(
-        pathmgr.open(os.path.join(output_dir, "summary.csv"), "w"), index=False
-    )
+    pathmgr.mkdirs(output_dir)
+
+    with pathmgr.open(os.path.join(output_dir, "errors.csv"), "w") as out_f:
+        errors_df.to_csv(out_f, index=False)
+    with pathmgr.open(os.path.join(output_dir, "summary.csv"), "w") as out_f:
+        summary_df.to_csv(out_f, index=False)
 
     # NOTE: this is not the best solution, but we're likely going to be running
     # this once per python interpreter context

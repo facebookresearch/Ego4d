@@ -85,7 +85,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
 
     if cfg.output_dir is None:
         time_now = f"{datetime.datetime.now().strftime('%d%m%y_%H%M%S')}"
-        cfg.output_dir = f"s3://ego4d-consortium-sharing/internal/validation/{cfg.input_university}/{time_now}"  # noqa
+        cfg.output_dir = f"s3://ego4d-consortium-sharing/internal/validation/{cfg.input_university}/{time_now}/"  # noqa
         print(f"Using output directory: {cfg.output_dir}")
 
     if cfg.metadata_folder is None:
@@ -101,7 +101,7 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         metadata_folder=_maybe_fix_s3_folder(cfg.metadata_folder),
         released_video_path=cfg.released_video_path,
         input_university=cfg.input_university,
-        output_dir=cfg.output_dir,
+        output_dir=_maybe_fix_s3_folder(cfg.output_dir),
         aws_profile_name=cfg.aws_profile_name,
         num_workers=cfg.num_workers,
         expiry_time_sec=cfg.expiry_time_sec,
