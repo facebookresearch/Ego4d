@@ -6,6 +6,7 @@ import sys
 from dataclasses import dataclass
 
 import cv2
+import pickle
 
 import hydra
 import pandas as pd
@@ -16,6 +17,12 @@ from ego4d.internal.human_pose.camera import (
     create_camera_data,
     get_aria_camera_models,
     xworld_to_yimage,
+    batch_xworld_to_yimage,
+)
+
+from ego4d.internal.human_pose.utils import (
+    check_and_convert_bbox, draw_points_2d, get_region_proposal, get_exo_camera_plane,
+    draw_bbox_xyxy
 )
 
 from ego4d.internal.human_pose.config import Config
@@ -30,9 +37,7 @@ from iopath.common.s3 import S3PathHandler
 from mmpose.apis import inference_top_down_pose_model, init_pose_model
 from tqdm.auto import tqdm
 import numpy as np
-import trimesh
-from pyntcloud.geometry.models.plane import Plane
-from pyntcloud import PyntCloud
+
 
 pathmgr = PathManager()
 pathmgr.register_handler(S3PathHandler(profile="default"))
@@ -48,7 +53,16 @@ class Context:
     dataset_json_path: str
     dataset_rel_dir: str
     frame_dir: str
-
+    bbox_dir: str
+    vis_bbox_dir: str
+    pose2d_dir: str
+    vis_pose2d_dir: str
+    pose3d_dir: str
+    vis_pose3d_dir: str
+    detector_config: str
+    detector_checkpoint: str
+    pose_config: str
+    pose_checkpoint: str
 
 def get_context(config: Config) -> Context:
     metadata_json = json.load(pathmgr.open(config.inputs.metadata_json_path))
@@ -61,6 +75,7 @@ def get_context(config: Config) -> Context:
         cache_rel_dir,
     )
     dataset_dir = os.path.join(cache_dir, config.mode_preprocess.dataset_name)
+
     return Context(
         root_dir=config.root_dir,
         cache_dir=cache_dir,
@@ -72,9 +87,187 @@ def get_context(config: Config) -> Context:
             cache_rel_dir, config.mode_preprocess.dataset_name
         ),
         frame_dir=os.path.join(dataset_dir, "frames"),
+        bbox_dir=os.path.join(dataset_dir, "bbox"),
+        vis_bbox_dir=os.path.join(dataset_dir, "vis_bbox"),
+        pose2d_dir=os.path.join(dataset_dir, "pose2d"),
+        vis_pose2d_dir=os.path.join(dataset_dir, "vis_pose2d"),
+        pose3d_dir=os.path.join(dataset_dir, "pose3d"),
+        vis_pose3d_dir=os.path.join(dataset_dir, "vis_pose3d"),
+        detector_config=config.mode_bbox.detector_config,
+        detector_checkpoint=config.mode_bbox.detector_checkpoint,
+        pose_config=config.mode_pose2d.pose_config,
+        pose_checkpoint=config.mode_pose2d.pose_checkpoint,
     )
 
+##-------------------------------------------------------------------------------
+def mode_pose2d(config: Config):
+    ctx = get_context(config)
 
+    dset = SyncedEgoExoCaptureDset(
+        root_dir=config.root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+    # by_dev_id = download_andor_generate_streams(
+    #     metadata=ctx.metadata_json,
+    #     download_video_files=config.mode_preprocess.download_video_files,
+    #     force_download=config.mode_preprocess.force_download,
+    #     output_dir=ctx.cache_dir,
+    # )
+    all_cam_ids = set(dset.all_cam_ids())
+
+    # aria_path = by_dev_id["aria01"]["local_path"]
+    aria_path = "/home/rawalk/Desktop/datasets/ego4d_data/cache/unc_T1/aria01/aria01.vrs"
+    assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
+    # aria_camera_models = get_aria_camera_models(aria_path)
+
+    #---------------construct pose model-------------------
+    from ego4d.internal.human_pose.pose_estimator import PoseModel
+    pose_model = PoseModel(pose_config=ctx.pose_config, pose_checkpoint=ctx.pose_checkpoint)
+
+    ##--------construct ground plane, it is parallel to the plane with all gopro camera centers----------------
+    exo_cameras = {exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None) for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]}
+    
+    if not os.path.exists(ctx.pose2d_dir):
+        os.makedirs(ctx.pose2d_dir)
+    
+    ## if ctx.vis_pose_dir does not exist make it
+    if not os.path.exists(ctx.vis_pose2d_dir):
+        os.makedirs(ctx.vis_pose2d_dir)
+
+    poses2d = {}
+
+    ## load bboxes from bbox_dir/bbox.pkl
+    bbox_file = os.path.join(ctx.bbox_dir, "bbox.pkl")
+    with open(bbox_file, "rb") as f:
+        bboxes = pickle.load(f)
+    
+    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+        info = dset[time_stamp]
+
+        poses2d[time_stamp] = {}
+
+        for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]:
+            image_path = info[exo_camera_name]['abs_frame_path']
+            image = cv2.imread(image_path)
+
+            vis_pose2d_cam_dir = os.path.join(ctx.vis_pose2d_dir, exo_camera_name)
+            if not os.path.exists(vis_pose2d_cam_dir):
+                os.makedirs(vis_pose2d_cam_dir)
+
+            exo_camera = create_camera(info[exo_camera_name]["camera_data"], None)
+
+            bbox_xyxy = bboxes[time_stamp][exo_camera_name] ## x1, y1, x2, y2
+            ## add confidence score to the bbox
+            bbox_xyxy = np.append(bbox_xyxy, 1.0)
+
+            if bbox_xyxy is not None:
+                pose_results = pose_model.get_poses2d(bboxes=[{'bbox': bbox_xyxy}], \
+                                        image_name=image_path, \
+                                    )
+
+                assert(len(pose_results) == 1)
+
+                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
+                pose_model.draw_poses2d(pose_results, image, save_path)
+
+                pose_result = pose_results[0]
+                pose2d = pose_result['keypoints']
+
+            poses2d[time_stamp][exo_camera_name] = pose2d
+
+    ## save poses2d to pose2d_dir/pose2d.pkl
+    with open(os.path.join(ctx.pose2d_dir, "pose2d.pkl"), "wb") as f:
+        pickle.dump(poses2d, f)
+
+    return
+
+
+###-------------------------------------------------------------------------------
+def mode_bbox(config: Config):
+    ctx = get_context(config)
+
+    dset = SyncedEgoExoCaptureDset(
+        root_dir=config.root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+    # by_dev_id = download_andor_generate_streams(
+    #     metadata=ctx.metadata_json,
+    #     download_video_files=config.mode_preprocess.download_video_files,
+    #     force_download=config.mode_preprocess.force_download,
+    #     output_dir=ctx.cache_dir,
+    # )
+    all_cam_ids = set(dset.all_cam_ids())
+
+    # aria_path = by_dev_id["aria01"]["local_path"]
+    aria_path = "/home/rawalk/Desktop/datasets/ego4d_data/cache/unc_T1/aria01/aria01.vrs"
+    assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
+    # aria_camera_models = get_aria_camera_models(aria_path)
+
+    #---------------construct bbox detector----------------
+    from ego4d.internal.human_pose.bbox_detector import DetectorModel
+    detector_model = DetectorModel(detector_config=ctx.detector_config, detector_checkpoint=ctx.detector_checkpoint)
+
+    ##--------construct ground plane, it is parallel to the plane with all gopro camera centers----------------
+    exo_cameras = {exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None) for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]}
+    exo_camera_centers = np.array([exo_camera.center for exo_camera_name, exo_camera in exo_cameras.items()])
+    camera_plane, camera_plane_unit_normal  = get_exo_camera_plane(exo_camera_centers)
+    
+    ## if ctx.bbox_dir does not exist make it
+    if not os.path.exists(ctx.bbox_dir):
+        os.makedirs(ctx.bbox_dir)
+    
+    ## if ctx.vis_bbox_dir does not exist make it
+    if not os.path.exists(ctx.vis_bbox_dir):
+        os.makedirs(ctx.vis_bbox_dir)
+
+    bboxes = {}
+    
+    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+        info = dset[time_stamp]
+        bboxes[time_stamp] = {}
+
+        for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]:
+            image_path = info[exo_camera_name]['abs_frame_path']
+            image = cv2.imread(image_path)
+
+            vis_bbox_cam_dir = os.path.join(ctx.vis_bbox_dir, exo_camera_name)
+            if not os.path.exists(vis_bbox_cam_dir):
+                os.makedirs(vis_bbox_cam_dir)
+
+            exo_camera = create_camera(info[exo_camera_name]["camera_data"], None)
+            left_camera = create_camera(info["aria_slam_left"]["camera_data"], None) ## TODO: use the camera model of the aria camera
+            right_camera = create_camera(info["aria_slam_right"]["camera_data"], None) ## TODO: use the camera model of the aria camera
+            human_center_3d = (left_camera.center + right_camera.center) / 2
+
+            proposal_points_3d = get_region_proposal(human_center_3d, unit_normal=camera_plane_unit_normal, human_height=1.5)
+            proposal_points_2d = batch_xworld_to_yimage(proposal_points_3d, exo_camera)
+            proposal_bbox = check_and_convert_bbox(proposal_points_2d, exo_camera.camera_model.width, exo_camera.camera_model.height)
+            proposal_bbox = np.array([proposal_bbox[0], proposal_bbox[1], proposal_bbox[2], proposal_bbox[3], 1]) ## add confidnece
+            proposal_bboxes = [{'bbox': proposal_bbox}]
+            
+            offshelf_bboxes = detector_model.get_bboxes(image_name=image_path, bboxes=proposal_bboxes)
+            bbox_xyxy = None
+
+            if offshelf_bboxes is not None:
+                assert len(offshelf_bboxes) == 1 ## single human per scene
+                bbox_xyxy = offshelf_bboxes[0]['bbox'][:4]
+
+                ## uncomment to visualize the bounding box
+                # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
+                bbox_image = draw_bbox_xyxy(image, bbox_xyxy, color=(0, 255, 0))
+                cv2.imwrite(os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), bbox_image)
+            
+            bboxes[time_stamp][exo_camera_name] = bbox_xyxy
+
+    ## save the bboxes as a pickle file
+    with open(os.path.join(ctx.bbox_dir, 'bbox.pkl'), 'wb') as f:
+        pickle.dump(bboxes, f)
+
+    return
+
+###-------------------------------------------------------------------------------
 def mode_preprocess(config: Config):
     """
     Does the following:
@@ -234,140 +427,7 @@ def mode_preprocess(config: Config):
     }
     json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
 
-
-###-------------------------------------------------------------------------------
-"""
-region_proposal of the human using aria camera location in 3D
-We fit a fixed height cylinder to the aria camera location
-The orientation of the cylinder is computed using the exo camera plane
-"""
-def get_region_proposal(point_3d, unit_normal, radius=0.3, human_height=1.1, padding=1.1, axis=[0, 1, 0]):
-    transform = trimesh.transformations.rotation_matrix(np.deg2rad(180), axis) ## angle and axis
-
-    ## compute the height of the human
-    cylinder_center = point_3d - human_height*unit_normal*0.5
-    transform[:3, 3] = cylinder_center ## place the cylinder at the hip of the human
-
-    mesh = trimesh.primitives.Cylinder(radius=radius, height=human_height)
-    mesh.apply_transform(transform)
-    bbox_3d = mesh.vertices ## slower but smoother, all the vertices of the cylinder
-    return bbox_3d
-
-"""
-return the ground plane and the unit normal of the ground plane
-"""
-def get_exo_camera_plane(points):
-    point_cloud = PyntCloud(pd.DataFrame(data=points, columns=["x", "y", "z"]))
-    plane = Plane()
-    plane.from_point_cloud(point_cloud.xyz)
-    a, b, c, d = plane.get_equation()
-    unit_normal = np.array([a, b, c])/np.sqrt(a*a + b*b + c*c)
-    return plane, unit_normal
-
-def mode_bounding_box_detection(config: Config):
-    ctx = get_context(config)
-
-    dset = SyncedEgoExoCaptureDset(
-        root_dir=config.root_dir,
-        dataset_json_path=ctx.dataset_json_path,
-        read_frames=False,
-    )
-    # by_dev_id = download_andor_generate_streams(
-    #     metadata=ctx.metadata_json,
-    #     download_video_files=config.mode_preprocess.download_video_files,
-    #     force_download=config.mode_preprocess.force_download,
-    #     output_dir=ctx.cache_dir,
-    # )
-    all_cam_ids = set(dset.all_cam_ids())
-
-    # aria_path = by_dev_id["aria01"]["local_path"]
-    aria_path = "/home/rawalk/Desktop/datasets/ego4d_data/cache/unc_T1/aria01/aria01.vrs"
-    assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
-    # aria_camera_models = get_aria_camera_models(aria_path)
-
-    ##--------construct ground plane, it is parallel to the plane with all gopro camera centers----------------
-    exo_cameras = {exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None) for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]}
-    exo_camera_centers = np.array([exo_camera.center for exo_camera_name, exo_camera in exo_cameras.items()])
-    camera_plane, camera_plane_unit_normal  = get_exo_camera_plane(exo_camera_centers)
-
-    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
-        info = dset[time_stamp]
-
-        for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]:
-            exo_camera = camera_for_data(info[exo_camera_name]["camera_data"], None)
-            left_camera = camera_for_data(info["aria_slam_left"]["camera_data"], None)
-            right_camera = camera_for_data(info["aria_slam_right"]["camera_data"], None)
-            human_center_3d = (left_camera.center + right_camera.center) / 2
-
-            region_proposal_points = get_region_proposal(human_center_3d, unit_normal=camera_plane_unit_normal)
-
-            import pdb; pdb.set_trace()
-
-    # TODO perform object detection with FasterRCNN ?
-    # TODO match on person classes using `camera_wearer_centers` ?
-
-###-------------------------------------------------------------------------------
-
-def mode_pose_keypoint_detection(config: Config):
-    ctx = get_context(config)
-    dset = SyncedEgoExoCaptureDset(
-        root_dir=config.root_dir,
-        dataset_json_path=ctx.dataset_json_path,
-        read_frames=False,
-    )
-
-    pose_model = init_pose_model(
-        config.mode_pose_estimation.pose_model_config,
-        config.mode_pose_estimation.pose_model_checkpoint,
-        device=f"cuda:{config.gpu_id}" if config.gpu_id > 0 else "cpu",
-    )
-
-    images = [
-        (
-            dset[i]["cam01"]["abs_frame_path"],
-            dset[i]["cam01"]["frame_path"],
-        )
-        for i in range(len(dset))
-    ]
-    # TODO: fixme
-    bbox = [300, 300, 500, 500]
-    persons = [
-        {
-            "bbox": bbox + [1.0],
-            "track_id": 0,
-        }
-    ]
-    images = images[0:1]
-
-    # NOTE
-    # we cannot provide a batch of inputs as a model config requires
-    # "frame_weight_test" which is available in a PoseTrack trained model
-    # but this model was trained on COCO-WholeBody
-    result = []
-    for person, (abs_image_path, rel_path) in tqdm(
-        zip(persons, images), total=len(images)
-    ):
-        pose = inference_top_down_pose_model(
-            pose_model,
-            abs_image_path,
-            person_results=persons,
-            format="xyxy",
-            return_heatmap=False,
-            bbox_thr=0.9,  # TODO add argument
-            outputs=None,
-        )
-        result.append(
-            {
-                "person": person,
-                "path": rel_path,
-                "pose": pose,  # TODO: fixme
-            }
-        )
-
-    torch.save(result, os.path.join(ctx.dataset_dir, "keypoints.pth"))
-
-
-def mode_triangulation(config: Config):
+def mode_pose3d(config: Config):
     # NOTE
     # feel free to write the implementation of this code to another file and
     # call it here as a function
@@ -379,11 +439,11 @@ def run(config: Config):
     if config.mode == "preprocess":
         mode_preprocess(config)
     elif config.mode == "bbox":
-        mode_bounding_box_detection(config)
-    elif config.mode == "pose_estimation":
-        mode_pose_keypoint_detection(config)
-    elif config.mode == "triangulate":
-        mode_triangulation(config)
+        mode_bbox(config)
+    elif config.mode == "pose2d":
+        mode_pose2d(config)
+    elif config.mode == "pose3d":
+        mode_pose3d(config)
     else:
         raise AssertionError(f"unknown mode: {config.mode}")
 
