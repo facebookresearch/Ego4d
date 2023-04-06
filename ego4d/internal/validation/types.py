@@ -276,7 +276,16 @@ def default_decode(value: str, datatype: type, name: str) -> Any:
             if len(value) > 0
             else None
         )
-
+    elif datatype == int:
+        if len(value) == 0:
+            return None
+        if "." in value:
+            x = value.split(".")
+            assert len(x) == 2, f"invalid number: {x}"
+            assert int(x[1]) == 0, f"fractional part must be 0 for integer type: {x}"
+            return int(x[0])
+        else:
+            return int(value)
     elif datatype in (int, float, str, bool):
         if len(value) == 0:
             return None
@@ -583,7 +592,7 @@ def load_egoexo_manifest(manifest_dir: str) -> ManifestEgoExo:
         participant_metadata = load_dataclass_dict_from_csv(
             file_path,
             ParticipantMetadataEgoExo,
-            "participant_id",
+            ["participant_id", "scenario_id", "collection_date"],
             unique_per_key=True,
         )
 
