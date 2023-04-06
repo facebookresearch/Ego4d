@@ -1,0 +1,138 @@
+---
+sidebar_position: 6
+id: visualizing
+title: Visualize Sequences and Pre-Computed Camera Trajectory
+---
+import useBaseUrl from '@docusaurus/useBaseUrl'
+
+# Visualize Sequences & Pre-Computed Camera Trajectory
+## Introduction
+
+The AriaViewer allows users to visualize time-synced recordings for one or more Project Aria sequences. It has the ability to visualize recordings and see 3D visualizations of pre-computed trajectory using following time-synced data:
+
+* Both SLAM and RGB camera video streams
+* All 7 audio microphone waveforms
+* Accelerometer, gyroscope, magnetometer, barometer and temperature signals
+* Speech-to-text derived data
+* Eye-tracking information overlayed on the RGB video stream
+
+:::note
+Cameras on Project Aria devices are installed sideways. By default, images are reported and viewed as they were provided by cameras and will appear sideways.
+:::
+
+
+## How to use AriaViewer
+### Single Recording
+
+The following instructions start running the visualization tool for a single recording in C++:
+
+```
+$ cd build/visualization
+$ ./aria_viewer ${vrs_path} ${optional_pose_path} ${optional_eyetracking_path} ${optional_speechtotext_path}
+```
+
+
+or in Python:
+
+
+```
+$ cd src/visualization
+$ python3 main.py ${vrs_path} ${optional_pose_path} ${optional_eyetracking_path} ${optional_speechtotext_path}
+```
+
+
+Pose, eye tracking and speech2text paths are optional. If they are not provided, the visualization tool will try to infer the full paths of `trajectory.csv`, `et_in_rgb_stream.csv` and `speech_aria_domain.csv` from the VRS path by using the Aria Pilot Dataset structure:
+
+
+```
+├── location
+│ └── trajectory.csv
+├── eyetracking
+│ └── et_in_rgb_stream.csv
+├── speech2text
+│ └── speech_aria_domain.csv
+├── ${vrs_path}
+└── ...
+```
+
+
+You will see something like the video below when you press the **Play** button.
+
+<video width="950" controls>
+  <source src={useBaseUrl('video/aria_viewer.m4v')} type="video/mp4"/>
+  Your browser does not support the video tag.
+</video>
+
+**Figure 1:** *AriaViewer Player*
+
+
+### Multiple Recordings
+
+In C++ multiple time synchronized recordings can be played back jointly using the aria_multi_viewer as:
+
+```
+$ cd build/visualization
+$ ./aria_multi_viewer ${recording_path_0} ${recording_path_1} ... ${recording_path_N}
+```
+
+You will see multiple AriaViewer UIs showing all provided recordings played back in synchrony after pressing both **Play** buttons:
+
+
+<video width="950" controls>
+  <source src={useBaseUrl('video/aria_multi_viewer.m4v')} type="video/mp4"/>
+  Your browser does not support the video tag.
+</video>
+
+**Figure 2:** *AriaViewer Player with Multiple Recordings*
+
+## Features of the AriaViewer UI
+
+The visualization tool’s layout varies depending on which sensor streams are selected via the menu bar. The grid shows from top left to bottom right:
+
+* The image stream of the left SLAM camera `camera-slam-left`
+* The image stream of the RGB camera `camera-rgb` with eye-tracking (visualized as a red cross) and speech-to-text information overlayed onto it
+* The image stream of the right SLAM camera` camera-slam-right`
+* The 3D visualization of the pre-computed trajectory as well as the frustra of the calibrated rig.
+* The acceleration observations of the left and right IMU in m/s^2
+* The gyroscope observations of the left and right IMU in rad/s
+* The magnetometer observations in Tesla
+* The signals of the 7 microphones
+
+### Menu bar
+
+The menu bar’s features are:
+
+* **Play:** Play and pause the recording
+* **playback_speed:** change the playback speed factor (0.1 means slowdown by a factor of 10, 1.0 means realtime, 10. means speed up by a factor of 10)
+* **camSparsity**: this drop down menu sets the sparsity level for the visualized camera poses. “1” shows all the camera poses at the frame-rate of `camera-slam-left`
+* **Snapshot UI**: take a snapshot of the window and save it as the image `snapshot.png` in the current path
+* **LeftImg**: show/hide `camera-slam-left` image stream
+* **RightImg**: show/hide `camera-slam-right` image stream
+* **RgbImg**: show/hide `camera-rgb` image stream
+* **LeftCam**: show/hide the 3D frustums of `camera-slam-left` in the trajectory visualization
+* **RightCam**: show/hide the 3D frustums of `camera-slam-right` in the trajectory visualization
+* **Rig**: show/hide the coordinate systems of `imu-left` in the trajectory visualization
+* **Trajectory**: show/hide the trajectory as lines connecting the the poses of `imu-left`
+* **World Coord:** shows the coordinate axes of the world coordinate system in the 3D view
+* **LeftImu**: show/hide the accelerometer and gyrometer observations of the left IMU
+* **RightImu**: show/hide the accelerometer and gyrometer  observations of the right IMU
+* **Magnetometer**: show/hide the magnetometer observations
+* **Barometer**: show/hide the barometer observations
+* **Temperature**: show/hide the temperature observations
+* **Print GPS log:** print the received GPS messages to the terminal
+* **Print Wifi log:** print the detected Wifi networks to the terminal
+* **Print Bluetooth:** print the detected Bluetooth beacons to the terminal
+* **temp [C]:** the current temperature reading in degrees Celsius
+* **pres [kPa]:** the current pressure reading in kilo Pascal
+
+## Notes
+
+* The playback speed mimics the real recording speed times the playback_speed factor.
+* The SLAM cameras and the RGB cameras may have different frame-rates.
+* The provided poses in `trajectory.csv` have 1kHz frequency and express the `imu-left` poses. The visualized poses are based on the timestamps of the `slam-left-cam` and are obtained by interpolating the provided 1kHz poses. Please refer to `utils.cpp` in `data_provider` in this tool kit for details about the interpolation. The poses of different sensors are visualized using the calibration parameters between `imu-left` and the other sensors.
+* The eye-tracking results are directly visualized in the RGB camera stream as a red cross.
+* The speech-to-text transcription of the audio signals is shown overlayed onto the RGB video stream formatted as `transcribed text (confidence %, duration of utterance in seconds).`
+
+
+
+If you want to know more about accessing Project Aria data go to [Accessing Sensor Data](dataprovider.mdx)

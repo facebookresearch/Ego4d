@@ -1,0 +1,44 @@
+---
+sidebar_position: 6
+id: reprojected-gaze
+title: Eye Gaze Data
+---
+import useBaseUrl from '@docusaurus/useBaseUrl'
+
+# Eye Gaze Data
+
+Eye Gaze derived data uses data from Project Aria devices’ eye tracking cameras to estimate where the user is looking. Data from the eye tracking cameras are used to estimate a vector expressing the gaze direction. That vector is translated into a 2D pixel coordinate on the 120 degree FOV RGB camera image.
+
+The Eye Gaze Data for each recording is stored in `eyetracking/et_in_rgb_stream.csv`.
+
+In the csv file (x,y) represents the calibrated 2D pixel coordinate of gaze position.
+
+**Table 1:** *`et_in_rgb_stream.csv` Structure*
+
+<div>
+    <table>
+        <tbody>
+            <tr>
+                <td>timestamp_unix_ns</td>
+                <td colSpan={2}>  Calibrated gaze position (pixel coordinate)</td>
+            </tr>
+            <tr>
+                <td> t </td>
+                <td> x</td>
+                <td> y</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+:::note
+The provided timestamp is the timestamp of the eye camera image used to compute the gaze, not an RGB camera timestamp. To query the approximate location of eye gaze at RGB image timestamp, we suggest you interpolate gaze results from neighboring frames.
+:::
+
+
+<video width="950" controls>
+  <source src={useBaseUrl('video/et_visualization.m4v')} type="video/mp4"/>
+  Your browser does not support the video tag.
+</video>
+
+**Figure 1:** *Eye Tracking Visualization*

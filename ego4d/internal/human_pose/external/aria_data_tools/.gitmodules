@@ -1,0 +1,15 @@
+[submodule "src/third_party/fast-cpp-csv-parser"]
+	path = src/third_party/fast-cpp-csv-parser
+	url = https://github.com/ben-strasser/fast-cpp-csv-parser.git
+[submodule "src/third_party/eigen"]
+	path = src/third_party/eigen
+	url = https://gitlab.com/libeigen/eigen.git
+[submodule "src/third_party/cereal"]
+	path = src/third_party/cereal
+	url = https://github.com/USCiLab/cereal.git
+[submodule "src/third_party/Sophus"]
+	path = src/third_party/Sophus
+	url = https://github.com/strasdat/Sophus.git
+[submodule "src/third_party/vrs"]
+	path = src/third_party/vrs
+	url = https://github.com/facebookresearch/vrs.git

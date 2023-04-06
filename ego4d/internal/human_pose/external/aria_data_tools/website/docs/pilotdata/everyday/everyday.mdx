@@ -1,0 +1,59 @@
+---
+sidebar_position: 3
+id: Everyday Activities
+title: Everyday Activities File Structure
+---
+
+# Everyday Activities File Structure
+
+The Everyday Activities dataset contains multiple activity sequences for one to two Project Aria device users. We created recordings using scripts to represent all day activities with always on sensing.
+
+Records for each location are stored in their own folder. Each location contains one or several script folders. The script folder contains a .csv file providing details about each sequence, as well as a folder for each sequence. Each sequence has one or several recording folders (one recording folder per Project Aria device wearer in the sequence).
+
+Derived data is stored in .csv files and the raw sensor data is stored in `recording.vrs`
+
+Each location folder contains the following assets:
+
+```
+ Location_n
+    ├── data_summary.csv
+    ├──  script_1
+        ├── seq_1
+            ├── recording_001
+              ├── eyetracking
+              | └── et_in_rgb_stream.csv
+              ├── location
+              | └── trajectory.csv
+              ├── recording.vrs
+              ├── speech2text
+              | ├── speech_aria_domain.csv
+              │ └── speech.csv
+              ├── synchronization
+                └── timestamp_mapping.csv
+            ├── recording_002
+```
+
+
+* `data_summary.csv` - details about all the scripts, sequences and recordings in this folder.
+* `eyetracking` - contains [Eye Gaze Data](/pilotdata/reprojected-gaze.mdx)
+* `location` - contains [Location Output Data](/pilotdata/location-output.mdx)
+* `recording.vrs` - contains Project Aria raw sensor data
+* `speech2text` - contains [Speech2Text Output Data](/pilotdata/speech2text.mdx)
+* `synchronization` - contains [Multi-Users Data](/pilotdata/timestamps.mdx)
+
+
+**Table 1:** *`data_summary.csv` Structure*
+
+|location |script_id |seq_id |recording_id |vrs |trajectory_file |eyetracking_file |speech2text_aria |speech2text_wav |synchronization |location_reference |contain_audio |stream_id |
+|--- |--- |--- |--- |--- |--- |--- |--- |--- |--- |--- |--- |--- |
+|location_n_indoor/outdoor |1-5 |1-8 |1-4 |script_n/seq_n/recording_n/recording.vrs |script_n/seq_n/recording_n/location/trajectory.csv |script_n/seq_n/recording_n/eyetracking/et_in_rgb_stream.csv |script_n/seq_n/recording_n/speech2text/speech_aria_domain.csv |script_n/seq_n/recording_n/speech2text/speech.csv |N/A if only one wearer |location_n_indoor/outdoor |TRUE/FALSE |Unique 15 digit number |
+
+:::note
+[Recording Scripts](/pilotdata/everyday/scripts.mdx) provides details about what activities are recorded in each script and sequence.
+:::
+
+## Project Aria Raw Sensor Data
+
+[Sensors and Measurements](/sensors-measurements.mdx) provides information about how sensors are named and labelled in the tooling, coordinate systems, time and units of measurement.
+
+[How Project Aria Uses VRS](/aria-vrs.mdx) provides information about how the raw data is stored.

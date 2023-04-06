@@ -1,0 +1,104 @@
+---
+sidebar_position: 1
+id: desktop_overview
+title: Desktop Activities Overview
+---
+import useBaseUrl from '@docusaurus/useBaseUrl'
+
+# Desktop Activities Overview
+Desktop Activities recorded a single operator manipulating objects over a desktop space. Data was captured by the operator wearing a Project Aria device and by a multi-view motion capture system. Most of the objects manipulated were 10 commonly used objects from the [YCB Benchmark](https://www.ycbbenchmarks.com/) object set.
+
+_Figure 1_ presents these objects with the corresponding YCB object indices. During recording, we also randomized the desktop appearance by placing non-YCB objects on the desk.
+
+![YCB Objects](/img/pilot_dataset/YCB_objects.png)
+**Figure 1:** *YCB Objects Used*
+
+*Note.* The items used were Cracker Box (003), Sugar Box (004), Mustard Bottle (006), Banana (011), Bleach Cleanser (021), Mug (025), Power Drill (035), Large Marker (040), Large Clamp (051), Extra Large Clamp (052). The number in bracket corresponds to the original YCB object index.
+
+## Statistics and Scenarios
+
+For Desktop Activities, we captured 16 sequences in total, with each recording taking two minutes on average. In this dataset:
+
+* Multiple objects were manipulated in 5 sequences
+* A single object was manipulated in 10 sequences
+* Non-YCB objects were tidied up and stacked in one sequence
+
+In total, the dataset provide 23066 frames per 4 camera streams from the Project Aria device, and 78042 frames per 12 RGB camera streams from the multi-view system. Out of these frames, 19471 frames were trigger-aligned across all 16 cameras, for a total of 311536 accurately aligned images. The Project Aria device recorded at 15FPS and the multi-view camera recorded at 60FPS. The devices, although time aligned, started and stopped asynchronously.
+
+
+**Table 1**
+*Desktop Activity Statistics and YCB Objects per Recording ID*
+
+|Recording ID  |Number of Project Aria device frames  |Number of multi-view camera frames  |Number of trigger-aligned frames per present camera  |Tracked YCB Object/s  |
+|---  |---  |---  |---  |---  |
+|01  |1,218  |4,000  |1,000  |None, sorting non-YCB objects  |
+|02  |1,170  |4,641  |1,128  | Power drill, bleach cleanser and mustard bottle  |
+|03  |1,603  |5,652  |1,406  | Power drill, bleach cleanser, large clamp and extra large clamp  |
+|04  |1,464  |4,800  |1,200  | Power drill, bleach cleanser, large clamp and extra large clamp  |
+|05  |1,380  |4,900  |1,225  | Cracker box, sugar box, banana and mustard bottle  |
+|06  |1,860  |6,700  |1,675  | Cracker box, sugar box, banana and mustard bottle  |
+|07  |969  |3,200  |800  |Banana  |
+|08  |964  |3,130  |783  |Bleach cleanser  |
+|09  |1,264  |4,300  |1,075  |Cracker box  |
+|10  |1,206  |4,000  |1,000  |Large clamp  |
+|11  |1,409  |4,900  |1,225  |Power drill  |
+|12  |1,624  |5,800  |1,450  |Large clamp  |
+|13  |1,585  |2,500  |625  |Mug  |
+|14  |1,476  |5,270  |1,317  |Large marker  |
+|15  |1,909  |6,999  |1,749  |Sugar box  |
+|16  |1,966  |7,250  |1,813  |Mustard bottle  |
+|Total number of frames  |23,066  |78,042  |19,471  |  |
+|Total number of images  |92,264  |936,504  |311,536  |  |
+
+
+*Note.* For Number of Project Aria device frames, each frame contains of 4 trigger-aligned images (1 RGB, 2 SLAM and 1 ET). For Number of multi-view camera frames, each frame contains 12 trigger-aligned RGB images.
+
+
+## File Structure
+
+Each recording uses this structure:
+
+```
+ Recording number
+    ├── aria_recording.vrs
+    ├── aria_checksum.txt
+    ├── aria_timestamp.csv
+    ├── aria_trajectory.csv
+    ├── multiview_recording.vrs
+    ├── multiview_recording_checksum.txt
+```
+
+* `aria_recording.vrs` — provides the Project Aria recordings in [VRS](aria-vrs.mdx) format. The cameras’ calibration parameters are stored as meta data inside the VRS file. The VRS file contains 1 RGB camera stream, 2 SLAM camera streams, 1 eye tracking (ET) camera stream and 2 IMU streams. The sensor timestamps reflect the device’s local time.
+* `multiview_recording.vrs`  — provides multi-view recordings in VRS format. This file contains 12 RGB camera streams, recorded at 60 FPS. The cameras’ calibration parameters are stored as meta data inside the VRS file. The intrinsic calibration follows [OpenCV camera calibration](https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html#ga3207604e4b1a1758aa66acb6ed5aa65d) to describe the radial and tangential distortion for a pinhole camera model. The sensor timestamps reflect the synchronized global time.
+* `aria_timemap.csv` — Provides the time mapping from the Project Aria device timestamp to the synchronized timeline, using the [Timestamps Mapping Data](pilotdata/timestamps.mdx) format.
+* `aria_trajectory.csv` – Provides the 6DoF SE(3) transformation of the Project Aria device with respect to the world coordinates. The world coordinates are defined by the multi-view camera extrinsics calibration. The trajectory is stored at 60 FPS and has a synchronized global timestamp.
+
+**Table 2:** *`aria_trajectory.csv` file format*
+<div>
+    <table>
+        <tbody>
+            <tr>
+                <td>global timestamp (ns)</td>
+                <td colSpan={3}>Position in world (t_world_device) [meters]</td>
+                <td colSpan={4}>Rotation R_world_device</td>
+            </tr>
+            <tr>
+                <td>timestamp</td>
+                <td>tx</td>
+                <td>ty</td>
+                <td>tz</td>
+                <td>qx</td>
+                <td>qy</td>
+                <td>qz</td>
+                <td>qw</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<video width="950" controls>
+  <source src={useBaseUrl('video/desk_activity.m4v')} type="video/mp4"/>
+  Your browser does not support the video tag.
+</video>
+
+**Figure 2:** *Desktop Activity Visualization*

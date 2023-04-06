@@ -1,0 +1,120 @@
+---
+sidebar_position: 8
+id: mps
+title: Machine Perception Services
+---
+
+# Machine Perception Services
+
+# Introduction
+
+This page provides information on how to use Machine Perception Services (MPS) derived data with Aria Data Tools. Currently, this tooling is only available in C++.
+
+MPS is a derived data service provided to Project Aria’s Academic Research Partners. Approved research partners can request MPS to generate:
+
+* Trajectory data - SLAM & IMU sensor data is used to get 6Dof pose trajectory, which can be used for downstream spatial AI tasks
+* Eye Gaze data -  Data from Aria’s eye tracking (ET) cameras are used to estimate a vector expressing the gaze direction and uncertainty
+
+If your organization would like to partner with Project Aria, gaining access to Aria devices and services such as MPS, please complete the [Partnership Interest Form](https://form.asana.com/?k=XOUA2BN-8ptiKPps2wLG3A&d=26764464567100).
+
+To read and visualize MPS data, the [Aria Data Provider](https://facebookresearch.github.io/Aria_data_tools/docs/howto/dataprovider/) (as of December 15 2022), now contains:
+
+* Mps_io, a self contained library that allows it to parse MPS output files
+* Mps_visualization, visualization samples
+
+# Trajectory data
+
+SLAM & IMU data is used to get 6Dof pose trajectory, with open-loop trajectories, closed-loop trajectories and online-calibration data.
+
+Files used by the mps_io library:
+
+* “Open_loop_trajectory.csv” - The open loop trajectory of Aria device data is a locally smooth, gravity-aligned, 1kHz trajectory generated via visual inertial odometry (VIO) without loop closures. This trajectory format trades global accuracy for improved local accuracy.
+* “Closed_loop_trajectory.csv” - The closed loop trajectory provides a gravity aligned, 1kHz trajectory with higher global accuracy compared to the `open_loop_trajectory`. This is achieved through loop closure.
+* “Online_calibration.jsonl” - [JSONL](https://jsonlines.org/) files contain one-record-per-line of json-encoded records. Each record is a json dict object that contains timestamp metadata and the result of online calibration for the cameras and IMUs. The calibration parameters contain intrinsics/extrinsics parameters for each sensor as well as a time offsets which best temporally align their data.
+
+## [Aria Data Provider](https://facebookresearch.github.io/Aria_data_tools/docs/howto/dataprovider/) Code Snippets
+
+### Read the data
+
+```
+#include "trajectoryReader.h"
+
+# Depending of the input file, use the according function:
+
+std::filesystem::path filepath = “<PATH>/open_loop_trajectory.csv”;
+
+Trajectory loadedOpenPose = readOpenLoop(locationFilePath);
+
+std::filesystem::path filepath = “<PATH>/closed_loop_trajectory.csv”;
+
+Trajectory loadedClosePose = readCloseLoop(locationFilePath);
+```
+
+
+### Online calibration
+
+```
+#include "onlineCalibrationReader.h"
+
+std::filesystem::path filepath = “<PATH>/online_calibration.jsonl”;
+
+TemporalDeviceModels readOnlineCalibration(filepath);
+```
+
+## Aria Trajectory Viewer
+
+Visualize trajectory data using AriaViewer
+
+```
+$ cd build/visualization
+
+$ ./mps_trajectory_viewer <PATH>/closed_loop_trajectory.csv
+```
+
+![image of trajectory viewer](/img/docs/TrajectoryViewer.png)
+
+Note: You can also add eye gaze vector data on top of the device trajectory
+
+```
+$ cd build/visualization
+
+$ ./mps_trajectory_viewer -- <PATH>/closed_loop_trajectory.csv <PATH>/eye-gaze-output.csv
+```
+![image of trajectory viewer](/img/docs/TrajectoryAndEyeGazeVectorsViewer.png)
+
+# Eye Gaze data
+
+Eye Gaze data is produced by an MPS eye tracking algorithm. Gaze tracking is typically employed to determine a person's focus of attention (the direction they are looking in).
+
+Files used by the mps_io library:
+
+* “Eye-gaze-output.csv“  provides the temporal state of the EyeGaze vector and uncertainty
+* “Eye-gaze-coord-transform.json” provides the transform from the device to CPF (Central Pupil Frame)
+
+## [Aria Data Provider](https://facebookresearch.github.io/Aria_data_tools/docs/howto/dataprovider/) Code Snippet
+
+```
+#include "eyeGazeReader.h"
+
+std::filesystem::path filepath = “<PATH>/eye-gaze-output.csv”;
+
+TemporalEyeGazeData eyeGaze_records = readEyeGaze(filepath);
+```
+
+
+Notes on how Eye Gaze data aligns with VRS image data:
+
+* EyeGaze data is timestamp based (close to EyeCamera image timestamps).
+* To query the approximate location of eye gaze at any given timestamp (i.e RGB image timestamp), you can use the `QueryEyeGaze` function, which demonstrates how to interpolate EyeGaze vector data.
+
+## Aria Eye Gaze Viewer
+
+Visualize Eye Gaze data using [AriaViewer](https://facebookresearch.github.io/Aria_data_tools/docs/howto/visualizing/).
+
+```
+$ cd build/visualization
+
+$ ./mps_eyegaze_viewer <PATH>GUID.vrs <PATH>/eye-gaze-output.csv
+```
+
+![image of eye gaze viewer](/img/docs/EyeGazeViewer.png)

@@ -1,0 +1,52 @@
+---
+sidebar_position: 4
+id: location-output
+title: Location Output Data
+---
+import useBaseUrl from '@docusaurus/useBaseUrl'
+
+
+# Location Output Data
+
+Location Output Data shows the Project Aria device’s position and orientation in the world across six dimensions of freedom.
+
+Each recording has a corresponding `trajectory.csv file`, which contains the co-location data of the Project Aria device. The trajectory is saved by a series of timestamped transformations of the Project Aria device's left IMU relative to the world coordinates (frames). The transformations are saved in 1KHz, to give high transformation accuracy when interpolating the trajectory at any arbitrary timestamp.
+
+To give co-location information across different recordings, trajectories from the same [location](/pilotdata/everyday/everyday.mdx) are all aligned into the same world frame. Trajectories from the same [sequence](/pilotdata/everyday/scripts.mdx) are all aligned into the same world frame. The origin of the world frames are arbitrarily defined. The gravity acceleration vector always points up in the z axis of the world frame.
+
+The Location Output Dataset for each recording is stored in `location/trajectory.csv`
+
+**Table 1:** *`trajectory.csv` Structure*
+
+<div>
+    <table>
+        <tbody>
+            <tr>
+                <td>Timestamp (ns from Unix Epoch)</td>
+                <td colSpan={3}>Position in world (t_world_leftimu) [meters]</td>
+                <td colSpan={4}>Rotation R_world_leftimu</td>
+            </tr>
+            <tr>
+                <td>t</td>
+                <td>x</td>
+                <td>y</td>
+                <td>z</td>
+                <td>qw</td>
+                <td>qx</td>
+                <td>qy</td>
+                <td>qz</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+:::note
+This data structure is different to the location output data services provided to Academic partners.
+:::
+
+<video width="950" controls>
+  <source src={useBaseUrl('video/map_merge.m4v')} type="video/mp4"/>
+  Your browser does not support the video tag.
+</video>
+
+*Shared 3D Global Trajectories for Multi-User Activities in the Same Location*

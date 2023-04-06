@@ -1,0 +1,175 @@
+---
+sidebar_position: 1
+id: examples
+title: Examples
+---
+
+# Examples
+
+## Introduction
+The Aria Research Kit: Aria Data Tools provides Python3 code and a C++ library to work with [VRS files](/aria-vrs.mdx).
+
+The following examples provide specific scenarios for how to use the Project Aria Data Provider and how to visualize sequences and pre-computed camera trajectory.
+
+
+## Retrieve and Read Data Using the Project Aria Data Provider
+
+### Python
+
+In this example, records are extracted and read for the Left SLAM Camera from `recording.vrs`.
+For more information about the Project Aria Data Provider go to [Accessing Sensor Data](howto/dataprovider.mdx)
+
+
+#### 1. Open and select the file to read
+
+```
+$ python
+>>> import pyark.datatools as datatools
+>>> vrs_data_provider = datatools.dataprovider.AriaVrsDataProvider()
+>>> vrs_data_provider.openFile(‘recording.vrs’)
+```
+
+#### 2. Select which sensor information to extract
+
+Either through a high-level API:
+
+```
+vrs_data_provider.setSlamLeftCameraPlayer()
+```
+
+or with a StreamID:
+
+```
+>>> slam_camera_recordable_type_id = 1201
+>>> slam_left_camera_instance_id = 1
+>>> slam_left_camera_stream_id = datatools.dataprovider.StreamId(slam_camera_recordable_type_id, slam_left_camera_instance_id)
+>>> vrs_data_provider.setStreamPlayer(slam_left_camera_stream_id)
+```
+
+#### 3.  Set whether to print data layouts (optional)
+
+By default, data layouts are not printed while reading records. Set the verbosity to True to print data layouts and False to not print data layouts:
+
+```
+vrs_data_provider.setVerbose(True)
+```
+
+#### 4. Read the data stream
+
+All records in timestamp order, example command and output.
+
+```
+>>> vrs_data_provider.readAllRecords()
+4822.486 Camera Data (SLAM) #1 [1201-1]: jpg, 44338 bytes. # JPEG compressed image data size before decompression
+...
+4832.286 Camera Data (SLAM) #1 [1201-1]: jpg, 64148 bytes.
+4832.386 Camera Data (SLAM) #1 [1201-1]: jpg, 64174 bytes.
+```
+
+Read a single data record by timestamp:
+
+```
+vrs_data_provider.readDataRecordByTime(slam_left_camera_stream_id, someTimestamp)
+```
+
+You can also use a higher level API that reads a data record in a specific stream and proceeds next timestamp in the player internally.
+
+```
+vrs_data_provider.tryFetchNextData(slam_left_camera_stream_id)
+```
+
+
+#### 5. Access the data stream
+
+```
+>>> slam_left_camera_player = vrs_data_provider.getSlamLeftCameraPlayer()
+>>> slam_left_camera_data_record = slam_left_camera_player.getDataRecord()
+>>> slam_left_camera_data_record.captureTimestampNs
+ 4832385508212
+
+>>> slam_left_camera_data = slam_left_camera_player.getData()
+>>> pixel_frame = slam_left_camera_data.pixelFrame
+>>> buffer = pixel_frame.getBuffer()
+>>> len(buffer)
+307200 # JPEG image data decompressed internally in AriaImageSensorPlayer
+# equal to SLAM camera image width (640) * image height(480)
+
+```
+
+#### 6. Read the first configuration record of a stream:
+
+```
+vrs_data_provider.readFirstConfigurationRecord(slam_left_camera_stream_id)
+```
+
+#### 7. Load the device model
+
+There are calibration strings for each image and motion stream. Reading the configuration record for any one of them will load the device model.
+
+```
+>>> slam_left_camera_stream_id = slam_left_camera_player.getStreamId()
+>>> slam_left_camera_stream_id
+<pyark.datatools.dataprovider.StreamId object at 0x7f955808c270>
+>>> vrs_data_provider.readFirstConfigurationRecord(slam_left_camera_stream_id)
+True
+>>> vrs_data_provider.loadDeviceModel()
+True
+>>> device_model = vrs_data_provider.getDeviceModel()
+>>> device_model
+<pyark.datatools.sensors.DeviceModel object at 0x7f955808c2b0>
+```
+
+
+### C++
+
+Use the following commands to verbosely read all or some data streams in a Project Aria VRS file.
+
+```
+$ cd build/data_provider
+$ ./read_all <vrs_path> # Read records of all streams verbosely
+$ ./read_selected <vrs_path> # Read records of selected streams verbosely
+```
+
+
+
+## Visualizing Sequences and Pre-Computed Camera Trajectory
+
+Use the following commands to run the Visualization Tool:
+
+
+### Python
+
+```
+$ cd src/visualization
+$ python3.9 main.py ${vrs_path} ${optional_pose_path} ${optional_eyetracking_path} ${optional_speechtotext_path}
+```
+
+
+
+### C++
+
+```
+$ cd build/visualization
+$ ./aria_viewer ${vrs_path} ${optional_pose_path} ${optional_eyetracking_path} ${optional_speechtotext_path}
+
+```
+
+Pose, eye tracking and speech2text paths are optional. If they are not provided, the visualization tool will try to infer the full paths of `trajectory.csv`, `et_in_rgb_stream.csv` and `speech_aria_domain.csv` from the VRS path by using the Aria Pilot Dataset structure:
+
+
+```
+├── location
+│ └── trajectory.csv
+├── eyetracking
+│ └── et_in_rgb_stream.csv
+├── speech2text
+│ └── speech_aria_domain.csv
+├── ${vrs_path}
+└── ...
+```
+
+
+You will see something like the image below in the viewer after you press the **Play** button.
+![img image of visualization tool](/img/docs/aria_viewer.png)
+
+For more information, about this tool, go to [Visualize Sequences and Pre-Computed Camera Trajectory](howto/visualizing.mdx)
