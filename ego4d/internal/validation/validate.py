@@ -1386,8 +1386,14 @@ def _check_files_exist(
     def _check_file(f: ReferencedFile) -> List[Error]:
         errs = []
         assert f.root_dir is not None
-        path = os.path.join(f.root_dir, f.relative_path or "")
-        if _maybe_strip_last_slash(f.root_dir) == _maybe_strip_last_slash(path):
+        if f.relative_path.startswith("s3"):
+            path = f.relative_path
+        else:
+            path = os.path.join(f.root_dir, f.relative_path or "")
+
+        if path is None or _maybe_strip_last_slash(
+            f.root_dir
+        ) == _maybe_strip_last_slash(path):
             errs.append(
                 Error(
                     ErrorLevel.ERROR,
@@ -1441,13 +1447,15 @@ def _check_files_exist(
 def _check_mp4_files(manifest: ManifestEgoExo, num_workers: int) -> List[Error]:
     ret = []
     vps = {
-        (
-            vc.university_capture_id,
-            vc.university_video_id,
-            vc.component_index,
-        ): os.path.join(
-            manifest.captures[vc.university_capture_id].university_video_folder_path,
-            vc.video_component_relative_path,
+        (vc.university_capture_id, vc.university_video_id, vc.component_index,): (
+            os.path.join(
+                manifest.captures[
+                    vc.university_capture_id
+                ].university_video_folder_path,
+                vc.video_component_relative_path,
+            )
+            if not vc.video_component_relative_path.startswith("s3")
+            else vc.video_component_relative_path
         )
         for vcs in manifest.video_components.values()
         for vc in vcs
