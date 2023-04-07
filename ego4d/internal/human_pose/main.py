@@ -508,6 +508,64 @@ def mode_preprocess(config: Config):
     json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
 
 
+def mode_multi_view_vis(config: Config):
+    ctx = get_context(config)
+    camera_names = ["cam01", "cam02", "cam03", "cam04"]
+
+    read_dir = ctx.vis_pose3d_dir
+    write_dir = os.path.join(ctx.vis_pose3d_dir, "multi_view")
+    os.makedirs(write_dir, exist_ok=True)
+
+    write_image_width = 3840
+    write_image_height = 2160
+
+    read_image_width = 3840
+    read_image_height = 2160
+
+    fps = 10
+    padding = 5
+
+    total_width_with_padding = 2*read_image_width + padding
+    total_height_with_padding = 2*read_image_height + padding
+
+    total_width = 2*read_image_width
+    total_height = 2*read_image_height
+    divide_val = 2
+
+    image_names = [image_name for image_name in sorted(os.listdir(os.path.join(read_dir, camera_names[0]))) if image_name.endswith('.jpg')]
+
+    for t, image_name in enumerate(tqdm(image_names)):
+        canvas = 255*np.ones((total_height_with_padding, total_width_with_padding, 3))
+
+        for idx, camera_name in enumerate(camera_names):
+            camera_image = cv2.imread(os.path.join(read_dir, camera_name, image_name))
+            camera_image = cv2.resize(camera_image, (read_image_width, read_image_height))
+            
+            ##------------paste-----------------
+            col_idx = idx % divide_val
+            row_idx = idx // divide_val
+
+            origin_x = read_image_width*col_idx + col_idx*padding; 
+            origin_y = read_image_height*row_idx + row_idx*padding
+            image = camera_image
+
+            canvas[origin_y:origin_y + image.shape[0], origin_x:origin_x + image.shape[1], :] = image[:, :, :]
+
+        ##---------resize to target size, ffmpeg does not work with offset image sizes---------
+        canvas = cv2.resize(canvas, (total_width, total_height))
+        canvas = cv2.resize(canvas, (write_image_width, write_image_height))
+
+        cv2.imwrite(os.path.join(write_dir, image_name), canvas)
+
+    ##----------make video--------------
+    command = 'rm -rf {}/exo.mp4'.format(write_dir)
+    os.system(command)
+
+    command = 'ffmpeg -r {} -f image2 -i {}/%05d.jpg -pix_fmt yuv420p {}/exo.mp4'.format(fps, write_dir, ctx.vis_pose3d_dir)
+    os.system(command)
+
+    return
+
 @hydra.main(config_path="configs", config_name=None)
 def run(config: Config):
     if config.mode == "preprocess":
@@ -518,6 +576,8 @@ def run(config: Config):
         mode_pose2d(config)
     elif config.mode == "pose3d":
         mode_pose3d(config)
+    elif config.mode == "multi_view_vis":
+        mode_multi_view_vis(config)
     else:
         raise AssertionError(f"unknown mode: {config.mode}")
 
