@@ -35,5 +35,8 @@ mode_bbox:
 mode_pose2d:
   pose_config: "/home/rawalk/Desktop/forked_ego4d/ego4d/internal/human_pose/external/mmpose/configs/wholebody/2d_kpt_sview_rgb_img/topdown_heatmap/coco-wholebody/hrnet_w48_coco_wholebody_384x288_dark_plus.py"
   pose_checkpoint: "https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth"
+  dummy_pose_config: '/home/rawalk/Desktop/forked_ego4d/ego4d/internal/human_pose/external/mmpose/configs/body/2d_kpt_sview_rgb_img/topdown_heatmap/coco/hrnet_w32_coco_256x192.py'
+  dummy_pose_checkpoint: 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w32_coco_256x192-c78dce93_20200708.pth'
+
 mode_pose3d:
   todo: abc

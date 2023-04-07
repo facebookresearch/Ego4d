@@ -122,17 +122,13 @@ class PoseModel:
         return
 
     ####--------------------------------------------------------
-    def draw_projected_poses3d(self, pose_results, image_name, save_path, camera_type='ego', camera_mode='rgb'):
-        if camera_mode == 'rgb':
-            keypoint_thres = self.rgb_keypoint_thres
-        else:
-            keypoint_thres = self.gray_keypoint_thres
+    def draw_projected_poses3d(self, pose_results, image_name, save_path):
+        keypoint_thres = self.rgb_keypoint_vis_thres
 
         ##-----------restructure to the desired format used by mmpose---------
         pose_results_ = []
-        for human_name in pose_results.keys():
-            pose = pose_results[human_name] ## 17 x 3
-            pose_ = np.zeros((self.num_keypoints, 3)) ## 133 x 3
+        for pose in pose_results:
+            pose_ = np.zeros((self.num_keypoints, 3)) ## 17 x 3
 
             pose_[:len(pose), :3] = pose[:, :]
 
@@ -148,8 +144,8 @@ class PoseModel:
             dataset=self.dataset,
             dataset_info=self.dataset_info,
             kpt_score_thr=keypoint_thres,
-            radius=self.radius[(camera_type, camera_mode)],
-            thickness=self.thickness[(camera_type, camera_mode)],
+            radius=self.radius,
+            thickness=self.thickness,
             show=False,
             out_file=save_path)
 

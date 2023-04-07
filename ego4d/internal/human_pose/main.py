@@ -63,6 +63,8 @@ class Context:
     detector_checkpoint: str
     pose_config: str
     pose_checkpoint: str
+    dummy_pose_config: str
+    dummy_pose_checkpoint: str
 
 def get_context(config: Config) -> Context:
     metadata_json = json.load(pathmgr.open(config.inputs.metadata_json_path))
@@ -97,7 +99,85 @@ def get_context(config: Config) -> Context:
         detector_checkpoint=config.mode_bbox.detector_checkpoint,
         pose_config=config.mode_pose2d.pose_config,
         pose_checkpoint=config.mode_pose2d.pose_checkpoint,
+        dummy_pose_config=config.mode_pose2d.dummy_pose_config,
+        dummy_pose_checkpoint=config.mode_pose2d.dummy_pose_checkpoint,
     )
+
+##-------------------------------------------------------------------------------
+##-------------------------------------------------------------------------------
+def mode_pose3d(config: Config):
+    ctx = get_context(config)
+
+    dset = SyncedEgoExoCaptureDset(
+        root_dir=config.root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+    # by_dev_id = download_andor_generate_streams(
+    #     metadata=ctx.metadata_json,
+    #     download_video_files=config.mode_preprocess.download_video_files,
+    #     force_download=config.mode_preprocess.force_download,
+    #     output_dir=ctx.cache_dir,
+    # )
+    all_cam_ids = set(dset.all_cam_ids())
+
+    # aria_path = by_dev_id["aria01"]["local_path"]
+    aria_path = "/home/rawalk/Desktop/datasets/ego4d_data/cache/unc_T1/aria01/aria01.vrs"
+    assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
+    # aria_camera_models = get_aria_camera_models(aria_path)
+
+    #---------------import triangulator-------------------
+    from ego4d.internal.human_pose.triangulator import Triangulator
+    from ego4d.internal.human_pose.pose_estimator import PoseModel
+    pose_model = PoseModel(pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint) ## lightweight for visualization only!
+
+    exo_cameras = {exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None) for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]}
+    if not os.path.exists(ctx.pose3d_dir):
+        os.makedirs(ctx.pose3d_dir)
+    
+    ## if ctx.vis_pose3d_dir does not exist make it
+    if not os.path.exists(ctx.vis_pose3d_dir):
+        os.makedirs(ctx.vis_pose3d_dir)
+
+    poses3d = {}
+
+    ## load pose2d.pkl
+    pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
+    with open(pose2d_file, "rb") as f:
+        poses2d = pickle.load(f)
+    
+    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+        info = dset[time_stamp]
+
+        multi_view_pose2d = {exo_camera_name: poses2d[time_stamp][exo_camera_name] for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]}
+
+        ## triangulate
+        triangulator = Triangulator(time_stamp, ["cam01", "cam02", "cam03", "cam04"], exo_cameras, multi_view_pose2d)
+        pose3d = triangulator.run(debug=True) ## 17 x 4 (x, y, z, confidence)
+        poses3d[time_stamp] = pose3d
+
+        ## visualize pose3d
+        for exo_camera_name in ["cam01", "cam02", "cam03", "cam04"]:
+            image_path = info[exo_camera_name]['abs_frame_path']
+            image = cv2.imread(image_path)
+            exo_camera = exo_cameras[exo_camera_name]
+
+            vis_pose3d_cam_dir = os.path.join(ctx.vis_pose3d_dir, exo_camera_name)
+            if not os.path.exists(vis_pose3d_cam_dir):
+                os.makedirs(vis_pose3d_cam_dir)
+
+            projected_pose3d =  batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
+            projected_pose3d = np.concatenate([projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1) ## 17 x 3
+
+            save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
+            pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
+
+    ## save poses3d.pkl
+    with open(os.path.join(ctx.pose3d_dir, "pose3d.pkl"), "wb") as f:
+        pickle.dump(poses3d, f)
+
+    return
+
 
 ##-------------------------------------------------------------------------------
 def mode_pose2d(config: Config):
@@ -426,12 +506,6 @@ def mode_preprocess(config: Config):
         "frames": output,
     }
     json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
-
-def mode_pose3d(config: Config):
-    # NOTE
-    # feel free to write the implementation of this code to another file and
-    # call it here as a function
-    pass
 
 
 @hydra.main(config_path="configs", config_name=None)

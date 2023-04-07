@@ -24,6 +24,7 @@ class Camera:
     T_camera_device: Mat44  # project device pt into camera frame
     camera_model: Union[pycolmap.Camera, AriaCameraModel]  # intrinsics
     device_row: dict  # raw data constructed camera from
+    extrinsics: Mat44  # project world pt into camera frame
 
 # https://github.com/colmap/colmap/blob/d6f528ab59fd653966e857f8d0c2203212563631/scripts/python/read_write_model.py#L453
 def qvec2rotmat(qvec):
@@ -77,6 +78,7 @@ def create_camera(camera_data, camera_model):
     ]:
         ret[key] = np.array(camera_data[key])
 
+    ret['extrinsics'] = ret['T_camera_device'] @ ret['T_device_world'] ## map world point to camera frame
     return Camera(**ret)
 
 
@@ -122,6 +124,8 @@ def create_camera_data(
     T_world_device[0:3, 3] = t_world
     T_world_device[3, 3] = 1.0
     T_device_world = inv(T_world_device)
+
+    extrinsics = T_camera_device @ T_device_world
 
     return {
         "name": name,
