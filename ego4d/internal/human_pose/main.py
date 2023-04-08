@@ -532,7 +532,7 @@ def mode_preprocess(config: Config):
 
 def mode_multi_view_vis(config: Config):
     ctx = get_context(config)
-    camera_names = ["cam01", "cam02", "cam03", "cam04"]
+    camera_names = ctx.exo_cam_names
 
     read_dir = ctx.vis_pose3d_dir
     write_dir = os.path.join(ctx.vis_pose3d_dir, "multi_view")
