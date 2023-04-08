@@ -1,0 +1,3 @@
+[submodule "ego4d/internal/human_pose/external/mmlab"]
+	path = ego4d/internal/human_pose/external/mmlab
+	url = git@github.com:rawalkhirodkar/mmlab.git

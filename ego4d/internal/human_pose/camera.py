@@ -24,7 +24,7 @@ class Camera:
     T_camera_device: Mat44  # project device pt into camera frame
     camera_model: Union[pycolmap.Camera, AriaCameraModel]  # intrinsics
     device_row: dict  # raw data constructed camera from
-
+    extrinsics: Mat44  # project world pt into camera frame
 
 # https://github.com/colmap/colmap/blob/d6f528ab59fd653966e857f8d0c2203212563631/scripts/python/read_write_model.py#L453
 def qvec2rotmat(qvec):
@@ -77,6 +77,7 @@ def create_camera(camera_data, camera_model):
     ]:
         ret[key] = np.array(camera_data[key])
 
+    ret['extrinsics'] = ret['T_camera_device'] @ ret['T_device_world'] ## map world point to camera frame
     return Camera(**ret)
 
 
@@ -165,6 +166,18 @@ def xworld_to_yimage(pt3d: Vec3, to_cam: Camera):
     pt_target = np.matmul(T_to_world, np.array(pt3d.tolist() + [1.0]))[0:3]
     return xdevice_to_ximage(pt_target, to_cam)
 
+def batch_xworld_to_yimage(pts3d: Vec3, to_cam: Camera):
+    assert pts3d.shape[1] == 3
+
+    pts2d = []
+
+    for pt3d in pts3d:
+        T_to_world = np.matmul(to_cam.T_camera_device, to_cam.T_device_world)
+        pt_target = np.matmul(T_to_world, np.array(pt3d.tolist() + [1.0]))[0:3]
+        pts2d.append(xdevice_to_ximage(pt_target, to_cam).reshape(1, -1))
+
+    pts2d = np.concatenate(pts2d, axis=0)
+    return pts2d
 
 def xdevice_to_yimage(pt3d: Vec3, from_cam: Camera, to_cam: Camera):
     assert pt3d.shape[0] == 3
