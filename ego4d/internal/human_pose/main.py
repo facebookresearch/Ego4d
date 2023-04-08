@@ -544,7 +544,7 @@ def mode_multi_view_vis(config: Config):
     read_image_width = 3840
     read_image_height = 2160
 
-    fps = 10
+    fps = 30
     padding = 5
 
     total_width_with_padding = 2*read_image_width + padding
