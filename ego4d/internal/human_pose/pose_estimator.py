@@ -34,7 +34,7 @@ class PoseModel:
         self.radius = 4
 
         ## Link thickness for visualization
-        self.thickness = 4
+        self.thickness = 6
 
         self.min_vis_keypoints = 5 ## coco format, 17 keypoints!
 
@@ -58,13 +58,10 @@ class PoseModel:
         pose_results = self.refine_bboxes(pose_results)
 
         if len(pose_results) < len(bboxes):
-            pose_human_names = [val['human_name'] for val in pose_results] ## human names in the pose results
-
             for bbox in bboxes:
-                if bbox['human_name'] not in pose_human_names:
-                    pose_result = bbox.copy()
-                    pose_result['keypoints'] = np.zeros((self.num_keypoints, 3)) ## dummy pose
-                    pose_results.append(pose_result)
+                pose_result = bbox.copy()
+                pose_result['keypoints'] = np.zeros((self.num_keypoints, 3)) ## dummy pose
+                pose_results.append(pose_result)
 
         return pose_results
 
@@ -78,6 +75,9 @@ class PoseModel:
             pose = pose_results[i]['keypoints']
 
             is_valid = pose[:, 2] > self.rgb_keypoint_thres
+
+            if is_valid.sum() == 0:
+                continue
 
             x1 = pose[is_valid, 0].min(); x2 = pose[is_valid, 0].max()
             y1 = pose[is_valid, 1].min(); y2 = pose[is_valid, 1].max()

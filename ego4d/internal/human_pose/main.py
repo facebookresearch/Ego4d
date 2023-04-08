@@ -6,16 +6,15 @@ from typing import List
 
 import numpy as np
 import cv2
+import pickle
 
 import hydra
 import pandas as pd
-import torch
 from ego4d.internal.colmap.preprocess import download_andor_generate_streams
 from ego4d.internal.human_pose.camera import (
     create_camera,
     create_camera_data,
     get_aria_camera_models,
-    xworld_to_yimage,
     batch_xworld_to_yimage,
 )
 
@@ -62,6 +61,7 @@ class Context:
     pose_checkpoint: str
     dummy_pose_config: str
     dummy_pose_checkpoint: str
+    human_height: float = 1.5
 
 
 def get_context(config: Config) -> Context:
@@ -80,6 +80,7 @@ def get_context(config: Config) -> Context:
         if not x["is_ego"] and not x["has_walkaround"]
     ]
     dataset_dir = os.path.join(cache_dir, config.mode_preprocess.dataset_name)
+
     return Context(
         root_dir=config.root_dir,
         cache_dir=cache_dir,
@@ -104,6 +105,7 @@ def get_context(config: Config) -> Context:
         pose_checkpoint=config.mode_pose2d.pose_checkpoint,
         dummy_pose_config=config.mode_pose2d.dummy_pose_config,
         dummy_pose_checkpoint=config.mode_pose2d.dummy_pose_checkpoint,
+        human_height=config.mode_bbox.human_height,
     )
 
 ##-------------------------------------------------------------------------------
@@ -222,6 +224,7 @@ def mode_pose2d(config: Config):
 
     ## load bboxes from bbox_dir/bbox.pkl
     bbox_file = os.path.join(ctx.bbox_dir, "bbox.pkl")
+
     with open(bbox_file, "rb") as f:
         bboxes = pickle.load(f)
     
@@ -241,10 +244,11 @@ def mode_pose2d(config: Config):
             exo_camera = create_camera(info[exo_camera_name]["camera_data"], None)
 
             bbox_xyxy = bboxes[time_stamp][exo_camera_name] ## x1, y1, x2, y2
-            ## add confidence score to the bbox
-            bbox_xyxy = np.append(bbox_xyxy, 1.0)
-
+           
             if bbox_xyxy is not None:
+                 ## add confidence score to the bbox
+                bbox_xyxy = np.append(bbox_xyxy, 1.0)
+                
                 pose_results = pose_model.get_poses2d(bboxes=[{'bbox': bbox_xyxy}], \
                                         image_name=image_path, \
                                     )
@@ -256,6 +260,11 @@ def mode_pose2d(config: Config):
 
                 pose_result = pose_results[0]
                 pose2d = pose_result['keypoints']
+            
+            else:
+                pose2d = None
+                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
+                cv2.imwrite(save_path, image)
 
             poses2d[time_stamp][exo_camera_name] = pose2d
 
@@ -324,14 +333,17 @@ def mode_bbox(config: Config):
             right_camera = create_camera(info["aria_slam_right"]["camera_data"], None) ## TODO: use the camera model of the aria camera
             human_center_3d = (left_camera.center + right_camera.center) / 2
 
-            proposal_points_3d = get_region_proposal(human_center_3d, unit_normal=camera_plane_unit_normal, human_height=1.5)
+            proposal_points_3d = get_region_proposal(human_center_3d, unit_normal=camera_plane_unit_normal, human_height=ctx.human_height)
             proposal_points_2d = batch_xworld_to_yimage(proposal_points_3d, exo_camera)
             proposal_bbox = check_and_convert_bbox(proposal_points_2d, exo_camera.camera_model.width, exo_camera.camera_model.height)
-            proposal_bbox = np.array([proposal_bbox[0], proposal_bbox[1], proposal_bbox[2], proposal_bbox[3], 1]) ## add confidnece
-            proposal_bboxes = [{'bbox': proposal_bbox}]
-            
-            offshelf_bboxes = detector_model.get_bboxes(image_name=image_path, bboxes=proposal_bboxes)
+
             bbox_xyxy = None
+            offshelf_bboxes = None
+
+            if proposal_bbox is not None:
+                proposal_bbox = np.array([proposal_bbox[0], proposal_bbox[1], proposal_bbox[2], proposal_bbox[3], 1]) ## add confidnece
+                proposal_bboxes = [{'bbox': proposal_bbox}]
+                offshelf_bboxes = detector_model.get_bboxes(image_name=image_path, bboxes=proposal_bboxes)
 
             if offshelf_bboxes is not None:
                 assert len(offshelf_bboxes) == 1 ## single human per scene
@@ -340,10 +352,15 @@ def mode_bbox(config: Config):
                 ## uncomment to visualize the bounding box
                 # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
                 bbox_image = draw_bbox_xyxy(image, bbox_xyxy, color=(0, 255, 0))
-                cv2.imwrite(os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), bbox_image)
+            # 
+            else:
+                bbox_image = image
             
-            bboxes[time_stamp][exo_camera_name] = bbox_xyxy
+            # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
 
+            cv2.imwrite(os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), bbox_image)
+            bboxes[time_stamp][exo_camera_name] = bbox_xyxy
+        
     ## save the bboxes as a pickle file
     with open(os.path.join(ctx.bbox_dir, 'bbox.pkl'), 'wb') as f:
         pickle.dump(bboxes, f)

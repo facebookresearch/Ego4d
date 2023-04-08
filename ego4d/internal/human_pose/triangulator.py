@@ -39,7 +39,11 @@ class Triangulator:
                 if human_name not in self.pose2d.keys():
                     self.pose2d[human_name] = {}  
 
-                keypoints =  multiview_pose2d[camera_name][self.keypoints_idxs] ##only get the coco keypoints
+                if multiview_pose2d[camera_name] is not None:
+                    keypoints =  multiview_pose2d[camera_name][self.keypoints_idxs] ##only get the coco keypoints
+                else:
+                    keypoints = np.zeros((self.num_keypoints, 3))
+                
                 self.pose2d[human_name][camera_name] = keypoints
 
         return
