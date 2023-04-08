@@ -5,8 +5,6 @@ from typing import Any, Dict, List, Optional
 import cv2
 import pandas as pd
 
-from ego4d.internal.human_pose.readers import TorchAudioStreamReader
-
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
 
@@ -42,13 +40,13 @@ def get_synced_timesync_df(metadata_json):
 class SyncedEgoExoCaptureDset:
     def __init__(
         self,
-        root_dir: str,
+        data_dir: str,
         dataset_json_path: str,
         read_frames: bool,
     ):
         self.dataset_json = json.load(open(dataset_json_path))
         self.read_frames = read_frames
-        self.root_dir = root_dir
+        self.root_dir = data_dir
         self.cache_dir = self.dataset_json["dataset_dir"]
         self.frame_dir = os.path.join(self.root_dir, self.cache_dir, "frames")
 
@@ -85,30 +83,3 @@ class FrameDirDset:
 
     def __len__(self):
         return len(self.frame_paths)
-
-
-# NOTE(miguelmartin):
-# using this is probably not optimal for extraction
-# we can speed things up by setting frame_window_size > 1
-# e.g.
-# 50ms to load a single frame in GPU memory vs 90ms to load 32 frames => better
-# to read a batch of frames
-class VideoFrameDset:
-    def __init__(
-        self, path, gpu_idx=0, data_reader_class=TorchAudioStreamReader, **kwargs
-    ):
-        self.reader = data_reader_class(
-            path,
-            frame_window_size=1,
-            stride=1,
-            gpu_idx=gpu_idx,
-            size=None,
-            mean=None,
-            **kwargs,
-        )
-
-    def __getitem__(self, idx):
-        return self.reader[idx]
-
-    def __len__(self):
-        return len(self.reader)

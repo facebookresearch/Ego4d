@@ -1,3 +1,4 @@
+.DS_Store
 *.log
 *.pyc
 build/
@@ -7,11 +8,9 @@ dist/
 lightning_logs/
 venv/
 .vscode/
-notebooks/moments_cvpr/mobilenet_v3_small-047dcff4.pth
-notebooks/moments_cvpr/moments.ckpt
-notebooks/moments_cvpr/r2plus1d_18-91a641e6.pth
-notebooks/moments_cvpr/resnet18-f37072fd.pth
-.DS_Store
+**.pth
 tp/*
 *.mp4
 *.json
+**/outputs/**
+notebooks/.ipynb_checkpoints/**
