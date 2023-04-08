@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
+from typing import List
 
 import cv2
 
@@ -42,6 +43,7 @@ class Context:
     dataset_json_path: str
     dataset_rel_dir: str
     frame_dir: str
+    exo_cam_names: List[str]
 
 
 def get_context(config: Config) -> Context:
@@ -54,6 +56,11 @@ def get_context(config: Config) -> Context:
         config.root_dir,
         cache_rel_dir,
     )
+    exo_cam_names = [
+        x["device_id"]
+        for x in metadata_json["videos"]
+        if not x["is_ego"] and not x["has_walkaround"]
+    ]
     dataset_dir = os.path.join(cache_dir, config.mode_preprocess.dataset_name)
     return Context(
         root_dir=config.root_dir,
@@ -66,6 +73,7 @@ def get_context(config: Config) -> Context:
             cache_rel_dir, config.mode_preprocess.dataset_name
         ),
         frame_dir=os.path.join(dataset_dir, "frames"),
+        exo_cam_names=exo_cam_names,
     )
 
 
@@ -121,7 +129,7 @@ def mode_preprocess(config: Config):
     subprocess.run(cmd)
 
     # gopro
-    for cam in ["cam01", "cam02", "cam03", "cam04"]:
+    for cam in ctx.exo_cam_names:
         cam_frame_dir = os.path.join(ctx.frame_dir, cam)
         os.makedirs(cam_frame_dir, exist_ok=True)
         frame_indices = [
@@ -199,7 +207,7 @@ def mode_preprocess(config: Config):
                 "_raw_camera": aria_pose,
             }
 
-        for cam_id in ["cam01", "cam02", "cam03", "cam04"]:
+        for cam_id in ctx.exo_cam_names:
             frame_num = int(row_df[f"{cam_id}_frame_number"])
             frame_path = os.path.join(cam_id, f"{frame_num:06d}.jpg")
             exo_name = (
@@ -253,7 +261,7 @@ def mode_bounding_box_detection(config: Config):
         )
 
     centers = {}
-    for cam_id in ["cam01", "cam02", "cam03", "cam04"]:
+    for cam_id in ctx.exo_cam_names:
         assert cam_id in all_cam_ids
 
         temp = []

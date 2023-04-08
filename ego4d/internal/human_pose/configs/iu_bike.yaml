@@ -4,18 +4,18 @@ mode: "preprocess"
 inputs:
   from_frame_number: 7000
   to_frame_number: 7599
-  metadata_json_path: "s3://ego4d-consortium-sharing/internal/egoexo_pilot/unc/T1/metadata.json"
-  aria_trajectory_path: "s3://ego4d-consortium-sharing/internal/temple3_egoexo/unc_t1/multi_closed_loop_trajectory_framerate_0.csv"
-  exo_trajectory_path: "s3://ego4d-consortium-sharing/internal/temple3_egoexo/unc_t1/gopro_calibs.csv"
+  metadata_json_path: "s3://ego4d-consortium-sharing/internal/egoexo_pilot/iu/bike/metadata.json"
+  aria_trajectory_path: "s3://ego4d-consortium-sharing/internal/temple3_egoexo/iu_bike_nopointcloud/closed_loop_trajectory.csv"
+  exo_trajectory_path: "s3://ego4d-consortium-sharing/internal/temple3_egoexo/iu_bike_nopointcloud/gopro_calibs.csv"
   aria_streams:
     - 214-1
     - 1201-1
     - 1201-2
   exo_timesync_name_to_calib_name:
-    cam01: "/home/jingdong/data/egoexo/unc_t1/raw/gopro1_%09d.jpg"
-    cam02: "/home/jingdong/data/egoexo/unc_t1/raw/gopro2_%09d.jpg"
-    cam03: "/home/jingdong/data/egoexo/unc_t1/raw/gopro3_%09d.jpg"
-    cam04: "/home/jingdong/data/egoexo/unc_t1/raw/gopro4_%09d.jpg"
+    cam01: "GX010017"
+    cam02: "GX010005"
+    cam03: "GX010007"
+    cam04: "GX010009"
 mode_preprocess:
   dataset_name: "dataset"
   vrs_bin_path: "vrs"
@@ -31,3 +31,4 @@ mode_pose_estimation:
   pose_model_checkpoint: "https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth"
 mode_triangulate:
   todo: abc
+

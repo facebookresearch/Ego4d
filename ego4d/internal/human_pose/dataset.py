@@ -15,60 +15,21 @@ pathmgr.register_handler(S3PathHandler(profile="default"))
 
 
 def _get_synced_timesync_df(timesync_df):
-    # start idx
-    cam01_idx = timesync_df.cam01_global_time.first_valid_index()
-    cam02_idx = timesync_df.cam02_global_time.first_valid_index()
-    cam03_idx = timesync_df.cam03_global_time.first_valid_index()
-    cam04_idx = timesync_df.cam04_global_time.first_valid_index()
-    aria_rgb_idx = timesync_df["aria01_214-1_global_time"].first_valid_index()
-    aria_slam1_idx = timesync_df["aria01_1201-1_global_time"].first_valid_index()
-    aria_slam2_idx = timesync_df["aria01_1201-2_global_time"].first_valid_index()
-    print(
-        cam01_idx,
-        cam02_idx,
-        cam03_idx,
-        cam04_idx,
-        aria_rgb_idx,
-        aria_slam1_idx,
-        aria_slam2_idx,
-    )
-    first_idx = max(
-        cam01_idx,
-        cam02_idx,
-        cam03_idx,
-        cam04_idx,
-        aria_rgb_idx,
-        aria_slam1_idx,
-        aria_slam2_idx,
-    )
-
-    # end idx
-    last_cam01_idx = timesync_df.cam01_global_time.last_valid_index()
-    last_cam02_idx = timesync_df.cam02_global_time.last_valid_index()
-    last_cam03_idx = timesync_df.cam03_global_time.last_valid_index()
-    last_cam04_idx = timesync_df.cam04_global_time.last_valid_index()
-    aria_rgb_last_idx = timesync_df["aria01_214-1_global_time"].last_valid_index()
-    aria_slam1_last_idx = timesync_df["aria01_1201-1_global_time"].last_valid_index()
-    aria_slam2_last_idx = timesync_df["aria01_1201-2_global_time"].last_valid_index()
-    print(
-        aria_rgb_last_idx,
-        aria_slam1_last_idx,
-        aria_slam2_last_idx,
-        last_cam01_idx,
-        last_cam02_idx,
-        last_cam03_idx,
-        last_cam04_idx,
-    )
-    last_idx = min(
-        aria_rgb_last_idx,
-        aria_slam1_last_idx,
-        aria_slam2_last_idx,
-        last_cam01_idx,
-        last_cam02_idx,
-        last_cam03_idx,
-        last_cam04_idx,
-    )
-
+    ks = [
+        k
+        for k in timesync_df.keys()
+        if "_global_time" in k
+    ]
+    start_indices = [
+        timesync_df[k].first_valid_index()
+        for k in ks
+    ]
+    last_indices = [
+        timesync_df[k].last_valid_index()
+        for k in ks
+    ]
+    first_idx = max(start_indices)
+    last_idx = min(last_indices)
     return timesync_df.iloc[first_idx : last_idx + 1]
 
 
