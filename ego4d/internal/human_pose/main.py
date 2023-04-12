@@ -2,13 +2,14 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Dict, Any
 
 import cv2
 
 import hydra
 import pandas as pd
 import torch
+import shutil
 from ego4d.internal.colmap.preprocess import download_andor_generate_streams
 from ego4d.internal.human_pose.camera import (
     create_camera,
@@ -46,8 +47,60 @@ class Context:
     exo_cam_names: List[str]
 
 
+def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
+    if capture_dir.endswith("/"):
+        capture_dir = capture_dir[0:-1]
+
+    if capture_dir.startswith("s3://"):
+        bucket_name = capture_dir.split("s3://")[1].split("/")[0]
+        prefix_path = "s3://{bucket_name}"
+    else:
+        prefix_path = capture_dir
+    
+    dirs = capture_dir.split("/")
+    take_id = dirs[-1]
+    video_source = dirs[-2]
+    files_in_capture = pathmgr.ls(capture_dir + "/")
+    video_files = pathmgr.ls(os.path.join(capture_dir, "videos/"))
+
+    def _create_video(f):
+        device_id = os.path.splitext(os.path.basename(f))[0]
+        device_type = "aria" if "aria" in device_id else "gopro"
+        is_ego = device_type == "aria"
+        has_walkaround = "mobile" in device_id or "aria" in device_id
+        s3_path = os.path.join(prefix_path, f)
+        return {
+            "device_id": device_id,
+            "device_type": device_type,
+            "is_ego": is_ego,
+            "has_walkaround": has_walkaround,
+            "s3_path": s3_path,
+        }
+
+    return {
+        "take_id": take_id,
+        "video_source": video_source,
+        "ego_id": "aria01",
+        "timesync_csv_path": os.path.join(capture_dir, "timesync.csv"),
+        "preview_path": os.path.join(capture_dir, "preview.mp4"),
+        "videos": [
+            _create_video(f)
+            for f in video_files
+        ]
+    }
+
+
 def get_context(config: Config) -> Context:
-    metadata_json = json.load(pathmgr.open(config.inputs.metadata_json_path))
+    if config.inputs.metadata_json_path is not None:
+        metadata_json = (
+            json.load(pathmgr.open(config.inputs.metadata_json_path))
+            if config.inputs.metadata_json_path is not None
+            else
+            _create_json_from_capture_dir(config.inputs.input_capture_dir)
+        )
+    else:
+        metadata_json = _create_json_from_capture_dir(config.inputs.capture_root_dir)
+
     cache_rel_dir = os.path.join(
         "cache",
         f"{metadata_json['video_source']}_{metadata_json['take_id']}",
@@ -91,7 +144,7 @@ def mode_preprocess(config: Config):
         output_dir=ctx.cache_dir,
     )
 
-    # shutil.rmtree(ctx.frame_dir, ignore_errors=True)
+    shutil.rmtree(ctx.frame_dir, ignore_errors=True)
     os.makedirs(ctx.frame_dir, exist_ok=True)
     i1 = config.inputs.from_frame_number
     i2 = config.inputs.to_frame_number

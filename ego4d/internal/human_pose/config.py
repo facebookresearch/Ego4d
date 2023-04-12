@@ -6,7 +6,8 @@ from typing import Dict, List, Optional
 class Input:
     from_frame_number: int
     to_frame_number: int
-    metadata_json_path: str
+    capture_root_dir: Optional[str]
+    metadata_json_path: Optional[str]
     aria_trajectory_dir: str
     exo_trajectory_dir: str
     aria_streams: List[str]
