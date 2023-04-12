@@ -15,19 +15,9 @@ pathmgr.register_handler(S3PathHandler(profile="default"))
 
 
 def _get_synced_timesync_df(timesync_df):
-    ks = [
-        k
-        for k in timesync_df.keys()
-        if "_global_time" in k
-    ]
-    start_indices = [
-        timesync_df[k].first_valid_index()
-        for k in ks
-    ]
-    last_indices = [
-        timesync_df[k].last_valid_index()
-        for k in ks
-    ]
+    ks = [k for k in timesync_df.keys() if "_global_time" in k]
+    start_indices = [timesync_df[k].first_valid_index() for k in ks]
+    last_indices = [timesync_df[k].last_valid_index() for k in ks]
     first_idx = max(start_indices)
     last_idx = min(last_indices)
     return timesync_df.iloc[first_idx : last_idx + 1]

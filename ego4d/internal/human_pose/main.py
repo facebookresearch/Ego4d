@@ -1,15 +1,15 @@
 import json
 import os
+import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 import cv2
 
 import hydra
 import pandas as pd
 import torch
-import shutil
 from ego4d.internal.colmap.preprocess import download_andor_generate_streams
 from ego4d.internal.human_pose.camera import (
     create_camera,
@@ -56,7 +56,7 @@ def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
         prefix_path = "s3://{bucket_name}"
     else:
         prefix_path = capture_dir
-    
+
     dirs = capture_dir.split("/")
     take_id = dirs[-1]
     video_source = dirs[-2]
@@ -83,10 +83,7 @@ def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
         "ego_id": "aria01",
         "timesync_csv_path": os.path.join(capture_dir, "timesync.csv"),
         "preview_path": os.path.join(capture_dir, "preview.mp4"),
-        "videos": [
-            _create_video(f)
-            for f in video_files
-        ]
+        "videos": [_create_video(f) for f in video_files],
     }
 
 
@@ -95,8 +92,7 @@ def get_context(config: Config) -> Context:
         metadata_json = (
             json.load(pathmgr.open(config.inputs.metadata_json_path))
             if config.inputs.metadata_json_path is not None
-            else
-            _create_json_from_capture_dir(config.inputs.input_capture_dir)
+            else _create_json_from_capture_dir(config.inputs.input_capture_dir)
         )
     else:
         metadata_json = _create_json_from_capture_dir(config.inputs.capture_root_dir)
