@@ -47,7 +47,8 @@ mode_pose2d:
   dummy_pose_checkpoint: 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w32_coco_256x192-c78dce93_20200708.pth'
 
 mode_pose3d:
-  todo: abc
+  start_frame: 0
+  end_frame: -1
 
 mode_multi_view_vis:
   todo: abc

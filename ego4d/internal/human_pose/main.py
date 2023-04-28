@@ -65,6 +65,10 @@ class Context:
     human_height: float = 1.5
     human_radius: float = 0.3
     min_bbox_score: float = 0.7
+    pose3d_start_frame: int = 0
+    pose3d_end_frame: int = -1
+    refine_pose3d_dir: str = None
+    vis_refine_pose3d_dir: str = None
 
 def get_context(config: Config) -> Context:
     metadata_json = json.load(pathmgr.open(config.inputs.metadata_json_path))
@@ -110,6 +114,10 @@ def get_context(config: Config) -> Context:
         human_height=config.mode_bbox.human_height,
         human_radius=config.mode_bbox.human_radius,
         min_bbox_score=config.mode_bbox.min_bbox_score,
+        pose3d_start_frame=config.mode_pose3d.start_frame,
+        pose3d_end_frame=config.mode_pose3d.end_frame,
+        refine_pose3d_dir=os.path.join(dataset_dir, "refine_pose3d"),
+        vis_refine_pose3d_dir=os.path.join(dataset_dir, "vis_refine_pose3d"),
     )
 
 ##-------------------------------------------------------------------------------
@@ -136,8 +144,7 @@ def mode_pose3d(config: Config):
     # aria_camera_models = get_aria_camera_models(aria_path)
 
     #---------------import triangulator-------------------
-    # from ego4d.internal.human_pose.triangulator import Triangulator
-    from ego4d.internal.human_pose.triangulator_nonlinear import Triangulator
+    from ego4d.internal.human_pose.triangulator import Triangulator
     from ego4d.internal.human_pose.pose_estimator import PoseModel
     pose_model = PoseModel(pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint) ## lightweight for visualization only!
 
@@ -149,7 +156,111 @@ def mode_pose3d(config: Config):
     if not os.path.exists(ctx.vis_pose3d_dir):
         os.makedirs(ctx.vis_pose3d_dir)
 
-    poses3d = {}
+    start_time_stamp = ctx.pose3d_start_frame
+    end_time_stamp = ctx.pose3d_end_frame if ctx.pose3d_end_frame > 0 else len(dset)
+    time_stamps = range(start_time_stamp, end_time_stamp)
+
+    ## check if ctx.pose2d_dir, 
+    camera_pose2d_files = [os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl") for exo_camera_name in ctx.exo_cam_names]
+
+    ## check if all camera pose2d files exist
+    is_parallel = True
+    for camera_pose2d_file in camera_pose2d_files:
+        if not os.path.exists(camera_pose2d_file):
+            is_parallel = False
+            break
+    
+    if is_parallel:
+        poses2d = {time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names} for time_stamp in time_stamps} 
+        for exo_camera_name in ctx.exo_cam_names:
+            pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+            with open(pose2d_file, "rb") as f:
+                poses2d_camera = pickle.load(f)
+
+            for time_stamp in time_stamps:
+                poses2d[time_stamp][exo_camera_name] = poses2d_camera[time_stamp][exo_camera_name]
+
+    else:
+        ## load pose2d.pkl
+        pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
+        with open(pose2d_file, "rb") as f:
+            poses2d = pickle.load(f)
+    
+    for time_stamp in tqdm(time_stamps):
+        info = dset[time_stamp]
+
+        multi_view_pose2d = {exo_camera_name: poses2d[time_stamp][exo_camera_name] for exo_camera_name in ctx.exo_cam_names}
+
+        ## triangulate
+        triangulator = Triangulator(time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d)
+        pose3d = triangulator.run(debug=True) ## 17 x 4 (x, y, z, confidence)
+
+        ## visualize pose3d
+        for exo_camera_name in ctx.exo_cam_names:
+            image_path = info[exo_camera_name]['abs_frame_path']
+            image = cv2.imread(image_path)
+            exo_camera = exo_cameras[exo_camera_name]
+
+            vis_pose3d_cam_dir = os.path.join(ctx.vis_pose3d_dir, exo_camera_name)
+            if not os.path.exists(vis_pose3d_cam_dir):
+                os.makedirs(vis_pose3d_cam_dir)
+
+            projected_pose3d =  batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
+            projected_pose3d = np.concatenate([projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1) ## 17 x 3
+
+            save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
+            pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
+        
+        ## save pose3d as timestamp.npy
+        np.save(os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy"), pose3d)
+
+    return
+
+##-------------------------------------------------------------------------------
+def mode_refine_pose3d(config: Config):
+    ctx = get_context(config)
+
+    dset = SyncedEgoExoCaptureDset(
+        root_dir=config.root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+    # by_dev_id = download_andor_generate_streams(
+    #     metadata=ctx.metadata_json,
+    #     download_video_files=config.mode_preprocess.download_video_files,
+    #     force_download=config.mode_preprocess.force_download,
+    #     output_dir=ctx.cache_dir,
+    # )
+    all_cam_ids = set(dset.all_cam_ids())
+
+    # aria_path = by_dev_id["aria01"]["local_path"]
+    aria_path = "/home/rawalk/Desktop/datasets/ego4d_data/cache/unc_T1/aria01/aria01.vrs"
+    assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
+    # aria_camera_models = get_aria_camera_models(aria_path)
+
+    #---------------import triangulator-------------------
+    from ego4d.internal.human_pose.triangulator_nonlinear import TriangulatorNonLinear
+    from ego4d.internal.human_pose.pose_estimator import PoseModel
+    pose_model = PoseModel(pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint) ## lightweight for visualization only!
+
+    exo_cameras = {exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None) for exo_camera_name in ctx.exo_cam_names}
+    if not os.path.exists(ctx.refine_pose3d_dir):
+        os.makedirs(ctx.refine_pose3d_dir)
+    
+    ## if ctx.vis_pose3d_dir does not exist make it
+    if not os.path.exists(ctx.vis_refine_pose3d_dir):
+        os.makedirs(ctx.vis_refine_pose3d_dir)
+
+    ## load all pose3d from ctx.pose3d_dir, they are 00000.npy, 00001.npy, ...
+    pose3d_files = [os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy") for time_stamp in range(len(dset))]
+    pose3d = []
+    for time_stamp, pose3d_file in enumerate(pose3d_files):
+        pose3d.append(np.load(pose3d_file))
+    
+    import pdb; pdb.set_trace()
+    
+
+
 
     ## check if ctx.pose2d_dir, 
     camera_pose2d_files = [os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl") for exo_camera_name in ctx.exo_cam_names]
@@ -185,6 +296,7 @@ def mode_pose3d(config: Config):
         ## triangulate
         triangulator = Triangulator(time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d)
         pose3d = triangulator.run(debug=True) ## 17 x 4 (x, y, z, confidence)
+
         poses3d[time_stamp] = pose3d
 
         ## visualize pose3d
@@ -638,6 +750,8 @@ def run(config: Config):
         mode_pose2d(config)
     elif config.mode == "pose3d":
         mode_pose3d(config)
+    elif config.mode == "refine_pose3d":
+        mode_refine_pose3d(config)
     elif config.mode == "multi_view_vis_bbox":
         mode_multi_view_vis(config, "bbox")
     elif config.mode == "multi_view_vis_pose2d":

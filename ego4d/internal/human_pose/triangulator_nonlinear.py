@@ -6,9 +6,43 @@ import random
 import pycolmap
 from utils import COCO_KP_ORDER
 
+
+COCO_SKELETON = {
+                'left_leg': [13, 15], ## l-knee to l-ankle
+                'right_leg': [14, 16], ## r-knee to r-ankle
+                'left_thigh': [11, 13], ## l-hip to l-knee
+                'right_thigh': [12, 14], ## r-hip to r-knee
+                'hip': [11, 12], ## l-hip to r-hip
+                'left_torso': [5, 11], ## l-shldr to l-hip
+                'right_torso': [6, 12], ## r-shldr to r-hip
+                'left_bicep': [5, 7], ## l-shldr to l-elbow
+                'right_bicep': [6, 8], ## r-shldr to r-elbow
+                'shoulder': [5, 6], ## l-shldr to r-shldr
+                'left_hand': [7, 9], ## l-elbow to l-wrist
+                'right_hand': [8, 10], ## r-elbow to r-wrist
+                'left_face': [1, 0], ## l-eye to nose
+                'right_face': [2, 0], ## l-eye to nose
+                'face': [1, 2], ## l-eye to r-eye
+                'left_ear': [1, 3], ## l-eye to l-ear
+                'right_ear': [2, 4], ## l-eye to r-ear
+                'left_neck': [3, 5], ## l-ear to l-shldr
+                'right_neck': [4, 6], ## r-ear to r-shldr
+}
+
+###----------------------------------------------------------------------------
+COCO_SKELETON_FLIP_PAIRS = {
+                    'leg':    ('left_leg', 'right_leg'),
+                    'thigh':    ('left_thigh', 'right_thigh'),
+                    'torso':    ('left_torso', 'right_torso'),
+                    'bicep':    ('left_bicep', 'right_bicep'),
+                    'hand':    ('left_hand', 'right_hand'),
+                    'face':    ('left_face', 'right_face'),
+                    'ear':    ('left_ear', 'right_ear'),
+                    'neck':    ('left_neck', 'right_neck'),
+                    }
 ##------------------------------------------------------------------------------------
 ## performs triangulation
-class Triangulator: 
+class TriangulatorNonLinear:
     def __init__(self, time_stamp, camera_names, cameras, multiview_pose2d):
         self.camera_names = camera_names
         self.cameras = cameras
@@ -60,15 +94,25 @@ class Triangulator:
 
         # Calculate the human body constraints error
         constraints_error = 0
-        # for (kp1, kp2), constraint in human_constraints.items():
-        #     length_3D = np.linalg.norm(triangulated_keypoints[kp1] - triangulated_keypoints[kp2])
-        #     constraints_error += (length_3D - constraint) ** 2
+
+         ##----------compute limbs-----------------
+        limb_lengths = {}
+        for limb_name in COCO_SKELETON.keys():
+            limb_length = np.linalg.norm(triangulated_keypoints[COCO_SKELETON[limb_name][0]] \
+                                         - triangulated_keypoints[COCO_SKELETON[limb_name][1]])
+
+            limb_lengths[limb_name] = limb_length
+
+        ## -----------symmetry--------------------
+        for limb_name, (left_kp, right_kp) in COCO_SKELETON_FLIP_PAIRS.items():
+            limb_error = np.linalg.norm(limb_lengths[left_kp] - limb_lengths[right_kp])
+            constraints_error += limb_error
 
         return reprojection_error + constraints_error
     
     ##-----------------------------------------
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
-    def run(self, debug=False):
+    def run(self, init_pose3d=None):
         points_3d = np.zeros((self.num_keypoints, 4))
         camera_names = sorted(self.pose2d.keys())
         num_views = len(camera_names)
@@ -103,7 +147,11 @@ class Triangulator:
 
         ###------------------------optimize!------------------------
         # Provide initial estimates for the 3D keypoints (use triangulation or any other method)
-        initial_keypoint_estimates = np.zeros((self.num_keypoints, 3))
+
+        if init_pose3d is not None:
+            initial_keypoint_estimates = init_pose3d[:, :3]
+        else:
+            initial_keypoint_estimates = np.zeros((self.num_keypoints, 3))
 
         # Flatten the initial estimates for keypoints and camera weights
         initial_params = initial_keypoint_estimates.flatten()
@@ -113,18 +161,16 @@ class Triangulator:
 
         # Run the optimization with the new objective function
         result = least_squares(self.objective_function_weighted, initial_params, \
-                               args=(keypoint_indices, cam_matrices, detected_keypoints))
+                               args=(keypoint_indices, cam_matrices, detected_keypoints),
+                                 method='trf', loss='soft_l1', f_scale=0.1, verbose=2, max_nfev=1000)
 
         # Reshape the result to obtain the optimized 3D keypoints and camera weights
         optimized_keypoints = result.x[:self.num_keypoints * 3].reshape(-1, 3)
-        optimized_camera_weights = result.x[self.num_keypoints * 3:].reshape(num_views, self.num_keypoints)
         
         points_3d[:, :3] = optimized_keypoints
         points_3d[:, 3] = 1.0
 
         return points_3d
-
-    
 
     ##-----------------------------------------
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
