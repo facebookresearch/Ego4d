@@ -58,7 +58,7 @@ region_proposal of the human using aria camera location in 3D
 We fit a fixed height cylinder to the aria camera location
 The orientation of the cylinder is computed using the exo camera plane
 """
-def get_region_proposal(point_3d, unit_normal, radius=0.4, human_height=1.8, axis=[0, 1, 0]):
+def get_region_proposal(point_3d, unit_normal, radius=0.3, human_height=1.8, axis=[0, 1, 0]):
     transform = trimesh.transformations.rotation_matrix(np.deg2rad(180), axis) ## angle and axis
 
     ## compute the height of the human

@@ -33,6 +33,7 @@ from ego4d.internal.human_pose.readers import read_frame_idx_set
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
 from tqdm.auto import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
 pathmgr = PathManager()
 pathmgr.register_handler(S3PathHandler(profile="default"))
@@ -62,7 +63,8 @@ class Context:
     dummy_pose_config: str
     dummy_pose_checkpoint: str
     human_height: float = 1.5
-
+    human_radius: float = 0.3
+    min_bbox_score: float = 0.7
 
 def get_context(config: Config) -> Context:
     metadata_json = json.load(pathmgr.open(config.inputs.metadata_json_path))
@@ -106,6 +108,8 @@ def get_context(config: Config) -> Context:
         dummy_pose_config=config.mode_pose2d.dummy_pose_config,
         dummy_pose_checkpoint=config.mode_pose2d.dummy_pose_checkpoint,
         human_height=config.mode_bbox.human_height,
+        human_radius=config.mode_bbox.human_radius,
+        min_bbox_score=config.mode_bbox.min_bbox_score,
     )
 
 ##-------------------------------------------------------------------------------
@@ -275,7 +279,7 @@ def mode_pose2d(config: Config):
     return
 
 
-###-------------------------------------------------------------------------------
+# ###-------------------------------------------------------------------------------
 def mode_bbox(config: Config):
     ctx = get_context(config)
 
@@ -299,7 +303,7 @@ def mode_bbox(config: Config):
 
     #---------------construct bbox detector----------------
     from ego4d.internal.human_pose.bbox_detector import DetectorModel
-    detector_model = DetectorModel(detector_config=ctx.detector_config, detector_checkpoint=ctx.detector_checkpoint)
+    detector_model = DetectorModel(detector_config=ctx.detector_config, detector_checkpoint=ctx.detector_checkpoint, min_bbox_score=ctx.min_bbox_score)
 
     ##--------construct ground plane, it is parallel to the plane with all gopro camera centers----------------
     exo_cameras = {exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None) for exo_camera_name in ctx.exo_cam_names}
@@ -333,7 +337,7 @@ def mode_bbox(config: Config):
             right_camera = create_camera(info["aria_slam_right"]["camera_data"], None) ## TODO: use the camera model of the aria camera
             human_center_3d = (left_camera.center + right_camera.center) / 2
 
-            proposal_points_3d = get_region_proposal(human_center_3d, unit_normal=camera_plane_unit_normal, human_height=ctx.human_height)
+            proposal_points_3d = get_region_proposal(human_center_3d, radius=ctx.human_radius, unit_normal=camera_plane_unit_normal, human_height=ctx.human_height)
             proposal_points_2d = batch_xworld_to_yimage(proposal_points_3d, exo_camera)
             proposal_bbox = check_and_convert_bbox(proposal_points_2d, exo_camera.camera_model.width, exo_camera.camera_model.height)
 
@@ -530,19 +534,33 @@ def mode_preprocess(config: Config):
     json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
 
 
-def mode_multi_view_vis(config: Config):
+def mode_multi_view_vis(config: Config, flag="pose3d"):
     ctx = get_context(config)
     camera_names = ctx.exo_cam_names
 
-    read_dir = ctx.vis_pose3d_dir
-    write_dir = os.path.join(ctx.vis_pose3d_dir, "multi_view")
+    if flag == "pose3d":
+        read_dir = ctx.vis_pose3d_dir
+        write_dir = os.path.join(ctx.vis_pose3d_dir, "multi_view")
+    elif flag == "bbox":
+        read_dir = ctx.vis_bbox_dir
+        write_dir = os.path.join(ctx.vis_bbox_dir, "multi_view")
+    elif flag == "pose2d":
+        read_dir = ctx.vis_pose2d_dir
+        write_dir = os.path.join(ctx.vis_pose2d_dir, "multi_view")
+
+    multi_view_vis(camera_names, read_dir, write_dir)
+
+    return
+
+def multi_view_vis(camera_names, read_dir, write_dir):
     os.makedirs(write_dir, exist_ok=True)
 
-    write_image_width = 3840
-    write_image_height = 2160
+    factor = 2
+    write_image_width = 3840 // factor
+    write_image_height = 2160 // factor
 
-    read_image_width = 3840
-    read_image_height = 2160
+    read_image_width = 3840 // factor
+    read_image_height = 2160 // factor
 
     fps = 30
     padding = 5
@@ -583,7 +601,7 @@ def mode_multi_view_vis(config: Config):
     command = 'rm -rf {}/exo.mp4'.format(write_dir)
     os.system(command)
 
-    command = 'ffmpeg -r {} -f image2 -i {}/%05d.jpg -pix_fmt yuv420p {}/exo.mp4'.format(fps, write_dir, ctx.vis_pose3d_dir)
+    command = 'ffmpeg -r {} -f image2 -i {}/%05d.jpg -pix_fmt yuv420p {}/exo.mp4'.format(fps, write_dir, read_dir)
     os.system(command)
 
     return
@@ -598,8 +616,12 @@ def run(config: Config):
         mode_pose2d(config)
     elif config.mode == "pose3d":
         mode_pose3d(config)
-    elif config.mode == "multi_view_vis":
-        mode_multi_view_vis(config)
+    elif config.mode == "multi_view_vis_bbox":
+        mode_multi_view_vis(config, "bbox")
+    elif config.mode == "multi_view_vis_pose2d":
+        mode_multi_view_vis(config, "pose2d")
+    elif config.mode == "multi_view_vis_pose3d":
+        mode_multi_view_vis(config, "pose3d")
     else:
         raise AssertionError(f"unknown mode: {config.mode}")
 

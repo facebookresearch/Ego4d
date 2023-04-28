@@ -50,3 +50,4 @@ class Config:
     mode_preprocess: PreprocessFrameConfig
     mode_pose_estimation: PoseEstimationConfig
     mode_triangulate: TriangulationConfig
+    exo_camera_name: str

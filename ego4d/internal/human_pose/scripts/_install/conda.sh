@@ -25,7 +25,6 @@ cd mmlab/mmpose
 pip install -r requirements.txt
 pip install -v -e . 
 pip install flask
-pip install flask
 pip install timm==0.4.9
 cd ../..
 
