@@ -241,6 +241,8 @@ def mode_refine_pose3d(config: Config):
     #---------------import triangulator-------------------
     from ego4d.internal.human_pose.triangulator_nonlinear import TriangulatorNonLinear
     from ego4d.internal.human_pose.pose_estimator import PoseModel
+    from ego4d.internal.human_pose.postprocess_pose3d import detect_outliers_and_interpolate
+
     pose_model = PoseModel(pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint) ## lightweight for visualization only!
 
     exo_cameras = {exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None) for exo_camera_name in ctx.exo_cam_names}
@@ -253,14 +255,11 @@ def mode_refine_pose3d(config: Config):
 
     ## load all pose3d from ctx.pose3d_dir, they are 00000.npy, 00001.npy, ...
     pose3d_files = [os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy") for time_stamp in range(len(dset))]
-    pose3d = []
+    poses3d = []
     for time_stamp, pose3d_file in enumerate(pose3d_files):
-        pose3d.append(np.load(pose3d_file))
+        poses3d.append(np.load(pose3d_file))
     
-    import pdb; pdb.set_trace()
-    
-
-
+    poses3d = np.stack(poses3d, axis=0) ## T x 17 x 4 (x, y, z, confidence)
 
     ## check if ctx.pose2d_dir, 
     camera_pose2d_files = [os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl") for exo_camera_name in ctx.exo_cam_names]
@@ -287,36 +286,41 @@ def mode_refine_pose3d(config: Config):
         pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
         with open(pose2d_file, "rb") as f:
             poses2d = pickle.load(f)
+
+    ## detect outliers and replace with interpolated values
+    poses3d = detect_outliers_and_interpolate(poses3d)
     
     for time_stamp in tqdm(range(len(dset)), total=len(dset)):
         info = dset[time_stamp]
+        pose3d = poses3d[time_stamp]
 
         multi_view_pose2d = {exo_camera_name: poses2d[time_stamp][exo_camera_name] for exo_camera_name in ctx.exo_cam_names}
 
         ## triangulate
-        triangulator = Triangulator(time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d)
-        pose3d = triangulator.run(debug=True) ## 17 x 4 (x, y, z, confidence)
+        # triangulator = TriangulatorNonLinear(time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d)
+        # pose3d = triangulator.run(init_pose3d=pose3d) ## 17 x 4 (x, y, z, confidence)
 
         poses3d[time_stamp] = pose3d
 
         ## visualize pose3d
-        for exo_camera_name in ctx.exo_cam_names:
+        # for exo_camera_name in ctx.exo_cam_names:
+        for exo_camera_name in ['cam01']:
             image_path = info[exo_camera_name]['abs_frame_path']
             image = cv2.imread(image_path)
             exo_camera = exo_cameras[exo_camera_name]
 
-            vis_pose3d_cam_dir = os.path.join(ctx.vis_pose3d_dir, exo_camera_name)
-            if not os.path.exists(vis_pose3d_cam_dir):
-                os.makedirs(vis_pose3d_cam_dir)
+            vis_refine_pose3d_cam_dir = os.path.join(ctx.vis_refine_pose3d_dir, exo_camera_name)
+            if not os.path.exists(vis_refine_pose3d_cam_dir):
+                os.makedirs(vis_refine_pose3d_cam_dir)
 
             projected_pose3d =  batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
             projected_pose3d = np.concatenate([projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1) ## 17 x 3
 
-            save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
+            save_path = os.path.join(vis_refine_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
             pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
 
     ## save poses3d.pkl
-    with open(os.path.join(ctx.pose3d_dir, "pose3d.pkl"), "wb") as f:
+    with open(os.path.join(ctx.refine_pose3d_dir, "pose3d.pkl"), "wb") as f:
         pickle.dump(poses3d, f)
 
     return
