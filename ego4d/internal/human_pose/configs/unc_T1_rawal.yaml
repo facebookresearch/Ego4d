@@ -8,7 +8,7 @@ exo_camera_name: "cam01"
 
 inputs:
   from_frame_number: 7000
-  to_frame_number: 7599
+  to_frame_number: 7199
   metadata_json_path: "s3://ego4d-consortium-sharing/internal/egoexo_pilot/unc/T1/metadata.json"
   aria_trajectory_path: "s3://ego4d-consortium-sharing/internal/temple3_egoexo/unc_t1/multi_closed_loop_trajectory_framerate_0.csv"
   exo_trajectory_path: "s3://ego4d-consortium-sharing/internal/temple3_egoexo/unc_t1/gopro_calibs.csv"

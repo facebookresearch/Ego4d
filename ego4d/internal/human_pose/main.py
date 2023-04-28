@@ -136,7 +136,8 @@ def mode_pose3d(config: Config):
     # aria_camera_models = get_aria_camera_models(aria_path)
 
     #---------------import triangulator-------------------
-    from ego4d.internal.human_pose.triangulator import Triangulator
+    # from ego4d.internal.human_pose.triangulator import Triangulator
+    from ego4d.internal.human_pose.triangulator_nonlinear import Triangulator
     from ego4d.internal.human_pose.pose_estimator import PoseModel
     pose_model = PoseModel(pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint) ## lightweight for visualization only!
 
@@ -150,10 +151,31 @@ def mode_pose3d(config: Config):
 
     poses3d = {}
 
-    ## load pose2d.pkl
-    pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
-    with open(pose2d_file, "rb") as f:
-        poses2d = pickle.load(f)
+    ## check if ctx.pose2d_dir, 
+    camera_pose2d_files = [os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl") for exo_camera_name in ctx.exo_cam_names]
+
+    ## check if all camera pose2d files exist
+    is_parallel = True
+    for camera_pose2d_file in camera_pose2d_files:
+        if not os.path.exists(camera_pose2d_file):
+            is_parallel = False
+            break
+    
+    if is_parallel:
+        poses2d = {time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names} for time_stamp in range(len(dset))} 
+        for exo_camera_name in ctx.exo_cam_names:
+            pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+            with open(pose2d_file, "rb") as f:
+                poses2d_camera = pickle.load(f)
+
+            for time_stamp in range(len(dset)):
+                poses2d[time_stamp][exo_camera_name] = poses2d_camera[time_stamp][exo_camera_name]
+
+    else:
+        ## load pose2d.pkl
+        pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
+        with open(pose2d_file, "rb") as f:
+            poses2d = pickle.load(f)
     
     for time_stamp in tqdm(range(len(dset)), total=len(dset)):
         info = dset[time_stamp]

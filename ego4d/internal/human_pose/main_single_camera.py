@@ -152,7 +152,7 @@ def mode_pose2d(config: Config, camera_name: str):
     poses2d = {}
 
     ## load bboxes from bbox_dir/bbox.pkl
-    bbox_file = os.path.join(ctx.bbox_dir, "bbox.pkl")
+    bbox_file = os.path.join(ctx.bbox_dir, "bbox_{}.pkl".format(camera_name))
 
     with open(bbox_file, "rb") as f:
         bboxes = pickle.load(f)
@@ -197,7 +197,7 @@ def mode_pose2d(config: Config, camera_name: str):
 
             poses2d[time_stamp][exo_camera_name] = pose2d
 
-    ## save poses2d to pose2d_dir/pose2d.pkl
+    ## save poses2d to pose2d_dir/pose2d_cam01.pkl
     with open(os.path.join(ctx.pose2d_dir, "pose2d_{}.pkl".format(camera_name)), "wb") as f:
         pickle.dump(poses2d, f)
 
