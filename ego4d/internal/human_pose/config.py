@@ -28,13 +28,17 @@ class BBoxConfig:
     detector_model_config: Optional[str]
     detector_model_checkpoint: Optional[str]
     use_aria_trajectory: bool
+    human_height: float
+    human_radius: float
+    min_bbox_score: float
 
 
 @dataclass
 class PoseEstimationConfig:
-    pose_model_config: str
-    pose_model_checkpoint: str
-    use_preprocessed_frames: bool
+    pose_config: str
+    pose_checkpoint: str
+    dummy_pose_config: str
+    dummy_pose_checkpoint: str
 
 
 @dataclass
@@ -44,10 +48,12 @@ class TriangulationConfig:
 
 @dataclass
 class Config:
-    root_dir: str
+    data_dir: str
+    root_repo_dir: str
     gpu_id: int  # use -1 for CPU
     mode: str  # one of {preprocess_frames,
     inputs: Input
     mode_preprocess: PreprocessFrameConfig
-    mode_pose_estimation: PoseEstimationConfig
+    mode_bbox: BBoxConfig
+    mode_pose2d: PoseEstimationConfig
     mode_triangulate: TriangulationConfig
