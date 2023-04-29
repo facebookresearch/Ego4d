@@ -239,7 +239,7 @@ def mode_refine_pose3d(config: Config):
     # aria_camera_models = get_aria_camera_models(aria_path)
 
     #---------------import triangulator-------------------
-    from ego4d.internal.human_pose.triangulator_nonlinear import TriangulatorNonLinear
+    from ego4d.internal.human_pose.pose_refiner import get_refined_pose3d
     from ego4d.internal.human_pose.pose_estimator import PoseModel
     from ego4d.internal.human_pose.postprocess_pose3d import detect_outliers_and_interpolate
 
@@ -287,20 +287,15 @@ def mode_refine_pose3d(config: Config):
         with open(pose2d_file, "rb") as f:
             poses2d = pickle.load(f)
 
-    ## detect outliers and replace with interpolated values
+    ## detect outliers and replace with interpolated values, basic smoothing
     poses3d = detect_outliers_and_interpolate(poses3d)
-    
+
+    ## refine pose3d
+    poses3d = get_refined_pose3d(poses3d)
+
     for time_stamp in tqdm(range(len(dset)), total=len(dset)):
         info = dset[time_stamp]
         pose3d = poses3d[time_stamp]
-
-        multi_view_pose2d = {exo_camera_name: poses2d[time_stamp][exo_camera_name] for exo_camera_name in ctx.exo_cam_names}
-
-        ## triangulate
-        # triangulator = TriangulatorNonLinear(time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d)
-        # pose3d = triangulator.run(init_pose3d=pose3d) ## 17 x 4 (x, y, z, confidence)
-
-        poses3d[time_stamp] = pose3d
 
         ## visualize pose3d
         # for exo_camera_name in ctx.exo_cam_names:
