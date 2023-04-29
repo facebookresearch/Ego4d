@@ -11,5 +11,5 @@ CONFIG=iu_bike_rawal
 
 # ##--------------------------------------------------------------
 # CUDA_VISIBLE_DEVICES=${DEVICES} python main.py --config-name $CONFIG mode=multi_view_vis_bbox
-CUDA_VISIBLE_DEVICES=${DEVICES} python main.py --config-name $CONFIG mode=multi_view_vis_pose2d
-# CUDA_VISIBLE_DEVICES=${DEVICES} python main.py --config-name $CONFIG mode=multi_view_vis_pose3d
+# CUDA_VISIBLE_DEVICES=${DEVICES} python main.py --config-name $CONFIG mode=multi_view_vis_pose2d
+CUDA_VISIBLE_DEVICES=${DEVICES} python main.py --config-name $CONFIG mode=multi_view_vis_pose3d

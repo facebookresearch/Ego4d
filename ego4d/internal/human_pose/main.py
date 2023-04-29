@@ -253,8 +253,10 @@ def mode_refine_pose3d(config: Config):
     if not os.path.exists(ctx.vis_refine_pose3d_dir):
         os.makedirs(ctx.vis_refine_pose3d_dir)
 
-    ## load all pose3d from ctx.pose3d_dir, they are 00000.npy, 00001.npy, ...
-    pose3d_files = [os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy") for time_stamp in range(len(dset))]
+    ## load all pose3d from ctx.pose3d_dir, they are 00000.npy, 00001.npy, using os.listdir ending in .npy and is 05d, do not use dset
+    time_stamps = sorted([int(f.split(".")[0]) for f in os.listdir(ctx.pose3d_dir) if f.endswith(".npy")])
+    pose3d_files = [os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy") for time_stamp in time_stamps]
+
     poses3d = []
     for time_stamp, pose3d_file in enumerate(pose3d_files):
         poses3d.append(np.load(pose3d_file))
@@ -272,13 +274,13 @@ def mode_refine_pose3d(config: Config):
             break
     
     if is_parallel:
-        poses2d = {time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names} for time_stamp in range(len(dset))} 
+        poses2d = {time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names} for time_stamp in time_stamps} 
         for exo_camera_name in ctx.exo_cam_names:
             pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
             with open(pose2d_file, "rb") as f:
                 poses2d_camera = pickle.load(f)
 
-            for time_stamp in range(len(dset)):
+            for time_stamp in time_stamps:
                 poses2d[time_stamp][exo_camera_name] = poses2d_camera[time_stamp][exo_camera_name]
 
     else:
@@ -293,13 +295,12 @@ def mode_refine_pose3d(config: Config):
     ## refine pose3d
     poses3d = get_refined_pose3d(poses3d)
 
-    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+    for time_stamp in tqdm(range(len(time_stamps)), total=len(time_stamps)):
         info = dset[time_stamp]
         pose3d = poses3d[time_stamp]
 
         ## visualize pose3d
-        # for exo_camera_name in ctx.exo_cam_names:
-        for exo_camera_name in ['cam01']:
+        for exo_camera_name in ctx.exo_cam_names:
             image_path = info[exo_camera_name]['abs_frame_path']
             image = cv2.imread(image_path)
             exo_camera = exo_cameras[exo_camera_name]
@@ -672,8 +673,8 @@ def mode_multi_view_vis(config: Config, flag="pose3d"):
     camera_names = ctx.exo_cam_names
 
     if flag == "pose3d":
-        read_dir = ctx.vis_pose3d_dir
-        write_dir = os.path.join(ctx.vis_pose3d_dir, "multi_view")
+        read_dir = ctx.vis_refine_pose3d_dir
+        write_dir = os.path.join(ctx.vis_refine_pose3d_dir, "multi_view")
     elif flag == "bbox":
         read_dir = ctx.vis_bbox_dir
         write_dir = os.path.join(ctx.vis_bbox_dir, "multi_view")
@@ -688,7 +689,7 @@ def mode_multi_view_vis(config: Config, flag="pose3d"):
 def multi_view_vis(camera_names, read_dir, write_dir):
     os.makedirs(write_dir, exist_ok=True)
 
-    factor = 2
+    factor = 1
     write_image_width = 3840 // factor
     write_image_height = 2160 // factor
 
