@@ -15,3 +15,6 @@ notebooks/moments_cvpr/resnet18-f37072fd.pth
 tp/*
 *.mp4
 *.json
+
+
+ego4d/internal/human_pose/outputs/*
