@@ -138,7 +138,6 @@ def _validate_vcs(
                         )
 
                 if not pathmgr.exists(path):
-                    breakpoint()
                     errors.append(
                         Error(
                             ErrorLevel.ERROR,
@@ -1365,7 +1364,6 @@ def _check_files_exist(
             return errs
 
         if not pathmgr.exists(path):
-            breakpoint()
             errs.append(
                 Error(
                     ErrorLevel.ERROR,
