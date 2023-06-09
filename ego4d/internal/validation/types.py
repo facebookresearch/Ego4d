@@ -269,7 +269,10 @@ def default_decode(value: str, datatype: type, name: str) -> Any:
     elif datatype == list:
         if len(value) == 0:
             return []
-        return json.loads(value)
+        try:
+            json.loads(value)
+        except Exception as e:
+            breakpoint()
     elif datatype == datetime:
         return (
             datetime.strptime(value.split(".")[0], DEFAULT_DATE_FORMAT_STR)
@@ -354,6 +357,7 @@ def load_dataclass_dict_from_csv(
         if csv_names != dn_names:
             missing_str = "\n".join([f"- {x}" for x in (dn_names - csv_names)])
             additional_str = "\n".join([f"- {x}" for x in (csv_names - dn_names)])
+            breakpoint()
             raise AssertionError(
                 f"""
 Missing fields from CSV {input_csv_file_path}:
@@ -381,6 +385,7 @@ Additional fields in CSV:
                     raise e
 
             obj = dataclass_class(**constructor_params)
+            
             dict_key = (
                 getattr(obj, dict_key_field)
                 if isinstance(dict_key_field, str)
@@ -393,6 +398,7 @@ Additional fields in CSV:
             lineno += 1
 
         if len(duplicate_keys) > 0:
+            breakpoint()
             raise AssertionError(
                 f"Multiple Primary Keys/IDs found for file {input_csv_file_path}:\n{duplicate_keys}"
             )

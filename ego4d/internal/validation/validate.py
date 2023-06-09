@@ -138,6 +138,7 @@ def _validate_vcs(
                         )
 
                 if not pathmgr.exists(path):
+                    breakpoint()
                     errors.append(
                         Error(
                             ErrorLevel.ERROR,
@@ -887,49 +888,6 @@ def _check_capture_metadata(
     return ret
 
 
-def _check_colmap(
-    manifest: ManifestEgoExo,
-) -> List[Error]:
-    all_colmap = manifest.colmap
-    assert all_colmap is not None
-
-    ret = []
-    for capture_uid, colmap in all_colmap.items():
-        for c in colmap:
-            if capture_uid not in manifest.captures:
-                ret.append(
-                    Error(
-                        ErrorLevel.ERROR,
-                        c.colmap_configuration_id,
-                        "colmap_configuration_invalid_capture_uid_fk",
-                        f"colmap configuration links to non-existent capture_uid: {capture_uid}",
-                    )
-                )
-
-            if c.colmap_ran and not c.was_inspected:
-                ret.append(
-                    Error(
-                        ErrorLevel.ERROR,
-                        c.colmap_configuration_id,
-                        "colmap_ran_but_not_inspected",
-                        f"colmap configuration for {c.colmap_configuration_id} was not inspected but ran",
-                    )
-                )
-
-        vers_for_capture = set(c.version for c in colmap)
-        if len(vers_for_capture) != len(colmap):
-            ret.append(
-                Error(
-                    ErrorLevel.ERROR,
-                    capture_uid,
-                    "colmap_duplicate_versions",
-                    f"Duplicate colmap versions found for capture uid: {capture_uid}",
-                )
-            )
-
-    return ret
-
-
 def _check_objects(manifest: ManifestEgoExo) -> List[Error]:
     ret = []
     physical_setting_ids = (
@@ -955,7 +913,7 @@ def _check_participants(
     ret = []
     assert manifest.participants is not None
     for (participant_id, scenario_id, _), p in manifest.participants.items():
-        if scenario_id not in metadata.scenarios:
+        if scenario_id is not None and scenario_id not in metadata.scenarios:
             ret.append(
                 Error(
                     ErrorLevel.ERROR,
@@ -964,205 +922,221 @@ def _check_participants(
                     "scenario {p.scenario_id} does not exist",
                 )
             )
-        if len(p.pre_survey_data) == 0:
+
+        if len(p.pre_survey_data) > 0 and len(p.participant_metadata) > 0:
             ret.append(
                 Error(
                     ErrorLevel.ERROR,
                     participant_id,
-                    "participant_has_empty_pre_survey_data",
-                    "participants should have pre survey data populated",
+                    "participant_has_both_pre_survey_data_and_participant_metadata",
+                    "in a single entry, participants should have either pre survey data or participant_metadata populated. not both.",
                 )
             )
-        else:
-            ks = {
-                "recording_location",
-                "scenario_num_iterations",
-                "scenario_frequency",
-                "scenario_experience_years",
-                "has_taught_scenario",
-                "has_recorded_scenario_howto",
-                "typical_time_to_complete_scenario_minutes",
-            }
-            given_ks = set(p.pre_survey_data.keys())
-
-            missing_ks = ks - given_ks
-            aux_ks = given_ks - ks
-            if len(missing_ks) > 0 or len(aux_ks) > 0:
-                ret.append(
-                    Error(
-                        ErrorLevel.WARN,
-                        participant_id,
-                        "participant_pre_survey_data_contraints",
-                        f"auxiliary keys: {aux_ks}, missing keys: {missing_ks}",
-                    )
-                )
-
-            if "recording_location" in given_ks:
-                v = p.pre_survey_data["recording_location"]
-                valid_vs = {
-                    "typical",
-                    "familiar",
-                    "unfamiliar",
-                }
-                if v not in valid_vs:
-                    ret.append(
-                        Error(
-                            ErrorLevel.WARN,
-                            participant_id,
-                            "participant_pre_survey_data_contraints",
-                            f"recording_location scenario_num_iterations {v} not one of: {valid_vs}",
-                        )
-                    )
-
-            if "scenario_num_iterations" in given_ks:
-                v = p.pre_survey_data["scenario_num_iterations"]
-                valid_vs = {
-                    "1-10",
-                    "10-100",
-                    "100-500",
-                    "500-1000",
-                    "1000+",
-                }
-                if v not in valid_vs:
-                    ret.append(
-                        Error(
-                            ErrorLevel.WARN,
-                            participant_id,
-                            "participant_pre_survey_data_contraints",
-                            f"scenario_num_iterations {v} not one of: {valid_vs}",
-                        )
-                    )
-
-            if "scenario_frequency" in given_ks:
-                v = p.pre_survey_data["scenario_frequency"]
-                valid_vs = {
-                    "daily",
-                    "weekly",
-                    "monthly",
-                    "rarely",
-                    "never",
-                }
-                if v not in valid_vs:
-                    ret.append(
-                        Error(
-                            ErrorLevel.WARN,
-                            participant_id,
-                            "participant_pre_survey_data_contraints",
-                            f"scenario_frequency {v} not one of: {valid_vs}",
-                        )
-                    )
-
-            if "scenario_experience_years" in given_ks:
-                v = p.pre_survey_data["scenario_experience_years"]
-                valid_vs = {
-                    "1 year",
-                    "1-3 years",
-                    "3-5 years",
-                    "5-10 years",
-                    "10+ years",
-                }
-                if v not in valid_vs:
-                    ret.append(
-                        Error(
-                            ErrorLevel.WARN,
-                            participant_id,
-                            "participant_pre_survey_data_contraints",
-                            f"scenario_experience_years {v} not one of: {valid_vs}",
-                        )
-                    )
-            if "has_taught_scenario" in given_ks:
-                v = p.pre_survey_data["has_taught_scenario"]
-                try:
-                    _ = bool(v)
-                except Exception:
-                    ret.append(
-                        Error(
-                            ErrorLevel.WARN,
-                            participant_id,
-                            "participant_pre_survey_data_contraints",
-                            f"has_taught_scenario could not be converted to boolean: {traceback.format_exc()}",
-                        )
-                    )
-            if "has_recorded_scenario_howto" in given_ks:
-                v = p.pre_survey_data["has_recorded_scenario_howto"]
-                try:
-                    _ = bool(v)
-                except Exception:
-                    ret.append(
-                        Error(
-                            ErrorLevel.WARN,
-                            participant_id,
-                            "participant_pre_survey_data_contraints",
-                            f"has_recorded_scenario_howto could not be converted to boolean: {traceback.format_exc()}",
-                        )
-                    )
-
-            if "typical_time_to_complete_scenario_minutes" in given_ks:
-                v = p.pre_survey_data["typical_time_to_complete_scenario_minutes"]
-                try:
-                    _ = int(v)
-                except Exception:
-                    ret.append(
-                        Error(
-                            ErrorLevel.WARN,
-                            participant_id,
-                            "participant_pre_survey_data_contraints",
-                            f"typical_time_to_complete_scenario_minutes could not be converted to integer: {traceback.format_exc()}",
-                        )
-                    )
-
-        if len(p.participant_metadata) == 0:
+        elif len(p.pre_survey_data) == 0 and len(p.participant_metadata) == 0:
             ret.append(
                 Error(
                     ErrorLevel.ERROR,
                     participant_id,
-                    "participant_empty_metadata",
-                    "participant has empty metadata for demographics, etc.",
+                    "participant_has_empty_pre_survey_data_and_participant_metadata",
+                    "participants should have either pre survey data or participant_metadata populated",
                 )
             )
-        else:
-            ks = {
-                "age_range",
-                "gender",
-                "race_ethnicity",
-                "country_born",
-                "native_language",
-                "home_language",
-                "education_completed",
-                "current_student",
-                "field",
-            }
-            given_ks = set(p.participant_metadata.keys())
-            missing_ks = ks - given_ks
-            aux_ks = given_ks - ks
-            if len(missing_ks) > 0 or len(aux_ks) > 0:
-                ret.append(
-                    Error(
-                        ErrorLevel.WARN,
-                        participant_id,
-                        "participant_metadata_constraints",
-                        f"auxiliary keys: {aux_ks}, missing keys: {missing_ks}",
-                    )
-                )
 
-            if "gender" in p.participant_metadata:
-                v = p.participant_metadata["gender"]
-                valid_vs = {
-                    "female",
-                    "male",
-                    "non_binary",
-                    "prefer_not_to_disclose",
-                    "prefer_to_self_describe",
+        else:
+            if len(p.pre_survey_data) > 0:
+                if p.scenario_id is None or p.scenario_id == 0:
+                    ret.append(
+                        Error(
+                            ErrorLevel.ERROR,
+                            participant_id,
+                            "participant_has_pre_survey_data_without_scenario_id",
+                            "If pre_survey_data is provided, then a valid scenario_id must be provided",
+                        )
+                    )
+
+                ks = {
+                    "recording_location",
+                    "scenario_num_iterations",
+                    "scenario_frequency",
+                    "scenario_experience_years",
+                    "has_taught_scenario",
+                    "has_recorded_scenario_howto",
+                    "has_watched_others_scenario_videos",
+                    "has_qualifications_or_professional_training",
+                    "typical_time_to_complete_scenario_minutes",
+                    "typical_time_per_practice_session_minutes"
                 }
-                if v not in valid_vs:
+                given_ks = set(p.pre_survey_data.keys())
+
+                missing_ks = ks - given_ks
+                aux_ks = given_ks - ks
+                if len(missing_ks) > 0 or len(aux_ks) > 0:
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            participant_id,
+                            "participant_pre_survey_data_contraints",
+                            f"auxiliary keys: {aux_ks}, missing keys: {missing_ks}",
+                        )
+                    )
+
+                if "recording_location" in given_ks:
+                    v = p.pre_survey_data["recording_location"]
+                    valid_vs = {
+                        "typical",
+                        "familiar",
+                        "unfamiliar",
+                    }
+                    if v not in valid_vs:
+                        ret.append(
+                            Error(
+                                ErrorLevel.WARN,
+                                participant_id,
+                                "participant_pre_survey_data_contraints",
+                                f"recording_location scenario_num_iterations {v} not one of: {valid_vs}",
+                            )
+                        )
+
+                if "scenario_num_iterations" in given_ks:
+                    v = p.pre_survey_data["scenario_num_iterations"]
+                    valid_vs = {
+                        "1-10",
+                        "10-100",
+                        "100-500",
+                        "500-1000",
+                        "1000+",
+                    }
+                    if v not in valid_vs:
+                        ret.append(
+                            Error(
+                                ErrorLevel.WARN,
+                                participant_id,
+                                "participant_pre_survey_data_contraints",
+                                f"scenario_num_iterations {v} not one of: {valid_vs}",
+                            )
+                        )
+
+                if "scenario_frequency" in given_ks:
+                    v = p.pre_survey_data["scenario_frequency"]
+                    valid_vs = {
+                        "daily",
+                        "weekly",
+                        "monthly",
+                        "rarely",
+                        "never",
+                    }
+                    if v not in valid_vs:
+                        ret.append(
+                            Error(
+                                ErrorLevel.WARN,
+                                participant_id,
+                                "participant_pre_survey_data_contraints",
+                                f"scenario_frequency {v} not one of: {valid_vs}",
+                            )
+                        )
+
+                if "scenario_experience_years" in given_ks:
+                    v = p.pre_survey_data["scenario_experience_years"]
+                    valid_vs = {
+                        "1 year",
+                        "1-3 years",
+                        "3-5 years",
+                        "5-10 years",
+                        "10+ years",
+                    }
+                    if v not in valid_vs:
+                        ret.append(
+                            Error(
+                                ErrorLevel.WARN,
+                                participant_id,
+                                "participant_pre_survey_data_contraints",
+                                f"scenario_experience_years {v} not one of: {valid_vs}",
+                            )
+                        )
+                if "has_taught_scenario" in given_ks:
+                    v = p.pre_survey_data["has_taught_scenario"]
+                    try:
+                        _ = bool(v)
+                    except Exception:
+                        ret.append(
+                            Error(
+                                ErrorLevel.WARN,
+                                participant_id,
+                                "participant_pre_survey_data_contraints",
+                                f"has_taught_scenario could not be converted to boolean: {traceback.format_exc()}",
+                            )
+                        )
+                if "has_recorded_scenario_howto" in given_ks:
+                    v = p.pre_survey_data["has_recorded_scenario_howto"]
+                    try:
+                        _ = bool(v)
+                    except Exception:
+                        ret.append(
+                            Error(
+                                ErrorLevel.WARN,
+                                participant_id,
+                                "participant_pre_survey_data_contraints",
+                                f"has_recorded_scenario_howto could not be converted to boolean: {traceback.format_exc()}",
+                            )
+                        )
+
+                if "typical_time_to_complete_scenario_minutes" in given_ks:
+                    v = p.pre_survey_data["typical_time_to_complete_scenario_minutes"]
+                    try:
+                        _ = int(v)
+                    except Exception:
+                        ret.append(
+                            Error(
+                                ErrorLevel.WARN,
+                                participant_id,
+                                "participant_pre_survey_data_contraints",
+                                f"typical_time_to_complete_scenario_minutes could not be converted to integer: {traceback.format_exc()}",
+                            )
+                        )
+
+            if len(p.participant_metadata) > 0:
+                ks = {
+                    "age_range",
+                    "gender",
+                    "race_ethnicity",
+                    "country_born",
+                    "native_language",
+                    "home_language",
+                    "education_completed",
+                    "current_student",
+                    "field",
+                }
+                given_ks = set(p.participant_metadata.keys())
+                missing_ks = ks - given_ks
+                aux_ks = given_ks - ks
+                if len(missing_ks) > 0 or len(aux_ks) > 0:
                     ret.append(
                         Error(
                             ErrorLevel.WARN,
                             participant_id,
                             "participant_metadata_constraints",
-                            f"gender '{v}' not one of: {valid_vs}",
+                            f"auxiliary keys: {aux_ks}, missing keys: {missing_ks}",
                         )
                     )
+
+                if "gender" in p.participant_metadata:
+                    v = p.participant_metadata["gender"]
+                    valid_vs = {
+                        "female",
+                        "male",
+                        "non_binary",
+                        "prefer_not_to_disclose",
+                        "prefer_to_self_describe",
+                    }
+                    if v not in valid_vs:
+                        ret.append(
+                            Error(
+                                ErrorLevel.WARN,
+                                participant_id,
+                                "participant_metadata_constraints",
+                                f"gender '{v}' not one of: {valid_vs}",
+                            )
+                        )
 
     return ret
 
@@ -1341,20 +1315,6 @@ def _get_referenced_files(manifest: ManifestEgoExo) -> List[ReferencedFile]:
                 )
             )
 
-    if manifest.colmap:
-        for capture_uid, cs in manifest.colmap.items():
-            if capture_uid not in manifest.captures:
-                continue
-            for c in cs:
-                root_dir = manifest.captures[capture_uid].university_video_folder_path
-                ret.append(
-                    ReferencedFile(
-                        source_id=f"(capture={c.university_capture_id}, colmap_id={c.colmap_configuration_id})",
-                        source_location="colmap_config_dir",
-                        root_dir=root_dir,
-                        relative_path=c.config_relative_path,
-                    )
-                )
     if manifest.objects:
         for object_id, obj in manifest.objects.items():
             if obj.university_object_id not in manifest.captures:
@@ -1405,6 +1365,7 @@ def _check_files_exist(
             return errs
 
         if not pathmgr.exists(path):
+            breakpoint()
             errs.append(
                 Error(
                     ErrorLevel.ERROR,
@@ -1514,18 +1475,6 @@ def validate_egoexo_files(
         ret.extend(
             _check_associated_takes_metadata(manifest, metadata, capture, capture_uid)
         )
-
-    if not manifest.colmap:
-        ret.append(
-            Error(
-                ErrorLevel.WARN,
-                "colmap",
-                "no_colmap_metadata_provided",
-                "missing colmap metadata (null or empty)",
-            )
-        )
-    else:
-        ret.extend(_check_colmap(manifest))
 
     if not manifest.participants:
         ret.append(

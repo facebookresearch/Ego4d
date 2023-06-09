@@ -18,6 +18,7 @@ scenario_id,name
 1015,Making Milk Tea
 1016,Cooking Cookies
 1017,Cooking Brownies
+1018,Making White Radish & Lettuce & Tomato & Cucumber Salad
 2000,Health
 2001,Covid-19 Rapid Antigen Test
 2002,Medical Checkup - Blood Pressure Monitor
@@ -52,8 +53,40 @@ scenario_id,name
 6002,Basketball Drills - Reverse Layup
 6003,Basketball Drills - Mid-Range Jump Shooting
 7000,Rock Climbing
+7001,Los_Andes_FPC5_women
+7002,Los_Andes_FPC1_women
+7003,Los_Andes_FPC2_women
+7004,Los_Andes_FPC10_men
+7005,Los_Andes_FPC11_men
+7006,Los_Andes_FPC12_men
+7007,Los_Andes_FPC13_women
+7008,Los_Andes_FPC14_women
+7009,Los_Andes_FPC15_women
+7010,Los_Andes_FPC16_women
+7011,Los_Andes_FPC17_women
+7012,Los_Andes_FPC14_men
+7013,Los_Andes_FPC15_men
+7014,Los_Andes_FPC16_men
+7015,Los_Andes_FPC18_men
+7016,Los_Andes_FPC17_men
+7017,Los_Andes_Super_Final_men
+7300,Minnesota_RW_Casual
+7018,LosAndes_V2_R1
+7019,LosAndes_V1_R1
+7020,LosAndes_V2_R2
+7021,LosAndes_V4_R1
+7022,LosAndes_V3_R1
+7023,LosAndes_V3_R2
+7024,LosAndes_V4_R2
+7025,LosAndes_V3_R3
 8000,Soccer
 8001,Soccer Drills - Inside Trap and Outside Play
 8002,Soccer Drills - Outside Trap and Outside Play
 8003,Soccer Drills - Dribbling
+8004,Soccer Drills - Juggling
+8005,Soccer Drills - Penalty Kick 
 9000,Dance
+9001,Performing the basic choreography
+9002,Performing the advanced choreography
+9003,Teaching the basic choreography
+9004,Teaching the advanced choreography
