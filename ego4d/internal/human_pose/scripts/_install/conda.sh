@@ -25,7 +25,7 @@ cd ../..
 
 cd mmlab/mmpose
 pip install -r requirements.txt
-pip install -v -e . 
+pip install -v -e .
 pip install flask
 pip install timm==0.4.9
 cd ../..
@@ -45,7 +45,7 @@ pip install python-fcl
 pip install hydra-core --upgrade
 pip install av iopath
 pip install pycolmap
-pip install pyark
+pip install projectaria_tools
 
 ##-----------------------------------------------
 ## install ego4d locally
