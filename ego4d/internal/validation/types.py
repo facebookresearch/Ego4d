@@ -381,6 +381,7 @@ Additional fields in CSV:
                     raise e
 
             obj = dataclass_class(**constructor_params)
+            
             dict_key = (
                 getattr(obj, dict_key_field)
                 if isinstance(dict_key_field, str)
