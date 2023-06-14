@@ -963,7 +963,7 @@ def _check_participants(
                     "has_watched_others_scenario_videos",
                     "has_qualifications_or_professional_training",
                     "typical_time_to_complete_scenario_minutes",
-                    "typical_time_per_practice_session_minutes"
+                    "typical_time_per_practice_session_minutes",
                 }
                 given_ks = set(p.pre_survey_data.keys())
 
