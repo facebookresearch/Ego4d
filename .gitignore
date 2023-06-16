@@ -13,4 +13,6 @@ tp/*
 *.mp4
 *.json
 **/outputs/**
-notebooks/.ipynb_checkpoints/**
+
+# Jupyter Notebook
+.ipynb_checkpoints
