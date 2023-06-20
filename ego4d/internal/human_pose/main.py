@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import pickle
@@ -33,7 +34,7 @@ from ego4d.internal.human_pose.triangulator import Triangulator
 from ego4d.internal.human_pose.utils import (
     check_and_convert_bbox,
     draw_bbox_xyxy,
-    draw_points_2d,
+    # draw_points_2d,
     get_exo_camera_plane,
     get_region_proposal,
 )
@@ -78,7 +79,7 @@ def _create_json_from_capture_dir(capture_dir: str) -> Dict[str, Any]:
         capture_dir = capture_dir[0:-1]
 
     if capture_dir.startswith("s3://"):
-        bucket_name = capture_dir.split("s3://")[1].split("/")[0]
+        # bucket_name = capture_dir.split("s3://")[1].split("/")[0]
         prefix_path = "s3://{bucket_name}"
     else:
         prefix_path = capture_dir
@@ -146,20 +147,20 @@ def get_context(config: Config) -> Context:
     for rel_path_key in ["pose_config", "dummy_pose_config"]:
         rel_path = config.mode_pose2d[rel_path_key]
         abs_path = os.path.join(config.repo_root_dir, rel_path)
-        assert (
-            os.path.exists(abs_path),
-            f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})",
-        )
+        assert os.path.exists(
+            abs_path
+        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
+
         config.mode_pose2d[rel_path_key] = abs_path
 
     # bbox config
     for rel_path_key in ["detector_config"]:
         rel_path = config.mode_bbox[rel_path_key]
         abs_path = os.path.join(config.repo_root_dir, rel_path)
-        assert (
-            os.path.exists(abs_path),
-            f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})",
-        )
+        assert os.path.exists(
+            abs_path
+        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
+
         config.mode_bbox[rel_path_key] = abs_path
 
     return Context(
@@ -379,10 +380,10 @@ def mode_bbox(config: Config):
             exo_camera = create_camera(info[exo_camera_name]["camera_data"], None)
             left_camera = create_camera(
                 info["aria_slam_left"]["camera_data"], None
-            )  ## TODO: use the camera model of the aria camera
+            )  # TODO: use the camera model of the aria camera
             right_camera = create_camera(
                 info["aria_slam_right"]["camera_data"], None
-            )  ## TODO: use the camera model of the aria camera
+            )  # TODO: use the camera model of the aria camera
             human_center_3d = (left_camera.center + right_camera.center) / 2
 
             proposal_points_3d = get_region_proposal(
@@ -454,14 +455,18 @@ def mode_preprocess(config: Config):
 
     shutil.rmtree(ctx.frame_dir, ignore_errors=True)
     os.makedirs(ctx.frame_dir, exist_ok=True)
-    i1 = config.inputs.from_frame_number
-    i2 = config.inputs.to_frame_number
 
     synced_df = get_synced_timesync_df(ctx.metadata_json)
     aria_stream_ks = [
         f"aria01_{stream_id}_capture_timestamp_ns"
         for stream_id in config.inputs.aria_streams
     ]
+
+    num_frames = len(synced_df)
+    i1 = max(0, min(config.inputs.from_frame_number, num_frames - 1))
+    i2 = max(0, min(config.inputs.to_frame_number, num_frames - 1))
+    print(f"[Info] Final frame range: {i1} ~ {i2}")
+
     aria_t1 = min(synced_df[aria_stream_ks].iloc[i1]) / 1e9 - 1 / 30
     aria_t2 = max(synced_df[aria_stream_ks].iloc[i2]) / 1e9 + 1 / 30
 
@@ -469,6 +474,34 @@ def mode_preprocess(config: Config):
     aria_frame_dir = os.path.join(ctx.frame_dir, "aria01")
     os.makedirs(aria_frame_dir, exist_ok=True)
     print("Extracting aria")
+
+    vrs_deps_in_bin_path = False
+    vrs_deps = ["libxxhash.so.0", "libturbojpeg.so.0"]
+    for vrs_dep in vrs_deps:
+        if not os.path.exists(
+            os.path.join(os.path.dirname(config.mode_preprocess.vrs_bin_path), vrs_dep)
+        ):
+            print(
+                " ".join(
+                    [
+                        f"[Info] If you cannot find {vrs_dep}",
+                        "when running vrs binary in the next step,",
+                        f"consider copying {vrs_dep} to the same folder of",
+                        "your vrs_bin_path so we could pick it up.",
+                    ]
+                )
+            )
+        else:
+            vrs_deps_in_bin_path = True
+
+    if vrs_deps_in_bin_path:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(
+            [
+                os.environ["LD_LIBRARY_PATH"],
+                os.path.dirname(config.mode_preprocess.vrs_bin_path),
+            ]
+        )
+
     cmd = [
         config.mode_preprocess.vrs_bin_path,
         "extract-all",
@@ -487,7 +520,7 @@ def mode_preprocess(config: Config):
     ]
     print("Running:")
     print(" ".join(cmd))
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
 
     # gopro
     for cam in ctx.exo_cam_names:
@@ -631,7 +664,7 @@ def mode_multi_view_vis(config: Config):
         if image_name.endswith(".jpg")
     ]
 
-    for t, image_name in enumerate(tqdm(image_names)):
+    for _t, image_name in enumerate(tqdm(image_names)):
         canvas = 255 * np.ones((total_height_with_padding, total_width_with_padding, 3))
 
         for idx, camera_name in enumerate(camera_names):
@@ -654,13 +687,13 @@ def mode_multi_view_vis(config: Config):
                 :,
             ] = image[:, :, :]
 
-        ##---------resize to target size, ffmpeg does not work with offset image sizes---------
+        # ---------resize to target size, ffmpeg does not work with offset image sizes---------
         canvas = cv2.resize(canvas, (total_width, total_height))
         canvas = cv2.resize(canvas, (write_image_width, write_image_height))
 
         cv2.imwrite(os.path.join(write_dir, image_name), canvas)
 
-    ##----------make video--------------
+    # ----------make video--------------
     command = "rm -rf {}/exo.mp4".format(write_dir)
     os.system(command)
 
@@ -672,7 +705,7 @@ def mode_multi_view_vis(config: Config):
     os.system(command)
 
 
-@hydra.main(config_path="configs", config_name=None)
+@hydra.main(config_path="configs", config_name=None, version_base=None)
 def run(config: Config):
     if config.mode == "preprocess":
         mode_preprocess(config)
@@ -688,5 +721,82 @@ def run(config: Config):
         raise AssertionError(f"unknown mode: {config.mode}")
 
 
+def add_arguments(parser):
+    parser.add_argument("--config-name", default="unc_T1")
+    parser.add_argument(
+        "--config_path", default="configs", help="Path to the config folder"
+    )
+    parser.add_argument(
+        "--steps",
+        default="",
+        help="steps to run concatenated by '+', e.g., preprocess+bbox+pose2d+pose3d",
+    )
+
+
+def config_single_job(args, job_id):
+    args.job_id = job_id
+    args.name = args.name_list[job_id]
+    args.work_dir = args.work_dir_list[job_id]
+    args.output_dir = args.work_dir
+
+    args.config_name = args.config_list[job_id]
+
+
+def create_job_list(args):
+    args.config_list = args.config_name.split("+")
+
+    args.job_list = []
+    args.name_list = []
+
+    for config in args.config_list:
+        name = args.name + "_" + config
+        args.name_list.append(name)
+        args.job_list.append(name)
+
+    args.job_num = len(args.job_list)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    args = parser.parse_args()
+    args.steps = args.steps.split("+")
+    print(args)
+
+    return args
+
+
+def get_hydra_config(args):
+    # https://stackoverflow.com/questions/60674012/how-to-get-a-hydra-config-without-using-hydra-main
+    hydra.initialize(config_path=args.config_path)
+    cfg = hydra.compose(
+        config_name=args.config_name,
+        # args.opts contains config overrides, e.g., ["inputs.from_frame_number=7000",]
+        overrides=args.opts,
+    )
+    print("Final config:", cfg)
+    return cfg
+
+
+def main(args):
+    # Note: this function is called from launch_train.py
+    config = get_hydra_config(args)
+
+    if "preprocess" in args.steps:
+        mode_preprocess(config)
+    if "bbox" in args.steps:
+        mode_bbox(config)
+    if "pose2d" in args.steps:
+        mode_pose2d(config)
+    if "pose3d" in args.steps:
+        mode_pose3d(config)
+    if "multi_view_vis" in args.steps:
+        mode_multi_view_vis(config)
+
+
 if __name__ == "__main__":
-    run()  # pyre-ignore
+    # Using hydra:
+    run()
+    # Not using hydra:
+    # args = parse_args()
+    # main(args)
