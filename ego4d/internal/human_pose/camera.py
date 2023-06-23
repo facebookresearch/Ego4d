@@ -174,6 +174,7 @@ def batch_xworld_to_yimage(pts3d: Vec3, to_cam: Camera):
     assert pts3d.shape[1] == 3
 
     pts2d = []
+
     # TODO: optimize
     for pt3d in pts3d:
         T_to_world = np.matmul(to_cam.T_camera_device, to_cam.T_device_world)

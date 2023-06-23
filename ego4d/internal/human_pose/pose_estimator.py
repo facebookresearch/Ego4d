@@ -79,8 +79,6 @@ class PoseModel:
 
         self.min_vis_keypoints = 5  ## coco format, 17 keypoints!
 
-        return
-
     ####--------------------------------------------------------
     def get_poses2d(self, bboxes, image_name):
         pose_results, returned_outputs = inference_top_down_pose_model(
@@ -167,8 +165,6 @@ class PoseModel:
             out_file=save_path,
         )
 
-        return
-
     ####--------------------------------------------------------
     def draw_projected_poses3d(self, pose_results, image_name, save_path):
         keypoint_thres = self.rgb_keypoint_vis_thres
@@ -197,5 +193,3 @@ class PoseModel:
             show=False,
             out_file=save_path,
         )
-
-        return

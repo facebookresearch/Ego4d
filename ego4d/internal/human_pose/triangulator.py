@@ -1,12 +1,13 @@
-import os
 import random
 
 import numpy as np
+
 import torch
 from scipy.optimize import least_squares
 from utils import COCO_KP_ORDER
 
-
+##------------------------------------------------------------------------------------
+## performs triangulation
 class Triangulator:
     def __init__(self, time_stamp, camera_names, cameras, multiview_pose2d):
         self.camera_names = camera_names
@@ -49,9 +50,6 @@ class Triangulator:
 
                 self.pose2d[human_name][camera_name] = keypoints
 
-        return
-
-    # See:
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
     def run(self, debug=False):
         points_3d = {}
@@ -210,6 +208,14 @@ class Triangulator:
                 inlier_points,
                 inlier_proj_matricies,
             )[0]
+            res = least_squares(residual_function, x_0, loss="huber", method="trf")
+
+            keypoint_3d_in_base_camera = res.x
+            reprojection_error_vector = self.calc_reprojection_error_matrix(
+                np.array([keypoint_3d_in_base_camera]),
+                inlier_points,
+                inlier_proj_matricies,
+            )[0]
             reprojection_error_mean = np.mean(reprojection_error_vector)
 
         return keypoint_3d_in_base_camera, inlier_list, reprojection_error_vector
@@ -254,7 +260,6 @@ class Triangulator:
         point_3d_homo = vh[3, :]
 
         point_3d = self.homogeneous_to_euclidean(point_3d_homo)
-
         return point_3d
 
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/utils/multiview.py#L186
