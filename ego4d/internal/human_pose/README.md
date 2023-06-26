@@ -73,11 +73,11 @@ configurations must be added to `ego4d/internal/human_pose/configs`.
 
 Please ensure you have run the setup step first. From the repository root:
 
-#### Preprocess
 ```bash
 python3 ego4d/internal/human_pose/main.py --config-name unc_T1 mode=preprocess repo_root_dir=$PWD
+python3 ego4d/internal/human_pose/main.py --config-name unc_T1 mode=bbox repo_root_dir=$PWD
+python3 ego4d/internal/human_pose/main.py --config-name unc_T1 mode=pose2d repo_root_dir=$PWD
 ```
 
 # TODOs
 - [ ] TODO: scale horizontally / run via SLURM
-- [ ] Temporal smoothing

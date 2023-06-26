@@ -13,4 +13,5 @@ tp/*
 *.mp4
 *.json
 **/outputs/**
-notebooks/.ipynb_checkpoints/**
+.ipynb_checkpoints
+ego4d/internal/human_pose/outputs/*

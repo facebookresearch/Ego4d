@@ -174,6 +174,7 @@ def batch_xworld_to_yimage(pts3d: Vec3, to_cam: Camera):
     assert pts3d.shape[1] == 3
 
     pts2d = []
+
     # TODO: optimize
     for pt3d in pts3d:
         T_to_world = np.matmul(to_cam.T_camera_device, to_cam.T_device_world)
@@ -203,20 +204,20 @@ def ximage_to_yimage(pt_img: Vec2, from_cam: Camera, to_cam: Camera, z: float = 
 
 
 def get_aria_camera_models(aria_path):
-    import pyark.datatools as datatools  # slow import?
+    import projectaria_tools
 
-    vrs_data_provider = datatools.dataprovider.AriaVrsDataProvider()
+    vrs_data_provider = projectaria_tools.dataprovider.AriaVrsDataProvider()
     vrs_data_provider.openFile(aria_path)
 
-    aria_stream_id = datatools.dataprovider.StreamId(214, 1)
+    aria_stream_id = projectaria_tools.dataprovider.StreamId(214, 1)
     vrs_data_provider.setStreamPlayer(aria_stream_id)
     vrs_data_provider.readFirstConfigurationRecord(aria_stream_id)
 
-    aria_stream_id = datatools.dataprovider.StreamId(1201, 1)
+    aria_stream_id = projectaria_tools.dataprovider.StreamId(1201, 1)
     vrs_data_provider.setStreamPlayer(aria_stream_id)
     vrs_data_provider.readFirstConfigurationRecord(aria_stream_id)
 
-    aria_stream_id = datatools.dataprovider.StreamId(1201, 2)
+    aria_stream_id = projectaria_tools.dataprovider.StreamId(1201, 2)
     vrs_data_provider.setStreamPlayer(aria_stream_id)
     vrs_data_provider.readFirstConfigurationRecord(aria_stream_id)
 

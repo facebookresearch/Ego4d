@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import pickle
@@ -28,12 +29,14 @@ from ego4d.internal.human_pose.dataset import (
     SyncedEgoExoCaptureDset,
 )
 from ego4d.internal.human_pose.pose_estimator import PoseModel
+from ego4d.internal.human_pose.pose_refiner import get_refined_pose3d
+from ego4d.internal.human_pose.postprocess_pose3d import detect_outliers_and_interpolate
 from ego4d.internal.human_pose.readers import read_frame_idx_set
 from ego4d.internal.human_pose.triangulator import Triangulator
 from ego4d.internal.human_pose.utils import (
     check_and_convert_bbox,
     draw_bbox_xyxy,
-    draw_points_2d,
+    # draw_points_2d,
     get_exo_camera_plane,
     get_region_proposal,
 )
@@ -71,14 +74,22 @@ class Context:
     dummy_pose_config: str
     dummy_pose_checkpoint: str
     human_height: float = 1.5
+    human_radius: float = 0.3
+    min_bbox_score: float = 0.7
+    pose3d_start_frame: int = 0
+    pose3d_end_frame: int = -1
+    refine_pose3d_dir: Optional[str] = None
+    vis_refine_pose3d_dir: Optional[str] = None
 
 
-def _create_json_from_capture_dir(capture_dir: str) -> Dict[str, Any]:
+def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
+    assert capture_dir is not None
+
     if capture_dir.endswith("/"):
         capture_dir = capture_dir[0:-1]
 
     if capture_dir.startswith("s3://"):
-        bucket_name = capture_dir.split("s3://")[1].split("/")[0]
+        # bucket_name = capture_dir.split("s3://")[1].split("/")[0]
         prefix_path = "s3://{bucket_name}"
     else:
         prefix_path = capture_dir
@@ -146,20 +157,18 @@ def get_context(config: Config) -> Context:
     for rel_path_key in ["pose_config", "dummy_pose_config"]:
         rel_path = config.mode_pose2d[rel_path_key]
         abs_path = os.path.join(config.repo_root_dir, rel_path)
-        assert (
-            os.path.exists(abs_path),
-            f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})",
-        )
+        assert os.path.exists(
+            abs_path
+        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
         config.mode_pose2d[rel_path_key] = abs_path
 
     # bbox config
     for rel_path_key in ["detector_config"]:
         rel_path = config.mode_bbox[rel_path_key]
         abs_path = os.path.join(config.repo_root_dir, rel_path)
-        assert (
-            os.path.exists(abs_path),
-            f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})",
-        )
+        assert os.path.exists(
+            abs_path
+        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
         config.mode_bbox[rel_path_key] = abs_path
 
     return Context(
@@ -167,7 +176,7 @@ def get_context(config: Config) -> Context:
         repo_root_dir=config.repo_root_dir,
         cache_dir=cache_dir,
         cache_rel_dir=cache_rel_dir,
-        metadata_json=metadata_json,
+        metadata_json=metadata_json,  # pyre-ignore
         dataset_dir=dataset_dir,
         dataset_json_path=os.path.join(dataset_dir, "data.json"),
         dataset_rel_dir=os.path.join(
@@ -188,9 +197,16 @@ def get_context(config: Config) -> Context:
         dummy_pose_config=config.mode_pose2d.dummy_pose_config,
         dummy_pose_checkpoint=config.mode_pose2d.dummy_pose_checkpoint,
         human_height=config.mode_bbox.human_height,
+        human_radius=config.mode_bbox.human_radius,
+        min_bbox_score=config.mode_bbox.min_bbox_score,
+        pose3d_start_frame=config.mode_pose3d.start_frame,
+        pose3d_end_frame=config.mode_pose3d.end_frame,
+        refine_pose3d_dir=os.path.join(dataset_dir, "refine_pose3d"),
+        vis_refine_pose3d_dir=os.path.join(dataset_dir, "vis_refine_pose3d"),
     )
 
 
+##-------------------------------------------------------------------------------
 def mode_pose3d(config: Config):
     ctx = get_context(config)
 
@@ -199,7 +215,9 @@ def mode_pose3d(config: Config):
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
+    all_cam_ids = set(dset.all_cam_ids())
 
+    # ---------------import triangulator-------------------
     pose_model = PoseModel(
         pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint
     )  # lightweight for visualization only!
@@ -208,19 +226,47 @@ def mode_pose3d(config: Config):
         exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
         for exo_camera_name in ctx.exo_cam_names
     }
-    if not os.path.exists(ctx.pose3d_dir):
-        os.makedirs(ctx.pose3d_dir)
-
     os.makedirs(ctx.vis_pose3d_dir, exist_ok=True)
 
-    poses3d = {}
+    start_time_stamp = ctx.pose3d_start_frame
+    end_time_stamp = ctx.pose3d_end_frame if ctx.pose3d_end_frame > 0 else len(dset)
+    time_stamps = range(start_time_stamp, end_time_stamp)
 
-    pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
-    assert os.path.exists(pose2d_file), f"{pose2d_file} does not exist"
-    with open(pose2d_file, "rb") as f:
-        poses2d = pickle.load(f)
+    ## check if ctx.pose2d_dir
+    camera_pose2d_files = [
+        os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+        for exo_camera_name in ctx.exo_cam_names
+    ]
 
-    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+    ## check if all camera pose2d files exist
+    is_parallel = True
+    for camera_pose2d_file in camera_pose2d_files:
+        if not os.path.exists(camera_pose2d_file):
+            is_parallel = False
+            break
+
+    if is_parallel:
+        poses2d = {
+            time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names}
+            for time_stamp in time_stamps
+        }
+        for exo_camera_name in ctx.exo_cam_names:
+            pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+            with open(pose2d_file, "rb") as f:
+                poses2d_camera = pickle.load(f)
+
+            for time_stamp in time_stamps:
+                poses2d[time_stamp][exo_camera_name] = poses2d_camera[time_stamp][
+                    exo_camera_name
+                ]
+
+    else:
+        ## load pose2d.pkl
+        pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
+        with open(pose2d_file, "rb") as f:
+            poses2d = pickle.load(f)
+
+    for time_stamp in tqdm(time_stamps):
         info = dset[time_stamp]
 
         multi_view_pose2d = {
@@ -233,7 +279,6 @@ def mode_pose3d(config: Config):
             time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d
         )
         pose3d = triangulator.run(debug=True)  ## 17 x 4 (x, y, z, confidence)
-        poses3d[time_stamp] = pose3d
 
         # visualize pose3d
         for exo_camera_name in ctx.exo_cam_names:
@@ -253,10 +298,119 @@ def mode_pose3d(config: Config):
             save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
             pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
 
-    with open(os.path.join(ctx.pose3d_dir, "pose3d.pkl"), "wb") as f:
+        # save pose3d as timestamp.npy
+        np.save(os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy"), pose3d)
+
+
+##-------------------------------------------------------------------------------
+def mode_refine_pose3d(config: Config):
+    ctx = get_context(config)
+
+    dset = SyncedEgoExoCaptureDset(
+        root_dir=config.root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+    all_cam_ids = set(dset.all_cam_ids())
+
+    # ---------------import triangulator-------------------
+    pose_model = PoseModel(
+        pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint
+    )  ## lightweight for visualization only!
+
+    exo_cameras = {
+        exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
+        for exo_camera_name in ctx.exo_cam_names
+    }
+    os.makedirs(ctx.refine_pose3d_dir, exist_ok=True)
+    os.makedirs(ctx.vis_refine_pose3d_dir, exist_ok=True)
+
+    ## load all pose3d from ctx.pose3d_dir, they are 00000.npy, 00001.npy, using os.listdir ending in .npy and is 05d, do not use dset
+    time_stamps = sorted(
+        [int(f.split(".")[0]) for f in os.listdir(ctx.pose3d_dir) if f.endswith(".npy")]
+    )
+    pose3d_files = [
+        os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy")
+        for time_stamp in time_stamps
+    ]
+
+    poses3d = []
+    for time_stamp, pose3d_file in enumerate(pose3d_files):
+        poses3d.append(np.load(pose3d_file))
+
+    poses3d = np.stack(poses3d, axis=0)  ## T x 17 x 4 (x, y, z, confidence)
+
+    ## check if ctx.pose2d_dir,
+    camera_pose2d_files = [
+        os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+        for exo_camera_name in ctx.exo_cam_names
+    ]
+
+    ## check if all camera pose2d files exist
+    is_parallel = True
+    for camera_pose2d_file in camera_pose2d_files:
+        if not os.path.exists(camera_pose2d_file):
+            is_parallel = False
+            break
+
+    if is_parallel:
+        poses2d = {
+            time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names}
+            for time_stamp in time_stamps
+        }
+        for exo_camera_name in ctx.exo_cam_names:
+            pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+            with open(pose2d_file, "rb") as f:
+                poses2d_camera = pickle.load(f)
+
+            for time_stamp in time_stamps:
+                poses2d[time_stamp][exo_camera_name] = poses2d_camera[time_stamp][
+                    exo_camera_name
+                ]
+
+    else:
+        ## load pose2d.pkl
+        pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
+        with open(pose2d_file, "rb") as f:
+            poses2d = pickle.load(f)
+
+    ## detect outliers and replace with interpolated values, basic smoothing
+    poses3d = detect_outliers_and_interpolate(poses3d)
+
+    ## refine pose3d
+    poses3d = get_refined_pose3d(poses3d)
+
+    for time_stamp in tqdm(range(len(time_stamps)), total=len(time_stamps)):
+        info = dset[time_stamp]
+        pose3d = poses3d[time_stamp]
+
+        ## visualize pose3d
+        for exo_camera_name in ctx.exo_cam_names:
+            image_path = info[exo_camera_name]["abs_frame_path"]
+            image = cv2.imread(image_path)
+            exo_camera = exo_cameras[exo_camera_name]
+
+            # pyre-ignore
+            vis_refine_pose3d_cam_dir = os.path.join(
+                ctx.vis_refine_pose3d_dir, exo_camera_name
+            )
+            os.makedirs(vis_refine_pose3d_cam_dir, exist_ok=True)
+
+            projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
+            projected_pose3d = np.concatenate(
+                [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
+            )  ## 17 x 3
+
+            save_path = os.path.join(vis_refine_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
+            pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
+
+    ## save poses3d.pkl
+    # pyre-ignore
+    with open(os.path.join(ctx.refine_pose3d_dir, "pose3d.pkl"), "wb") as f:
         pickle.dump(poses3d, f)
 
 
+##-------------------------------------------------------------------------------
 def mode_pose2d(config: Config):
     ctx = get_context(config)
 
@@ -265,12 +419,19 @@ def mode_pose2d(config: Config):
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
+    all_cam_ids = set(dset.all_cam_ids())
 
+    # ---------------construct pose model-------------------
     pose_model = PoseModel(
         pose_config=ctx.pose_config, pose_checkpoint=ctx.pose_checkpoint
     )
 
-    # construct ground plane, it is parallel to the plane with all gopro camera centers----------------
+    ##--------construct ground plane, it is parallel to the plane with all gopro camera centers----------------
+    exo_cameras = {
+        exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
+        for exo_camera_name in ctx.exo_cam_names
+    }
+
     if not os.path.exists(ctx.pose2d_dir):
         os.makedirs(ctx.pose2d_dir)
 
@@ -322,7 +483,6 @@ def mode_pose2d(config: Config):
 
                 pose_result = pose_results[0]
                 pose2d = pose_result["keypoints"]
-
             else:
                 pose2d = None
                 save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
@@ -335,6 +495,7 @@ def mode_pose2d(config: Config):
         pickle.dump(poses2d, f)
 
 
+# ###-------------------------------------------------------------------------------
 def mode_bbox(config: Config):
     ctx = get_context(config)
 
@@ -379,10 +540,10 @@ def mode_bbox(config: Config):
             exo_camera = create_camera(info[exo_camera_name]["camera_data"], None)
             left_camera = create_camera(
                 info["aria_slam_left"]["camera_data"], None
-            )  ## TODO: use the camera model of the aria camera
+            )  # TODO: use the camera model of the aria camera
             right_camera = create_camera(
                 info["aria_slam_right"]["camera_data"], None
-            )  ## TODO: use the camera model of the aria camera
+            )  # TODO: use the camera model of the aria camera
             human_center_3d = (left_camera.center + right_camera.center) / 2
 
             proposal_points_3d = get_region_proposal(
@@ -454,21 +615,52 @@ def mode_preprocess(config: Config):
 
     shutil.rmtree(ctx.frame_dir, ignore_errors=True)
     os.makedirs(ctx.frame_dir, exist_ok=True)
-    i1 = config.inputs.from_frame_number
-    i2 = config.inputs.to_frame_number
 
     synced_df = get_synced_timesync_df(ctx.metadata_json)
     aria_stream_ks = [
         f"aria01_{stream_id}_capture_timestamp_ns"
         for stream_id in config.inputs.aria_streams
     ]
+
+    num_frames = len(synced_df)
+    i1 = max(0, min(config.inputs.from_frame_number, num_frames - 1))
+    i2 = max(0, min(config.inputs.to_frame_number, num_frames - 1))
+    print(f"[Info] Final frame range: {i1} ~ {i2}")
+
     aria_t1 = min(synced_df[aria_stream_ks].iloc[i1]) / 1e9 - 1 / 30
     aria_t2 = max(synced_df[aria_stream_ks].iloc[i2]) / 1e9 + 1 / 30
 
-    # aria
     aria_frame_dir = os.path.join(ctx.frame_dir, "aria01")
     os.makedirs(aria_frame_dir, exist_ok=True)
     print("Extracting aria")
+
+    vrs_deps_in_bin_path = False
+    vrs_deps = ["libxxhash.so.0", "libturbojpeg.so.0"]
+    for vrs_dep in vrs_deps:
+        if not os.path.exists(
+            os.path.join(os.path.dirname(config.mode_preprocess.vrs_bin_path), vrs_dep)
+        ):
+            print(
+                " ".join(
+                    [
+                        f"[Info] If you cannot find {vrs_dep}",
+                        "when running vrs binary in the next step,",
+                        f"consider copying {vrs_dep} to the same folder of",
+                        "your vrs_bin_path so we could pick it up.",
+                    ]
+                )
+            )
+        else:
+            vrs_deps_in_bin_path = True
+
+    if vrs_deps_in_bin_path:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(
+            [
+                os.environ["LD_LIBRARY_PATH"],
+                os.path.dirname(config.mode_preprocess.vrs_bin_path),
+            ]
+        )
+
     cmd = [
         config.mode_preprocess.vrs_bin_path,
         "extract-all",
@@ -487,7 +679,7 @@ def mode_preprocess(config: Config):
     ]
     print("Running:")
     print(" ".join(cmd))
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=True)
 
     # gopro
     for cam in ctx.exo_cam_names:
@@ -601,19 +793,32 @@ def mode_preprocess(config: Config):
     json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
 
 
-def mode_multi_view_vis(config: Config):
+def mode_multi_view_vis(config: Config, flag="pose3d"):
     ctx = get_context(config)
     camera_names = ctx.exo_cam_names
 
-    read_dir = ctx.vis_pose3d_dir
-    write_dir = os.path.join(ctx.vis_pose3d_dir, "multi_view")
+    if flag == "pose3d":
+        read_dir = ctx.vis_refine_pose3d_dir
+        write_dir = os.path.join(ctx.vis_refine_pose3d_dir, "multi_view")
+    elif flag == "bbox":
+        read_dir = ctx.vis_bbox_dir
+        write_dir = os.path.join(ctx.vis_bbox_dir, "multi_view")
+    elif flag == "pose2d":
+        read_dir = ctx.vis_pose2d_dir
+        write_dir = os.path.join(ctx.vis_pose2d_dir, "multi_view")
+
+    multi_view_vis(ctx, camera_names, read_dir, write_dir)
+
+
+def multi_view_vis(ctx, camera_names, read_dir, write_dir):
     os.makedirs(write_dir, exist_ok=True)
 
-    write_image_width = 3840
-    write_image_height = 2160
+    factor = 1
+    write_image_width = 3840 // factor
+    write_image_height = 2160 // factor
 
-    read_image_width = 3840
-    read_image_height = 2160
+    read_image_width = 3840 // factor
+    read_image_height = 2160 // factor
 
     fps = 30
     padding = 5
@@ -631,7 +836,7 @@ def mode_multi_view_vis(config: Config):
         if image_name.endswith(".jpg")
     ]
 
-    for t, image_name in enumerate(tqdm(image_names)):
+    for _t, image_name in enumerate(tqdm(image_names)):
         canvas = 255 * np.ones((total_height_with_padding, total_width_with_padding, 3))
 
         for idx, camera_name in enumerate(camera_names):
@@ -654,13 +859,13 @@ def mode_multi_view_vis(config: Config):
                 :,
             ] = image[:, :, :]
 
-        ##---------resize to target size, ffmpeg does not work with offset image sizes---------
+        # ---------resize to target size, ffmpeg does not work with offset image sizes---------
         canvas = cv2.resize(canvas, (total_width, total_height))
         canvas = cv2.resize(canvas, (write_image_width, write_image_height))
 
         cv2.imwrite(os.path.join(write_dir, image_name), canvas)
 
-    ##----------make video--------------
+    # ----------make video--------------
     command = "rm -rf {}/exo.mp4".format(write_dir)
     os.system(command)
 
@@ -672,7 +877,7 @@ def mode_multi_view_vis(config: Config):
     os.system(command)
 
 
-@hydra.main(config_path="configs", config_name=None)
+@hydra.main(config_path="configs", config_name=None, version_base=None)
 def run(config: Config):
     if config.mode == "preprocess":
         mode_preprocess(config)
@@ -682,11 +887,94 @@ def run(config: Config):
         mode_pose2d(config)
     elif config.mode == "pose3d":
         mode_pose3d(config)
-    elif config.mode == "multi_view_vis":
-        mode_multi_view_vis(config)
+    elif config.mode == "refine_pose3d":
+        mode_refine_pose3d(config)
+    elif config.mode == "multi_view_vis_bbox":
+        mode_multi_view_vis(config, "bbox")
+    elif config.mode == "multi_view_vis_pose2d":
+        mode_multi_view_vis(config, "pose2d")
+    elif config.mode == "multi_view_vis_pose3d":
+        mode_multi_view_vis(config, "pose3d")
     else:
         raise AssertionError(f"unknown mode: {config.mode}")
 
 
+def add_arguments(parser):
+    parser.add_argument("--config-name", default="unc_T1")
+    parser.add_argument(
+        "--config_path", default="configs", help="Path to the config folder"
+    )
+    parser.add_argument(
+        "--steps",
+        default="",
+        help="steps to run concatenated by '+', e.g., preprocess+bbox+pose2d+pose3d",
+    )
+
+
+def config_single_job(args, job_id):
+    args.job_id = job_id
+    args.name = args.name_list[job_id]
+    args.work_dir = args.work_dir_list[job_id]
+    args.output_dir = args.work_dir
+
+    args.config_name = args.config_list[job_id]
+
+
+def create_job_list(args):
+    args.config_list = args.config_name.split("+")
+
+    args.job_list = []
+    args.name_list = []
+
+    for config in args.config_list:
+        name = args.name + "_" + config
+        args.name_list.append(name)
+        args.job_list.append(name)
+
+    args.job_num = len(args.job_list)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    args = parser.parse_args()
+    args.steps = args.steps.split("+")
+    print(args)
+
+    return args
+
+
+def get_hydra_config(args):
+    # https://stackoverflow.com/questions/60674012/how-to-get-a-hydra-config-without-using-hydra-main
+    hydra.initialize(config_path=args.config_path)
+    cfg = hydra.compose(
+        config_name=args.config_name,
+        # args.opts contains config overrides, e.g., ["inputs.from_frame_number=7000",]
+        overrides=args.opts,
+    )
+    print("Final config:", cfg)
+    return cfg
+
+
+def main(args):
+    # Note: this function is called from launch_train.py
+    config = get_hydra_config(args)
+
+    if "preprocess" in args.steps:
+        mode_preprocess(config)
+    if "bbox" in args.steps:
+        mode_bbox(config)
+    if "pose2d" in args.steps:
+        mode_pose2d(config)
+    if "pose3d" in args.steps:
+        mode_pose3d(config)
+    if "multi_view_vis" in args.steps:
+        mode_multi_view_vis(config)
+
+
 if __name__ == "__main__":
-    run()  # pyre-ignore
+    # Using hydra:
+    run()
+    # Not using hydra:
+    # args = parse_args()
+    # main(args)
