@@ -14,9 +14,9 @@ class DownloadProgressBar:
     def __init__(self, total_size_bytes: Optional[int]):
         self.__tqdm = tqdm.tqdm(
             total=total_size_bytes if total_size_bytes else None,
-            unit="B",
+            unit="iB",
             unit_scale=True,
-            unit_divisor=1024 * 1024,
+            unit_divisor=1024,
         )
         self.__lock = threading.Lock()
 
