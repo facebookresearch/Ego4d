@@ -226,6 +226,8 @@ def mode_pose3d(config: Config):
         exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
         for exo_camera_name in ctx.exo_cam_names
     }
+
+    os.makedirs(ctx.pose3d_dir, exist_ok=True)
     os.makedirs(ctx.vis_pose3d_dir, exist_ok=True)
 
     start_time_stamp = ctx.pose3d_start_frame
@@ -307,7 +309,7 @@ def mode_refine_pose3d(config: Config):
     ctx = get_context(config)
 
     dset = SyncedEgoExoCaptureDset(
-        root_dir=config.root_dir,
+        data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -798,19 +800,26 @@ def mode_multi_view_vis(config: Config, flag="pose3d"):
     camera_names = ctx.exo_cam_names
 
     if flag == "pose3d":
+        read_dir = ctx.vis_pose3d_dir
+        write_dir = os.path.join(ctx.vis_pose3d_dir, "multi_view")
+        write_video = os.path.join(ctx.vis_pose3d_dir, "pose3d.mp4")
+    if flag == "refine_pose3d":
         read_dir = ctx.vis_refine_pose3d_dir
         write_dir = os.path.join(ctx.vis_refine_pose3d_dir, "multi_view")
+        write_video = os.path.join(ctx.vis_pose3d_dir, "refine_pose3d.mp4")
     elif flag == "bbox":
         read_dir = ctx.vis_bbox_dir
         write_dir = os.path.join(ctx.vis_bbox_dir, "multi_view")
+        write_video = os.path.join(ctx.vis_pose3d_dir, "bbox.mp4")
     elif flag == "pose2d":
         read_dir = ctx.vis_pose2d_dir
         write_dir = os.path.join(ctx.vis_pose2d_dir, "multi_view")
+        write_video = os.path.join(ctx.vis_pose3d_dir, "pose2d.mp4")
 
-    multi_view_vis(ctx, camera_names, read_dir, write_dir)
+    multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video)
 
 
-def multi_view_vis(ctx, camera_names, read_dir, write_dir):
+def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
     os.makedirs(write_dir, exist_ok=True)
 
     factor = 1
@@ -869,10 +878,8 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir):
     command = "rm -rf {}/exo.mp4".format(write_dir)
     os.system(command)
 
-    command = (
-        "ffmpeg -r {} -f image2 -i {}/%05d.jpg -pix_fmt yuv420p {}/exo.mp4".format(
-            fps, write_dir, ctx.vis_pose3d_dir
-        )
+    command = "ffmpeg -r {} -f image2 -i {}/%05d.jpg -pix_fmt yuv420p {}".format(
+        fps, write_dir, write_video
     )
     os.system(command)
 
@@ -895,6 +902,8 @@ def run(config: Config):
         mode_multi_view_vis(config, "pose2d")
     elif config.mode == "multi_view_vis_pose3d":
         mode_multi_view_vis(config, "pose3d")
+    elif config.mode == "multi_view_vis_refine_pose3d":
+        mode_multi_view_vis(config, "refine_pose3d")
     else:
         raise AssertionError(f"unknown mode: {config.mode}")
 
@@ -907,6 +916,7 @@ def add_arguments(parser):
     parser.add_argument(
         "--steps",
         default="",
+        type=str,
         help="steps to run concatenated by '+', e.g., preprocess+bbox+pose2d+pose3d",
     )
 
@@ -938,7 +948,6 @@ def parse_args():
     parser = argparse.ArgumentParser()
     add_arguments(parser)
     args = parser.parse_args()
-    args.steps = args.steps.split("+")
     print(args)
 
     return args
@@ -960,16 +969,30 @@ def main(args):
     # Note: this function is called from launch_train.py
     config = get_hydra_config(args)
 
-    if "preprocess" in args.steps:
-        mode_preprocess(config)
-    if "bbox" in args.steps:
-        mode_bbox(config)
-    if "pose2d" in args.steps:
-        mode_pose2d(config)
-    if "pose3d" in args.steps:
-        mode_pose3d(config)
-    if "multi_view_vis" in args.steps:
-        mode_multi_view_vis(config)
+    steps = args.steps.split("+")
+    print(f"steps: {steps}")
+
+    for step in steps:
+        if step == "preprocess":
+            mode_preprocess(config)
+        elif step == "bbox":
+            mode_bbox(config)
+        elif step == "pose2d":
+            mode_pose2d(config)
+        elif step == "pose3d":
+            mode_pose3d(config)
+        elif step == "refine_pose3d":
+            mode_refine_pose3d(config)
+        elif step == "multi_view_vis_bbox":
+            mode_multi_view_vis(config, flag="bbox")
+        elif step == "multi_view_vis_pose2d":
+            mode_multi_view_vis(config, flag="pose2d")
+        elif step == "multi_view_vis_pose3d":
+            mode_multi_view_vis(config, flag="pose3d")
+        elif step == "multi_view_vis_refine_pose3d":
+            mode_multi_view_vis(config, flag="refine_pose3d")
+        else:
+            raise Exception(f"Unknown step: {step}")
 
 
 if __name__ == "__main__":

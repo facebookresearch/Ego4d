@@ -3,10 +3,10 @@ import random
 import numpy as np
 
 import torch
+from ego4d.internal.human_pose.utils import COCO_KP_ORDER
 from scipy.optimize import least_squares
-from utils import COCO_KP_ORDER
 
-##------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------
 ## performs triangulation
 class Triangulator:
     def __init__(self, time_stamp, camera_names, cameras, multiview_pose2d):
@@ -72,7 +72,7 @@ class Triangulator:
                     confidence = self.pose2d[human_name][camera_name][keypoint_idx, 2]
                     camera = self.cameras[camera_name]
 
-                    ##---------use high confidence predictions------------------
+                    # ---------use high confidence predictions------------------
                     if confidence > self.keypoint_thres:
                         extrinsics = camera.extrinsics[:3, :]  ## 3x4
 
@@ -90,7 +90,7 @@ class Triangulator:
                             camera_name
                         )  ## camera choosen for triangulation for this point
 
-                ##---------------------------------------------------------------------------------------------
+                # ---------------------------------------------------------------------------------------------
                 if len(points) >= self.min_views:
                     ## triangulate for a single point
                     (
@@ -105,22 +105,25 @@ class Triangulator:
                         direct_optimization=True,
                     )
 
-                    if debug == True:
+                    if debug:
                         print(
-                            "kps_idx:{} kps_name:{} kps_error:{}, inliers:{}, {}".format(
-                                keypoint_idx,
-                                COCO_KP_ORDER[keypoint_idx],
-                                reprojection_error_vector.mean(),
-                                len(inlier_views),
-                                [choosen_cameras[index] for index in inlier_views],
+                            " ".join(
+                                [
+                                    f"ts:{self.time_stamp}",
+                                    f"kp_idx:{keypoint_idx}",
+                                    f"kp_name:{COCO_KP_ORDER[keypoint_idx]}",
+                                    f"kps_error:{reprojection_error_vector.mean():.5f}"
+                                    f"inliers:{len(inlier_views)}",
+                                    f"{[choosen_cameras[index] for index in inlier_views]}",
+                                ]
                             )
                         )
                     error += reprojection_error_vector.mean()
 
                     points_3d[human_name][keypoint_idx, :3] = point_3d
-                    points_3d[human_name][keypoint_idx, 3] = 1  ## mark as valid
+                    points_3d[human_name][keypoint_idx, 3] = 1  # mark as valid
 
-            if debug == True:
+            if debug:
                 print("{}, error:{}".format(human_name, error))
 
         return points_3d["aria01"]

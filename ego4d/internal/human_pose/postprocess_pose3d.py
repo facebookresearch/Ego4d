@@ -1,11 +1,6 @@
-import os
-import random
-
-import cv2
 import numpy as np
 import pandas as pd
 from scipy import signal
-from scipy.optimize import least_squares
 
 ## for coco 17 keypoints
 ## https://github.com/open-mmlab/mmpose/blob/af2cacd8492bea3b18d7eb407c5b9e52af1ad2fb/mmpose/apis/inference.py#L593
@@ -31,7 +26,7 @@ COCO_SKELETON = {
     "right_neck": [4, 6],  ## r-ear to r-shldr
 }
 
-##------------------------------------------------------------------------------------
+
 def detect_outliers_and_interpolate(poses):
     refine_poses = poses.copy()
     refine_poses = fill_missing_keypoints(
@@ -159,6 +154,12 @@ def fill_missing_keypoints(poses, window_length=10, polyorder=3):
         missing_timestamps = ((conf == 0).nonzero())[0]
 
         if len(missing_timestamps) == 0:
+            continue
+
+        if len(missing_timestamps) == total_time:
+            print(
+                f"[Warning] The keypoint {i} is consistently missing, skip interpolation!"
+            )
             continue
 
         ##----replace the missing keypoints with nan------------
