@@ -134,7 +134,8 @@ def launch_job(task, args):
         )
 
         job = executor.submit(task.main, args)
-        print(f"Job id: j{job.job_id}")
+        # print out job id and working dir for record
+        print(f"j{job.job_id}={args.work_dir}")
     elif args.run_type in ["flow_canary", "flow_canary_rebuild", "flow_local"]:
         args_json = os.path.join(args.work_dir, "flow_args.json")
 
