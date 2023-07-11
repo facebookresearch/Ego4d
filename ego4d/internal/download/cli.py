@@ -286,7 +286,7 @@ if __name__ == "__main__":
         "--parts",
         type=str,
         nargs="+",
-        default=["metadata", "captures", "takes", "trajectory"],
+        default=["metadata", "captures", "takes", "trajectory", "annotations"],
         help="what parts of the dataset to download",
     )
     parser.add_argument(
