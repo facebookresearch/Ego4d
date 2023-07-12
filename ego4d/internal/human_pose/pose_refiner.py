@@ -1,19 +1,12 @@
-import os
-import pathlib
-import sys
 from typing import List
 
-import cv2
-import mmcv
 import numpy as np
 import torch
+
+from ego4d.internal.human_pose.utils import COCO_SKELETON, COCO_SKELETON_FLIP_PAIRS
 from mmcv.runner import build_optimizer
-from tqdm import tqdm
-
-from utils import COCO_SKELETON, COCO_SKELETON_FLIP_PAIRS
 
 
-###----------------------------------------------------------------------------
 class OptimizableParameters:
     """Collects parameters for optimization."""
 
