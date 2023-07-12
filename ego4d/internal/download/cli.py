@@ -75,6 +75,7 @@ def main(args):
     num_workers = args.num_workers
     s3_profile = args.s3_profile
     yes = args.yes
+    uids = set(args.uids) if args.uids is not None else None
 
     # TODO: remove iopath dependency
     pathmgr = PathManager()
@@ -139,6 +140,8 @@ def main(args):
     all_paths = []
     for m in manifests:
         for x in m:
+            if uids is not None and x.uid not in uids:
+                continue
             all_paths.extend(x.paths)
 
     print("Determining what to download ...")
@@ -288,6 +291,13 @@ if __name__ == "__main__":
         nargs="+",
         default=["metadata", "captures", "takes", "trajectory", "annotations"],
         help="what parts of the dataset to download",
+    )
+    parser.add_argument(
+        "--uids",
+        type=str,
+        nargs="+",
+        default=None,
+        help="what uids to filter for takes or captures",
     )
     parser.add_argument(
         "-y",
