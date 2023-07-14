@@ -89,8 +89,8 @@ def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
         capture_dir = capture_dir[0:-1]
 
     if capture_dir.startswith("s3://"):
-        # bucket_name = capture_dir.split("s3://")[1].split("/")[0]
-        prefix_path = "s3://{bucket_name}"
+        bucket_name = capture_dir.split("s3://")[1].split("/")[0]
+        prefix_path = f"s3://{bucket_name}"
     else:
         prefix_path = capture_dir
 
@@ -558,6 +558,7 @@ def mode_bbox(config: Config):
                 proposal_points_2d,
                 exo_camera.camera_model.width,
                 exo_camera.camera_model.height,
+                min_area_ratio=config.mode_bbox.min_area_ratio,
             )
 
             bbox_xyxy = None
@@ -875,7 +876,7 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
         cv2.imwrite(os.path.join(write_dir, image_name), canvas)
 
     # ----------make video--------------
-    command = "rm -rf {}/exo.mp4".format(write_dir)
+    command = f"rm -rf {write_video}"
     os.system(command)
 
     command = "ffmpeg -r {} -f image2 -i {}/%05d.jpg -pix_fmt yuv420p {}".format(

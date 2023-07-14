@@ -303,6 +303,7 @@ def mode_bbox(config: Config, camera_name: str):
                 proposal_points_2d,
                 exo_camera.camera_model.width,
                 exo_camera.camera_model.height,
+                min_area_ratio=config.mode_bbox.min_area_ratio,
             )
 
             bbox_xyxy = None
