@@ -9,8 +9,9 @@ Steps:
     - paths + camera calibrations to JSON
 2. Obtain human bounding boxes 
     - Uses the Aria trajectory + FasterRCNN + heuristics
-2. 2D Pose Detection
-3. Triangulation
+3. 2D Pose Detection
+4. Triangulation
+5. Smoothing
 
 ## Setup
 
@@ -32,11 +33,11 @@ MMCV_WITH_OPS=1 pip install -e . -v
 popd
 
 pushd tp/mmlab/mmpose
-pop install .
+pip install .
 popd
 
 pushd tp/mmlab/mmdetection
-pop install .
+pip install .
 popd
 
 pip install "torch>=2.0.0"
