@@ -151,9 +151,12 @@ def download_andor_generate_streams(
 ) -> Dict[str, Any]:
     os.makedirs(output_dir, exist_ok=True)
     if metadata["timesync_csv_path"] is not None:
-        _download_s3_path(
-            metadata["timesync_csv_path"], os.path.join(output_dir, "timesync.csv")
-        )
+        local_timesync_csv = os.path.join(output_dir, "timesync.csv")
+        if metadata["timesync_csv_path"].startswith("s3://"):
+            _download_s3_path(metadata["timesync_csv_path"], local_timesync_csv)
+        else:
+            # local path
+            shutil.copy2(metadata["timesync_csv_path"], local_timesync_csv)
 
     by_dev_id = {}
     for v in tqdm(metadata["videos"]):
