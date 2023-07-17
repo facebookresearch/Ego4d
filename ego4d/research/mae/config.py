@@ -4,8 +4,18 @@ from typing import List, Optional
 from ego4d.research.common import SlurmConfig
 
 @dataclass
+class Ego4DInput:
+    video_root_dir: str
+
+@dataclass
+class EgoExoInput:
+    root_dir: str
+    metadata_path: str
+
+@dataclass
 class InputConfig:
-    video_path: str
+    ego4d_input: Optional[Ego4DInput]
+    egoexo_input: Optional[EgoExoInput]
 
 
 @dataclass
@@ -25,6 +35,8 @@ class TrainConfig:
     model_config: ModelConfig
     pre_config: PreprocessConfig
 
+    slurm_config: SlurmConfig
+
     checkpoint_dir: str
     checkpoint_metric: str
     batch_size: int
@@ -35,7 +47,6 @@ class TrainConfig:
     accelerator: str
     devices: int
 
-    run_locally: bool
     tb_log_dir: str
     tb_log_name: str
 

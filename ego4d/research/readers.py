@@ -5,7 +5,8 @@ import av
 
 import torch
 from torchaudio.io import StreamReader
-from torchvision.transforms import Resize
+from pytorchvideo.transforms import ShortSideScale, NormalizeVideo
+from torchvision.transforms._transforms_video import CenterCropVideo
 
 
 def get_video_meta(path):
@@ -71,7 +72,9 @@ class TorchAudioStreamReader(StridedReader):
         self,
         path: str,
         resize: Optional[int],
+        crop: Optional[int],
         mean: Optional[torch.Tensor],
+        std: Optional[torch.Tensor],
         frame_window_size: int,
         stride: int,
         gpu_idx: int,
@@ -79,7 +82,12 @@ class TorchAudioStreamReader(StridedReader):
         super().__init__(path, stride, frame_window_size)
 
         self.mean = mean
-        self.size = resize
+        self.crop = crop
+        self.std = std
+        self.resize = resize
+        self.resize_transform = ShortSideScale(self.resize) if self.resize is not None else None
+        self.norm_transform = NormalizeVideo(self.mean, self.std) if self.mean is not None else None
+        self.crop_transform = CenterCropVideo(self.crop) if self.crop is not None else None
         self.create_underlying_cont(gpu_idx)
 
     def create_underlying_cont(self, gpu_id):
@@ -89,8 +97,8 @@ class TorchAudioStreamReader(StridedReader):
         if self.gpu_id >= 0:
             decoder_opt = (
                 {"resize": f"{self.size}x{self.size}", "gpu": f"{gpu_id}"}
-                if self.size is not None
-                else {}
+                if self.resize is not None
+                else {"gpu": f"{gpu_id}"}
             )
             self.conf = {
                 "decoder": f"{decoder_basename}_cuvid",
@@ -98,14 +106,15 @@ class TorchAudioStreamReader(StridedReader):
                 "decoder_option": decoder_opt,
                 "stream_index": 0,
             }
-            self.resize = None
+            # TODO: check resize transform works for torchaudio
+            self.resize_transform = None
         else:
             self.conf = {
                 "decoder": decoder_basename,
                 "stream_index": 0,
             }
-            self.resize = (
-                Resize((self.size, self.size)) if self.size is not None else None
+            self.resize_transform = (
+                ShortSideScale(self.resize) if self.resize is not None else None
             )
 
         self.cont = StreamReader(self.path)
@@ -126,10 +135,12 @@ class TorchAudioStreamReader(StridedReader):
         assert len(fs) == 1
         ret = _yuv_to_rgb(fs[0])  # TODO: optimize me
         assert ret.shape[0] == self.frame_window_size
-        if self.resize is not None:
-            ret = self.resize(ret)
-        if self.mean is not None:
-            ret -= self.mean
+        if self.resize_transform is not None:
+            ret = self.resize_transform(ret)
+        if self.crop_transform is not None:
+            ret = self.crop_transform(ret)
+        if self.norm_transform is not None:
+            ret = self.norm_transform(ret)
         return ret
 
 
@@ -138,7 +149,9 @@ class PyAvReader(StridedReader):
         self,
         path: str,
         resize: Optional[int],
+        crop: Optional[int],
         mean: Optional[torch.Tensor],
+        std: Optional[torch.Tensor],
         frame_window_size: int,
         stride: int,
         gpu_idx: int,
@@ -149,7 +162,12 @@ class PyAvReader(StridedReader):
             raise AssertionError("GPU decoding not support for pyav")
 
         self.mean = mean
-        self.resize = Resize((resize, resize)) if resize is not None else None
+        self.crop = crop
+        self.std = std
+        self.resize = resize
+        self.resize_transform = ShortSideScale(self.resize) if self.resize is not None else None
+        self.norm_transform = NormalizeVideo(self.mean, self.std) if self.mean is not None else None
+        self.crop_transform = CenterCropVideo(self.crop) if self.crop is not None else None
         self.path = path
         self.create_underlying_cont(gpu_idx)
 
@@ -175,8 +193,10 @@ class PyAvReader(StridedReader):
             fs.append((f.pts, torch.tensor(f.to_ndarray(format="rgb24"))))
         fs = sorted(fs, key=lambda x: x[0])
         ret = torch.stack([x[1] for x in fs])
-        if self.resize is not None:
-            ret = self.resize(ret)
-        if self.mean is not None:
-            ret -= self.mean
+        if self.resize_transform is not None:
+            ret = self.resize_transform(ret)
+        if self.crop_transform is not None:
+            ret = self.crop_transform(ret)
+        if self.norm_transform is not None:
+            ret = self.norm_transform(ret)
         return ret
