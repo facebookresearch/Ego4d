@@ -1,4 +1,5 @@
 import argparse
+import ast
 import json
 import os
 import pickle
@@ -40,6 +41,7 @@ from ego4d.internal.human_pose.utils import (
     get_exo_camera_plane,
     get_region_proposal,
 )
+from ego4d.research.readers import PyAvReader
 
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
@@ -80,6 +82,9 @@ class Context:
     pose3d_end_frame: int = -1
     refine_pose3d_dir: Optional[str] = None
     vis_refine_pose3d_dir: Optional[str] = None
+    take: Optional[Dict[str, Any]] = None
+    all_cams: Optional[List[str]] = None
+    frame_rel_dir: str = None
 
 
 def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
@@ -123,7 +128,7 @@ def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
     }
 
 
-def get_context(config: Config) -> Context:
+def get_context_legacy(config: Config) -> Context:
     if config.inputs.metadata_json_path is not None:
         metadata_json = (
             json.load(pathmgr.open(config.inputs.metadata_json_path))
@@ -152,6 +157,7 @@ def get_context(config: Config) -> Context:
         if not x["is_ego"] and not x["has_walkaround"]
     ]
     dataset_dir = os.path.join(cache_dir, config.mode_preprocess.dataset_name)
+    dataset_rel_dir = os.path.join(cache_rel_dir, config.mode_preprocess.dataset_name)
 
     # pose2d config
     for rel_path_key in ["pose_config", "dummy_pose_config"]:
@@ -183,6 +189,7 @@ def get_context(config: Config) -> Context:
             cache_rel_dir, config.mode_preprocess.dataset_name
         ),
         frame_dir=os.path.join(dataset_dir, "frames"),
+        frame_rel_dir=os.path.join(dataset_rel_dir, "frames"),
         exo_cam_names=exo_cam_names,
         bbox_dir=os.path.join(dataset_dir, "bbox"),
         vis_bbox_dir=os.path.join(dataset_dir, "vis_bbox"),
@@ -206,6 +213,106 @@ def get_context(config: Config) -> Context:
     )
 
 
+def get_context(config: Config) -> Context:
+    if config.legacy:
+        return get_context_legacy(config)
+
+    take_json_path = os.path.join(config.data_dir, "takes.json")
+    takes = json.load(open(take_json_path))
+    take = [t for t in takes if t["take_uid"] == config.inputs.take_uid]
+    if len(take) != 1:
+        print("Take: {config.inputs.take_uid} does not exist")
+        sys.exit(1)
+    take = take[0]
+
+    if not config.data_dir.startswith("/"):
+        config.data_dir = os.path.join(config.repo_root_dir, config.data_dir)
+        print(f"Using data dir: {config.data_dir}")
+
+    data_dir = config.data_dir
+    cache_rel_dir = os.path.join(
+        "cache",
+        take["take_uid"],
+    )
+    cache_dir = os.path.join(
+        config.cache_root_dir,
+        cache_rel_dir,
+    )
+    exo_cam_names = [
+        x["cam_id"]
+        for x in take["capture"]["cameras"]
+        if not ast.literal_eval(x["is_ego"])
+        and not ast.literal_eval(x["has_walkaround"])
+    ]
+    all_cams = [
+        x["cam_id"]
+        for x in take["capture"]["cameras"]
+        if ast.literal_eval(x["is_ego"])
+        or (
+            not ast.literal_eval(x["is_ego"])
+            and not ast.literal_eval(x["has_walkaround"])
+        )
+    ]
+    dataset_dir = cache_dir
+    frame_rel_dir = os.path.join(cache_rel_dir, "frames")
+
+    # pose2d config
+    for rel_path_key in ["pose_config", "dummy_pose_config"]:
+        rel_path = config.mode_pose2d[rel_path_key]
+        abs_path = os.path.join(config.repo_root_dir, rel_path)
+        assert os.path.exists(
+            abs_path
+        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
+        config.mode_pose2d[rel_path_key] = abs_path
+
+    # bbox config
+    for rel_path_key in ["detector_config"]:
+        rel_path = config.mode_bbox[rel_path_key]
+        abs_path = os.path.join(config.repo_root_dir, rel_path)
+        assert os.path.exists(
+            abs_path
+        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
+        config.mode_bbox[rel_path_key] = abs_path
+
+    return Context(
+        data_dir=data_dir,
+        repo_root_dir=config.repo_root_dir,
+        cache_dir=cache_dir,
+        cache_rel_dir=cache_rel_dir,
+        metadata_json=None,  # pyre-ignore
+        dataset_dir=dataset_dir,
+        dataset_json_path=os.path.join(dataset_dir, "data.json"),
+        dataset_rel_dir=os.path.join(
+            cache_rel_dir,
+            config.mode_preprocess.dataset_name,
+        ),
+        frame_dir=os.path.join(dataset_dir, "frames"),
+        frame_rel_dir=frame_rel_dir,
+        exo_cam_names=exo_cam_names,
+        all_cams=all_cams,
+        bbox_dir=os.path.join(dataset_dir, "bbox"),
+        vis_bbox_dir=os.path.join(dataset_dir, "vis_bbox"),
+        pose2d_dir=os.path.join(dataset_dir, "pose2d"),
+        vis_pose2d_dir=os.path.join(dataset_dir, "vis_pose2d"),
+        pose3d_dir=os.path.join(dataset_dir, "pose3d"),
+        vis_pose3d_dir=os.path.join(dataset_dir, "vis_pose3d"),
+        detector_config=config.mode_bbox.detector_config,
+        detector_checkpoint=config.mode_bbox.detector_checkpoint,
+        pose_config=config.mode_pose2d.pose_config,
+        pose_checkpoint=config.mode_pose2d.pose_checkpoint,
+        dummy_pose_config=config.mode_pose2d.dummy_pose_config,
+        dummy_pose_checkpoint=config.mode_pose2d.dummy_pose_checkpoint,
+        human_height=config.mode_bbox.human_height,
+        human_radius=config.mode_bbox.human_radius,
+        min_bbox_score=config.mode_bbox.min_bbox_score,
+        pose3d_start_frame=config.mode_pose3d.start_frame,
+        pose3d_end_frame=config.mode_pose3d.end_frame,
+        refine_pose3d_dir=os.path.join(dataset_dir, "refine_pose3d"),
+        vis_refine_pose3d_dir=os.path.join(dataset_dir, "vis_refine_pose3d"),
+        take=take,
+    )
+
+
 ##-------------------------------------------------------------------------------
 def mode_pose3d(config: Config):
     ctx = get_context(config)
@@ -215,7 +322,6 @@ def mode_pose3d(config: Config):
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
-    all_cam_ids = set(dset.all_cam_ids())
 
     # ---------------import triangulator-------------------
     pose_model = PoseModel(
@@ -223,7 +329,9 @@ def mode_pose3d(config: Config):
     )  # lightweight for visualization only!
 
     exo_cameras = {
-        exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
         for exo_camera_name in ctx.exo_cam_names
     }
 
@@ -284,13 +392,12 @@ def mode_pose3d(config: Config):
 
         # visualize pose3d
         for exo_camera_name in ctx.exo_cam_names:
-            image_path = info[exo_camera_name]["abs_frame_path"]
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
             image = cv2.imread(image_path)
             exo_camera = exo_cameras[exo_camera_name]
 
             vis_pose3d_cam_dir = os.path.join(ctx.vis_pose3d_dir, exo_camera_name)
-            if not os.path.exists(vis_pose3d_cam_dir):
-                os.makedirs(vis_pose3d_cam_dir)
+            os.makedirs(vis_pose3d_cam_dir, exist_ok=True)
 
             projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
             projected_pose3d = np.concatenate(
@@ -313,7 +420,6 @@ def mode_refine_pose3d(config: Config):
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
-    all_cam_ids = set(dset.all_cam_ids())
 
     # ---------------import triangulator-------------------
     pose_model = PoseModel(
@@ -321,7 +427,9 @@ def mode_refine_pose3d(config: Config):
     )  ## lightweight for visualization only!
 
     exo_cameras = {
-        exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
         for exo_camera_name in ctx.exo_cam_names
     }
     os.makedirs(ctx.refine_pose3d_dir, exist_ok=True)
@@ -388,7 +496,7 @@ def mode_refine_pose3d(config: Config):
 
         ## visualize pose3d
         for exo_camera_name in ctx.exo_cam_names:
-            image_path = info[exo_camera_name]["abs_frame_path"]
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
             image = cv2.imread(image_path)
             exo_camera = exo_cameras[exo_camera_name]
 
@@ -430,7 +538,9 @@ def mode_pose2d(config: Config):
 
     ##--------construct ground plane, it is parallel to the plane with all gopro camera centers----------------
     exo_cameras = {
-        exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
         for exo_camera_name in ctx.exo_cam_names
     }
 
@@ -460,7 +570,7 @@ def mode_pose2d(config: Config):
         poses2d[time_stamp] = {}
 
         for exo_camera_name in ctx.exo_cam_names:
-            image_path = info[exo_camera_name]["abs_frame_path"]
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
             image = cv2.imread(image_path)
 
             vis_pose2d_cam_dir = os.path.join(ctx.vis_pose2d_dir, exo_camera_name)
@@ -497,7 +607,6 @@ def mode_pose2d(config: Config):
         pickle.dump(poses2d, f)
 
 
-# ###-------------------------------------------------------------------------------
 def mode_bbox(config: Config):
     ctx = get_context(config)
 
@@ -514,7 +623,9 @@ def mode_bbox(config: Config):
 
     # construct ground plane, it is parallel to the plane with all gopro camera centers
     exo_cameras = {
-        exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
         for exo_camera_name in ctx.exo_cam_names
     }
     exo_camera_centers = np.array(
@@ -532,19 +643,21 @@ def mode_bbox(config: Config):
         bboxes[time_stamp] = {}
 
         for exo_camera_name in ctx.exo_cam_names:
-            image_path = info[exo_camera_name]["abs_frame_path"]
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
             image = cv2.imread(image_path)
 
             vis_bbox_cam_dir = os.path.join(ctx.vis_bbox_dir, exo_camera_name)
             if not os.path.exists(vis_bbox_cam_dir):
                 os.makedirs(vis_bbox_cam_dir)
 
-            exo_camera = create_camera(info[exo_camera_name]["camera_data"], None)
+            exo_camera = create_camera(
+                info[f"{exo_camera_name}_0"]["camera_data"], None
+            )
             left_camera = create_camera(
-                info["aria_slam_left"]["camera_data"], None
+                info["aria01_slam-left"]["camera_data"], None
             )  # TODO: use the camera model of the aria camera
             right_camera = create_camera(
-                info["aria_slam_right"]["camera_data"], None
+                info["aria01_slam-right"]["camera_data"], None
             )  # TODO: use the camera model of the aria camera
             human_center_3d = (left_camera.center + right_camera.center) / 2
 
@@ -602,11 +715,7 @@ def mode_bbox(config: Config):
         pickle.dump(bboxes, f)
 
 
-def mode_preprocess(config: Config):
-    """
-    Does the following:
-    - extract all frames for all cameras
-    """
+def mode_preprocess_legacy(config: Config):
     ctx = get_context(config)
     assert config.mode_preprocess.download_video_files, "must download files"
     by_dev_id = download_andor_generate_streams(
@@ -790,6 +899,145 @@ def mode_preprocess(config: Config):
 
     dataset_json = {
         "cache_dir": ctx.cache_rel_dir,
+        "frame_dir": ctx.frame_rel_dir,
+        "dataset_dir": ctx.dataset_rel_dir,
+        "frames": output,
+    }
+    json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
+
+
+def mode_preprocess(config: Config):
+    if config.legacy:
+        mode_preprocess_legacy(config)
+    ctx = get_context(config)
+    assert config.mode_preprocess.download_video_files, "must download files"
+    shutil.rmtree(ctx.frame_dir, ignore_errors=True)
+    os.makedirs(ctx.frame_dir, exist_ok=True)
+
+    capture_dir = os.path.join(
+        ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
+    )
+    traj_dir = os.path.join(capture_dir, "trajectory")
+    aria_traj_path = os.path.join(traj_dir, "closed_loop_trajectory.csv")
+    exo_traj_path = os.path.join(traj_dir, "gopro_calibs.csv")
+    aria_traj_df = pd.read_csv(aria_traj_path)
+    exo_traj_df = pd.read_csv(exo_traj_path)
+    all_timesync_df = pd.read_csv(os.path.join(capture_dir, "timesync.csv"))
+
+    # TODO: confirm that this is correct?
+    i1, i2 = ctx.take["timesync_start_idx"], ctx.take["timesync_end_idx"] - 1
+    synced_df = all_timesync_df.iloc[i1:i2]
+
+    frame_paths = {}
+    for cam in ctx.all_cams:
+        if "aria" in cam:
+            # TODO: for hands, do we want to use slam left/right?
+            streams = config.inputs.aria_streams
+        else:
+            streams = ["0"]
+        for stream_name in streams:
+            rel_path = ctx.take["frame_aligned_videos"][cam][stream_name][
+                "relative_path"
+            ]
+            rel_frame_dir = f"{cam}_{stream_name}"
+            cam_frame_dir = os.path.join(ctx.frame_dir, f"{cam}_{stream_name}")
+            os.makedirs(cam_frame_dir, exist_ok=True)
+            path = os.path.join(ctx.data_dir, "takes", ctx.take["root_dir"], rel_path)
+            reader = PyAvReader(
+                path=path,
+                resize=None,
+                mean=None,
+                frame_window_size=1,
+                stride=1,
+                gpu_idx=-1,
+            )
+            start_frame = config.inputs.from_frame_number
+            end_frame = config.inputs.to_frame_number
+            n_frames = len(reader)
+            if end_frame is None:
+                end_frame = n_frames
+            frame_indices = list(range(start_frame, end_frame))
+
+            key = (cam, stream_name)
+            frame_paths[key] = {}
+            for idx in tqdm(frame_indices):
+                frame = reader[idx][0].cpu().numpy()
+                rel_out_path = os.path.join(rel_frame_dir, f"{idx:06d}.jpg")
+                out_path = os.path.join(cam_frame_dir, f"{idx:06d}.jpg")
+                frame_paths[key][idx] = rel_out_path
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                assert cv2.imwrite(out_path, frame), out_path
+
+    stream_name_to_id = {
+        "et": "211-1",
+        "rgb": "214-1",
+        "slam-left": "1201-1",
+        "slam-right": "1201-2",
+    }
+    aria_path = os.path.join(capture_dir, "videos/aria01.vrs")
+    assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
+    assert os.path.exists(aria_path), "need aria video downloaded"
+    aria_camera_models = get_aria_camera_models(aria_path)
+
+    output = []
+    for idx in tqdm(frame_indices):
+        row = {}
+        row_df = synced_df.iloc[idx]
+        for stream_name in config.inputs.aria_streams:
+            # TODO: support multiple aria cameras?
+            cam_id = "aria01"
+            key = (cam_id, stream_name)
+            key_str = "_".join(key)
+            frame_path = frame_paths[key][idx]
+
+            stream_id = stream_name_to_id[stream_name]
+            frame_num = int(row_df[f"aria01_{stream_id}_frame_number"])
+            frame_t = row_df[f"aria01_{stream_id}_capture_timestamp_ns"] / 1e9
+            aria_t = row_df[f"aria01_{stream_id}_capture_timestamp_ns"] / 1e3
+            frame_t = f"{frame_t:.3f}"
+            aria_pose = aria_traj_df.iloc[
+                (aria_traj_df.tracking_timestamp_us - aria_t).abs().argsort().iloc[0]
+            ].to_dict()
+            row[key_str] = {
+                "frame_path": frame_path,
+                "frame_number": idx,
+                "capture_frame_number": frame_num,
+                "t": aria_t,
+                "camera_data": create_camera_data(
+                    device_row=aria_pose,
+                    name=stream_id,
+                    camera_model=aria_camera_models[stream_id],
+                    device_row_key="device",
+                ),
+                "_raw_camera": aria_pose,
+            }
+
+        assert config.inputs.exo_timesync_name_to_calib_name is None
+        for cam_id in ctx.exo_cam_names:
+            key = (cam_id, "0")
+            key_str = "_".join(key)
+            frame_path = frame_paths[key][idx]
+            frame_num = int(row_df[f"{cam_id}_frame_number"])
+            cam_data = exo_traj_df[exo_traj_df.cam_uid == cam_id].iloc[0].to_dict()
+
+            row[key_str] = {
+                "frame_path": frame_path,
+                "frame_number": idx,
+                "capture_frame_number": frame_num,
+                "t": None,
+                "camera_data": create_camera_data(
+                    device_row=cam_data,
+                    name=cam_id,
+                    camera_model=None,
+                    device_row_key="cam",
+                ),
+                "_raw_camera": cam_data,
+            }
+        output.append(row)
+
+    dataset_json = {
+        "cache_dir": ctx.cache_rel_dir,
+        "frame_dir": ctx.frame_rel_dir,
         "dataset_dir": ctx.dataset_rel_dir,
         "frames": output,
     }

@@ -47,8 +47,7 @@ class SyncedEgoExoCaptureDset:
         self.dataset_json = json.load(open(dataset_json_path))
         self.read_frames = read_frames
         self.root_dir = data_dir
-        self.cache_dir = self.dataset_json["dataset_dir"]
-        self.frame_dir = os.path.join(self.root_dir, self.cache_dir, "frames")
+        self.frame_dir = os.path.join(self.root_dir, self.dataset_json["frame_dir"])
 
     def __getitem__(self, idx):
         row = self.dataset_json["frames"][idx]

@@ -6,10 +6,11 @@ from typing import Dict, List, Optional
 class Input:
     from_frame_number: int
     to_frame_number: int
+    take_uid: Optional[str]
     capture_root_dir: Optional[str]
     metadata_json_path: Optional[str]
-    aria_trajectory_dir: str
-    exo_trajectory_dir: str
+    aria_trajectory_dir: Optional[str]
+    exo_trajectory_dir: Optional[str]
     aria_streams: List[str]
     exo_timesync_name_to_calib_name: Optional[Dict[str, str]]
 
@@ -48,10 +49,12 @@ class TriangulationConfig:
 
 @dataclass
 class Config:
+    legacy: bool
     data_dir: str
+    cache_root_dir: str
     root_repo_dir: str
     gpu_id: int  # use -1 for CPU
-    mode: str  # one of {preprocess_frames,
+    mode: str
     inputs: Input
     mode_preprocess: PreprocessFrameConfig
     mode_bbox: BBoxConfig

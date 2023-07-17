@@ -1,0 +1,39 @@
+legacy: false
+repo_root_dir: null
+data_dir: "/checkpoint/miguelmartin/egoexo_data/dev/"
+cache_root_dir: "/checkpoint/miguelmartin/egoexo_data/dev/"
+gpu_id: 0
+mode: "preprocess"
+inputs:
+  from_frame_number: 0
+  to_frame_number: null
+  take_uid: "547322d7-399d-4aa8-af08-0a209b348aaa"
+  metadata_json_path: null
+  aria_trajectory_path: null
+  exo_trajectory_path: null
+  aria_streams:
+    - rgb
+    - slam-left
+    - slam-right
+  exo_timesync_name_to_calib_name: null
+mode_preprocess:
+  dataset_name: "dataset"
+  vrs_bin_path: "vrs"
+  download_video_files: true
+  force_download: false
+  extract_all_aria_frames: false
+mode_bbox:
+  detector_config: "tp/mmlab/mmpose/demo/mmdetection_cfg/faster_rcnn_x101_64x4d_fpn_mstrain_3x_coco.py"
+  detector_checkpoint: 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_x101_64x4d_fpn_mstrain_3x_coco/faster_rcnn_x101_64x4d_fpn_mstrain_3x_coco_20210524_124528-26c63de6.pth'
+  use_aria_trajectory: true
+  human_height: 1.5
+  human_radius: 0.3
+  min_bbox_score: 0.7
+mode_pose2d:
+  pose_config: "tp/mmlab/mmpose/configs/wholebody/2d_kpt_sview_rgb_img/topdown_heatmap/coco-wholebody/hrnet_w48_coco_wholebody_384x288_dark_plus.py"
+  pose_checkpoint: "https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth"
+  dummy_pose_config: 'tp/mmlab/mmpose/configs/body/2d_kpt_sview_rgb_img/topdown_heatmap/coco/hrnet_w32_coco_256x192.py'
+  dummy_pose_checkpoint: 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w32_coco_256x192-c78dce93_20200708.pth'
+mode_pose3d:
+  start_frame: 0
+  end_frame: -1
