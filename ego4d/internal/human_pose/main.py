@@ -93,23 +93,19 @@ def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
     if capture_dir.endswith("/"):
         capture_dir = capture_dir[0:-1]
 
-    if capture_dir.startswith("s3://"):
-        bucket_name = capture_dir.split("s3://")[1].split("/")[0]
-        prefix_path = f"s3://{bucket_name}"
-    else:
-        prefix_path = capture_dir
+    video_dir = os.path.join(capture_dir, "videos")
 
     dirs = capture_dir.split("/")
     take_id = dirs[-1]
     video_source = dirs[-2]
-    video_files = pathmgr.ls(os.path.join(capture_dir, "videos/"))
+    video_files = pathmgr.ls(video_dir)
 
     def _create_video(f):
         device_id = os.path.splitext(os.path.basename(f))[0]
         device_type = "aria" if "aria" in device_id else "gopro"
         is_ego = device_type == "aria"
         has_walkaround = "mobile" in device_id or "aria" in device_id
-        s3_path = os.path.join(prefix_path, f)
+        s3_path = os.path.join(video_dir, f)
         return {
             "device_id": device_id,
             "device_type": device_type,
@@ -219,9 +215,9 @@ def get_context(config: Config) -> Context:
 
     take_json_path = os.path.join(config.data_dir, "takes.json")
     takes = json.load(open(take_json_path))
-    take = [t for t in takes if t["take_uid"] == config.inputs.take_uid]
+    take = [t for t in takes if t["root_dir"] == config.inputs.take_name]
     if len(take) != 1:
-        print("Take: {config.inputs.take_uid} does not exist")
+        print("Take: {config.inputs.take_name} does not exist")
         sys.exit(1)
     take = take[0]
 
@@ -232,7 +228,7 @@ def get_context(config: Config) -> Context:
     data_dir = config.data_dir
     cache_rel_dir = os.path.join(
         "cache",
-        take["take_uid"],
+        take["root_dir"],
     )
     cache_dir = os.path.join(
         config.cache_root_dir,
@@ -260,18 +256,14 @@ def get_context(config: Config) -> Context:
     for rel_path_key in ["pose_config", "dummy_pose_config"]:
         rel_path = config.mode_pose2d[rel_path_key]
         abs_path = os.path.join(config.repo_root_dir, rel_path)
-        assert os.path.exists(
-            abs_path
-        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
+        assert os.path.exists(abs_path), f"{abs_path} does not exist"
         config.mode_pose2d[rel_path_key] = abs_path
 
     # bbox config
     for rel_path_key in ["detector_config"]:
         rel_path = config.mode_bbox[rel_path_key]
         abs_path = os.path.join(config.repo_root_dir, rel_path)
-        assert os.path.exists(
-            abs_path
-        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
+        assert os.path.exists(abs_path), f"{abs_path} does not exist"
         config.mode_bbox[rel_path_key] = abs_path
 
     return Context(
@@ -318,7 +310,7 @@ def mode_pose3d(config: Config):
     ctx = get_context(config)
 
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -416,7 +408,7 @@ def mode_refine_pose3d(config: Config):
     ctx = get_context(config)
 
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -525,7 +517,7 @@ def mode_pose2d(config: Config):
     ctx = get_context(config)
 
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -611,7 +603,7 @@ def mode_bbox(config: Config):
     ctx = get_context(config)
 
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -1081,12 +1073,24 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
     fps = 30
     padding = 5
 
-    total_width_with_padding = 2 * read_image_width + padding
-    total_height_with_padding = 2 * read_image_height + padding
+    if len(camera_names) <= 4:
+        num_cols = 2
+        num_rows = 2
+    elif len(camera_names) <= 6:
+        num_cols = 3
+        num_rows = 2
+    else:
+        raise Exception(
+            f"Large number ({len(camera_names)}) of cameras found: {camera_names}. "
+            + "Please add visualization layout."
+        )
 
-    total_width = 2 * read_image_width
-    total_height = 2 * read_image_height
-    divide_val = 2
+    total_width_with_padding = num_cols * read_image_width + (num_cols - 1) * padding
+    total_height_with_padding = num_rows * read_image_height + (num_rows - 1) * padding
+
+    total_width = num_cols * read_image_width
+    total_height = num_rows * read_image_height
+    divide_val = num_cols
 
     image_names = [
         image_name
@@ -1163,6 +1167,13 @@ def add_arguments(parser):
         "--config_path", default="configs", help="Path to the config folder"
     )
     parser.add_argument(
+        "--take_name",
+        default="uniandes_dance_007_3",
+        type=str,
+        help="take names to run, concatenated by '+', "
+        + "e.g., uniandes_dance_007_3+iiith_cooking_23+nus_covidtest_01",
+    )
+    parser.add_argument(
         "--steps",
         default="",
         type=str,
@@ -1176,17 +1187,17 @@ def config_single_job(args, job_id):
     args.work_dir = args.work_dir_list[job_id]
     args.output_dir = args.work_dir
 
-    args.config_name = args.config_list[job_id]
+    args.take_name = args.take_name_list[job_id]
 
 
 def create_job_list(args):
-    args.config_list = args.config_name.split("+")
+    args.take_name_list = args.take_name.split("+")
 
     args.job_list = []
     args.name_list = []
 
-    for config in args.config_list:
-        name = args.name + "_" + config
+    for take_name in args.take_name_list:
+        name = args.name + "_" + take_name
         args.name_list.append(name)
         args.job_list.append(name)
 
@@ -1208,7 +1219,7 @@ def get_hydra_config(args):
     cfg = hydra.compose(
         config_name=args.config_name,
         # args.opts contains config overrides, e.g., ["inputs.from_frame_number=7000",]
-        overrides=args.opts,
+        overrides=args.opts + [f"inputs.take_name={args.take_name}"],
     )
     print("Final config:", cfg)
     return cfg

@@ -7,7 +7,8 @@ mode: "preprocess"
 inputs:
   from_frame_number: 0
   to_frame_number: null
-  take_uid: "547322d7-399d-4aa8-af08-0a209b348aaa"
+  take_name: "uniandes_dance_007_3"
+  take_uid: null
   metadata_json_path: null
   aria_trajectory_path: null
   exo_trajectory_path: null
@@ -29,6 +30,7 @@ mode_bbox:
   human_height: 1.5
   human_radius: 0.3
   min_bbox_score: 0.7
+  min_area_ratio: 0.005
 mode_pose2d:
   pose_config: "tp/mmlab/mmpose/configs/wholebody/2d_kpt_sview_rgb_img/topdown_heatmap/coco-wholebody/hrnet_w48_coco_wholebody_384x288_dark_plus.py"
   pose_checkpoint: "https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth"

@@ -97,8 +97,13 @@ def create_camera_data(
         camera_model = _create_exo_camera(device_row)
         camera_type = "colmap"
     else:
-        R = camera_model.get_transform_device_camera().rotation_matrix()
-        t = camera_model.get_transform_device_camera().translation()
+        try:
+            R = camera_model.get_transform_device_camera().rotation_matrix()
+            t = camera_model.get_transform_device_camera().translation()
+        except AttributeError:
+            # print("[Warning] fall back to use old version of projectaria_tools")
+            R = camera_model.T_Device_Camera.rotationMatrix()
+            t = camera_model.T_Device_Camera.translation()
         T_device_camera = np.zeros((4, 4))
         T_device_camera[0:3, 0:3] = R
         T_device_camera[0:3, 3] = t
@@ -204,13 +209,42 @@ def ximage_to_yimage(pt_img: Vec2, from_cam: Camera, to_cam: Camera, z: float = 
 
 
 def get_aria_camera_models(aria_path):
-    from projectaria_tools.core import data_provider
+    try:
+        from projectaria_tools.core import data_provider
 
-    vrs_data_provider = data_provider.create_vrs_data_provider(aria_path)
-    aria_camera_model = vrs_data_provider.get_device_calibration()
-    slam_left = aria_camera_model.get_camera_calib("camera-slam-left")
-    slam_right = aria_camera_model.get_camera_calib("camera-slam-right")
-    rgb_cam = aria_camera_model.get_camera_calib("camera-rgb")
+        vrs_data_provider = data_provider.create_vrs_data_provider(aria_path)
+        aria_camera_model = vrs_data_provider.get_device_calibration()
+        slam_left = aria_camera_model.get_camera_calib("camera-slam-left")
+        slam_right = aria_camera_model.get_camera_calib("camera-slam-right")
+        rgb_cam = aria_camera_model.get_camera_calib("camera-rgb")
+    except Exception as e:
+        print(
+            f"[Warning] Hitting exception {e}. Fall back to old projectaria_tools ..."
+        )
+        import projectaria_tools
+
+        vrs_data_provider = projectaria_tools.dataprovider.AriaVrsDataProvider()
+        vrs_data_provider.openFile(aria_path)
+
+        aria_stream_id = projectaria_tools.dataprovider.StreamId(214, 1)
+        vrs_data_provider.setStreamPlayer(aria_stream_id)
+        vrs_data_provider.readFirstConfigurationRecord(aria_stream_id)
+
+        aria_stream_id = projectaria_tools.dataprovider.StreamId(1201, 1)
+        vrs_data_provider.setStreamPlayer(aria_stream_id)
+        vrs_data_provider.readFirstConfigurationRecord(aria_stream_id)
+
+        aria_stream_id = projectaria_tools.dataprovider.StreamId(1201, 2)
+        vrs_data_provider.setStreamPlayer(aria_stream_id)
+        vrs_data_provider.readFirstConfigurationRecord(aria_stream_id)
+
+        assert vrs_data_provider.loadDeviceModel()
+
+        aria_camera_model = vrs_data_provider.getDeviceModel()
+        slam_left = aria_camera_model.getCameraCalib("camera-slam-left")
+        slam_right = aria_camera_model.getCameraCalib("camera-slam-right")
+        rgb_cam = aria_camera_model.getCameraCalib("camera-rgb")
+
     assert slam_left is not None
     assert slam_right is not None
     assert rgb_cam is not None

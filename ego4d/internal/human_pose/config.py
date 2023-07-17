@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 class Input:
     from_frame_number: int
     to_frame_number: int
+    take_name: Optional[str]
     take_uid: Optional[str]
     capture_root_dir: Optional[str]
     metadata_json_path: Optional[str]
@@ -32,6 +33,7 @@ class BBoxConfig:
     human_height: float
     human_radius: float
     min_bbox_score: float
+    min_area_ratio: float
 
 
 @dataclass
