@@ -1,12 +1,15 @@
 input_config:
-  reader_class: "PyAvReader"
+  # TODO: batch stuff here?
+  # reader_class: "PyAvReader"
+  reader_class: "TorchAudioStreamReader"
   egoexo_input:
     root_dir: "/checkpoint/miguelmartin/egoexo_data/dev/"
   ego4d_input:
     video_root_dir: "/datasets01/ego4d_track2/v1/full_scale"
     metadata_path: "/checkpoint/miguelmartin/ego4d_data/ego4d.json" 
 model_config:
-  model_name: "vit_huge_mae_pretraining"
+  # model_name: "vit_huge_mae_pretraining"
+  model_name: "vit_base_mae_pretraining"
 batch_size: 32
 num_workers: 20
 prefetch_factor: 4

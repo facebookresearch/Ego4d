@@ -5,7 +5,7 @@ import av
 
 import torch
 from torchaudio.io import StreamReader
-from pytorchvideo.transforms import ShortSideScale, NormalizeVideo
+from pytorchvideo.transforms import ShortSideScale, Normalize
 from torchvision.transforms._transforms_video import CenterCropVideo
 
 
@@ -29,7 +29,7 @@ def get_video_meta(path):
         }
 
 
-def _yuv_to_rgb(img):
+def _yuv_to_rgb(img: torch.Tensor) -> torch.Tensor:
     img = img.to(torch.float)
     y = img[..., 0, :, :]
     u = img[..., 1, :, :]
@@ -44,8 +44,8 @@ def _yuv_to_rgb(img):
     b = y + 2.029 * u
 
     rgb = torch.stack([r, g, b], -1)
-    rgb = (rgb * 255).clamp(0, 255).to(torch.uint8)
-    return rgb
+    # rgb = (rgb * 255).clamp(0, 255).to(torch.uint8)
+    return rgb.permute(3, 0, 1, 2)
 
 
 class StridedReader:
@@ -86,7 +86,7 @@ class TorchAudioStreamReader(StridedReader):
         self.std = std
         self.resize = resize
         self.resize_transform = ShortSideScale(self.resize) if self.resize is not None else None
-        self.norm_transform = NormalizeVideo(self.mean, self.std) if self.mean is not None else None
+        self.norm_transform = Normalize(mean=self.mean, std=self.std) if self.mean is not None else None
         self.crop_transform = CenterCropVideo(self.crop) if self.crop is not None else None
         self.create_underlying_cont(gpu_idx)
 
@@ -95,8 +95,12 @@ class TorchAudioStreamReader(StridedReader):
 
         decoder_basename = self.meta["codec"]
         if self.gpu_id >= 0:
+            # TODO(miguelmartin): this resize may not work as it is:
+            # 1. not shortest side (can fix with -1xside knowing w/h of video)
+            # 2. unsure about the interpolation
             decoder_opt = (
-                {"resize": f"{self.size}x{self.size}", "gpu": f"{gpu_id}"}
+                # TODO(miguelmartin): this resize is not the shortest side scale
+                {"resize": f"{self.resize}x{self.resize}", "gpu": f"{gpu_id}"}
                 if self.resize is not None
                 else {"gpu": f"{gpu_id}"}
             )
@@ -106,7 +110,6 @@ class TorchAudioStreamReader(StridedReader):
                 "decoder_option": decoder_opt,
                 "stream_index": 0,
             }
-            # TODO: check resize transform works for torchaudio
             self.resize_transform = None
         else:
             self.conf = {
@@ -134,10 +137,11 @@ class TorchAudioStreamReader(StridedReader):
         assert fs is not None
         assert len(fs) == 1
         ret = _yuv_to_rgb(fs[0])  # TODO: optimize me
-        assert ret.shape[0] == self.frame_window_size
+        assert ret.shape[1] == self.frame_window_size
         if self.resize_transform is not None:
             ret = self.resize_transform(ret)
         if self.crop_transform is not None:
+            # TODO
             ret = self.crop_transform(ret)
         if self.norm_transform is not None:
             ret = self.norm_transform(ret)
@@ -166,7 +170,7 @@ class PyAvReader(StridedReader):
         self.std = std
         self.resize = resize
         self.resize_transform = ShortSideScale(self.resize) if self.resize is not None else None
-        self.norm_transform = NormalizeVideo(self.mean, self.std) if self.mean is not None else None
+        self.norm_transform = Normalize(mean=self.mean, std=self.std) if self.mean is not None else None
         self.crop_transform = CenterCropVideo(self.crop) if self.crop is not None else None
         self.path = path
         self.create_underlying_cont(gpu_idx)

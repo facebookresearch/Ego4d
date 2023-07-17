@@ -97,18 +97,25 @@ def get_dataset(config: InputConfig):
     t1 = time.time()
     video_class = PyAvReader
     video_class_kwargs={
-        "mean": None,  # TODO: config
+        "mean": [0.485, 0.456, 0.406],
+        "std": [0.229, 0.224, 0.225],
+        "crop": 224,
         "resize": 256,
-        "frame_window_size": 1,  # TODO: config
+        "frame_window_size": 32,  # TODO: config
         "stride": 1,  # TODO: config
         "gpu_idx": -1,  # TODO: config
     }
     if config.reader_class == "TorchAudioStreamReader":
         video_class = TorchAudioStreamReader
         video_class_kwargs={
-            "mean": None,  # TODO: config
-            "resize": 256,
-            "frame_window_size": 1,  # TODO: config
+            "mean": [0.485, 0.456, 0.406],
+            "std": [0.229, 0.224, 0.225],
+            # TODO: fixme
+            # "crop": 224,
+            # "resize": 256,
+            "crop": None,
+            "resize": 224,
+            "frame_window_size": 32,  # TODO: config
             "stride": 1,  # TODO: config
             "gpu_idx": 0,  # TODO: config
         }
@@ -147,6 +154,13 @@ def train(config: TrainConfig):
     t2 = time.time()
     print(f"Loaded: {t2-t1:.3f}s")
 
+    import IPython; IPython.embed()
+
+    # DOES NOT WORK
+    base_model = base_model.cuda()
+    # mask = torch.ones(x.shape).cuda()
+    mask = torch.ones([8, 14, 14]).cuda()
+    base_model(x[0].permute(1, 0, 2, 3), mask.bool())
     mae = EgoMae(config, base_model)
     # trainer = pl.Trainer(gpus=8, num_nodes=4, accelerator='ddp')
     trainer = pl.Trainer(limit_train_batches=100, max_epochs=1)

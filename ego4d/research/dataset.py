@@ -72,7 +72,6 @@ class VideoDataset:
         self.video_class_kwargs = video_class_kwargs
         self.paths = paths
         if paths_to_n_frames is None:
-            breakpoint()
             print("Creating containers")
             path_iter = paths
             if with_pbar:
