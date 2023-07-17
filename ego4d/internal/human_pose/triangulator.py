@@ -9,29 +9,32 @@ from scipy.optimize import least_squares
 # ------------------------------------------------------------------------------------
 ## performs triangulation
 class Triangulator:
-    def __init__(self, time_stamp, camera_names, cameras, multiview_pose2d):
+    def __init__(self, time_stamp, camera_names, cameras, multiview_pose2d, keypoint_thres=0.7, num_keypoints=17, reprojection_error_epsilon=0.01):
         self.camera_names = camera_names
         self.cameras = cameras
         self.time_stamp = time_stamp
-        self.keypoint_thres = 0.7  ## Keypoint score threshold
+        self.keypoint_thres = keypoint_thres  ## Keypoint score threshold
         self.n_iters = 1000
-        self.reprojection_error_epsilon = 0.01
+        self.reprojection_error_epsilon = reprojection_error_epsilon
         self.min_views = 2
         self.min_inliers = 2
         self.include_confidence = False
 
-        self.coco_17_keypoints_idxs = np.array(
-            range(17)
-        )  # indexes of the COCO keypoints
-        self.keypoints_idxs = self.coco_17_keypoints_idxs
-        self.num_keypoints = len(self.keypoints_idxs)
+        # self.coco_17_keypoints_idxs = np.array(
+        #     range(17)
+        # )  # indexes of the COCO keypoints
+        # self.keypoints_idxs = self.coco_17_keypoints_idxs
+        # self.num_keypoints = len(self.keypoints_idxs)
+        ######### Modified version ##########
+        self.num_keypoints = num_keypoints
+        self.keypoints_idxs = np.array(range(self.num_keypoints))
+
 
         # parse the pose2d results, reaarange from camera view to human
         # pose2d is a dictionary,
         # key = (camera_name, camera_mode), val = pose2d_results
         # restructure to (human_id) = [(camera_name, camera_mode): pose2d]
         self.pose2d = {}
-
         for camera_name, pose2d in multiview_pose2d.items():
             num_humans = 1  ## number of humans detected in this view
             human_name = "aria01"
@@ -66,6 +69,7 @@ class Triangulator:
                 choosen_cameras = []
 
                 for view_idx, camera_name in enumerate(self.pose2d[human_name].keys()):
+
                     point_2d = self.pose2d[human_name][camera_name][
                         keypoint_idx, :2
                     ]  ## chop off the confidnece
@@ -242,7 +246,7 @@ class Triangulator:
         points = points[:, :2].copy()
 
         # normalize points_confidence
-        points_confidence /= points_confidence.max()
+        # points_confidence /= points_confidence.max()
 
         n_views = len(proj_matricies)
         A = np.zeros((2 * n_views, 4))

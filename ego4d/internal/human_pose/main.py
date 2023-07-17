@@ -93,7 +93,15 @@ def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
     if capture_dir.endswith("/"):
         capture_dir = capture_dir[0:-1]
 
+<<<<<<< HEAD
     video_dir = os.path.join(capture_dir, "videos")
+=======
+    if capture_dir.startswith("s3://"):
+        bucket_name = capture_dir.split("s3://")[1].split("/")[0]
+        prefix_path = f"s3://{bucket_name}"
+    else:
+        prefix_path = capture_dir
+>>>>>>> f95520a (jinxu version - No rawal, edit main, pose_estimator, triangulator, camera)
 
     dirs = capture_dir.split("/")
     take_id = dirs[-1]
