@@ -43,11 +43,15 @@ class SyncedEgoExoCaptureDset:
         data_dir: str,
         dataset_json_path: str,
         read_frames: bool,
+        legacy=False
     ):
         self.dataset_json = json.load(open(dataset_json_path))
         self.read_frames = read_frames
         self.root_dir = data_dir
-        self.frame_dir = os.path.join(self.root_dir, self.dataset_json["frame_dir"])
+        if legacy:
+            self.frame_dir = os.path.join(self.root_dir, self.dataset_json["dataset_dir"], "frames")
+        else:
+            self.frame_dir = os.path.join(self.root_dir, self.dataset_json["frame_dir"])
 
     def __getitem__(self, idx):
         row = self.dataset_json["frames"][idx]

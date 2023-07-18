@@ -37,7 +37,7 @@ from ego4d.internal.human_pose.triangulator import Triangulator
 from ego4d.internal.human_pose.utils import (
     check_and_convert_bbox,
     draw_bbox_xyxy,
-    # draw_points_2d,
+    draw_points_2d,
     get_exo_camera_plane,
     get_region_proposal,
 )
@@ -50,6 +50,7 @@ from tqdm.auto import tqdm
 pathmgr = PathManager()
 pathmgr.register_handler(S3PathHandler(profile="default"))
 
+from mmdet.apis import inference_detector, init_detector
 
 @dataclass
 class Context:
@@ -93,15 +94,7 @@ def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
     if capture_dir.endswith("/"):
         capture_dir = capture_dir[0:-1]
 
-<<<<<<< HEAD
     video_dir = os.path.join(capture_dir, "videos")
-=======
-    if capture_dir.startswith("s3://"):
-        bucket_name = capture_dir.split("s3://")[1].split("/")[0]
-        prefix_path = f"s3://{bucket_name}"
-    else:
-        prefix_path = capture_dir
->>>>>>> f95520a (jinxu version - No rawal, edit main, pose_estimator, triangulator, camera)
 
     dirs = capture_dir.split("/")
     take_id = dirs[-1]
@@ -258,6 +251,7 @@ def get_context(config: Config) -> Context:
         )
     ]
     dataset_dir = cache_dir
+    # dataset_dir = os.path.join(cache_dir, config.mode_preprocess.dataset_name)
     frame_rel_dir = os.path.join(cache_rel_dir, "frames")
 
     # pose2d config
@@ -697,7 +691,7 @@ def mode_bbox(config: Config):
                 bbox_xyxy = offshelf_bboxes[0]["bbox"][:4]
 
                 # uncomment to visualize the bounding box
-                # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
+                bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
                 bbox_image = draw_bbox_xyxy(image, bbox_xyxy, color=(0, 255, 0))
             #
             else:
@@ -713,6 +707,247 @@ def mode_bbox(config: Config):
     # save the bboxes as a pickle file
     with open(os.path.join(ctx.bbox_dir, "bbox.pkl"), "wb") as f:
         pickle.dump(bboxes, f)
+
+
+
+def mode_body_bbox(config: Config):
+    """
+    Detect human body bbox solely based on pretrained detector
+    """
+    ctx = get_context(config)
+    ####################################
+    visualization = True
+    ####################################
+    # Load dataset info
+    dset = SyncedEgoExoCaptureDset(
+        data_dir=config.data_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+    # Pre-trained human bounding box detector
+    detector = init_detector(ctx.detector_config, ctx.detector_checkpoint, device='cuda:0')
+
+    # Directory to store bbox result and visualization
+    bbox_dir = os.path.join(ctx.dataset_dir, 'body/bbox')
+    os.makedirs(bbox_dir, exist_ok=True)
+    if visualization:
+        vis_bbox_dir = os.path.join(ctx.dataset_dir, 'body/vis_bbox')
+        os.makedirs(vis_bbox_dir, exist_ok=True)
+
+    # Iterate through every frames and generate body bbox
+    bboxes = {}
+    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+        info = dset[time_stamp]
+        bboxes[time_stamp] = {}
+        # Iterate through every cameras
+        for exo_camera_name in ctx.exo_cam_names:
+            # Load in image
+            # image_path = info[exo_camera_name]["abs_frame_path"] //prev
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
+
+            # bbox visualization save dir
+            if visualization:
+                vis_bbox_cam_dir = os.path.join(vis_bbox_dir, exo_camera_name)
+                if not os.path.exists(vis_bbox_cam_dir):
+                    os.makedirs(vis_bbox_cam_dir)
+
+            # Inference
+            det_results = inference_detector(detector, image_path)
+            curr_bbox = det_results[0].flatten()[:4] ######### Assume single person per frame!!!
+
+            # Append result
+            bboxes[time_stamp][exo_camera_name] = curr_bbox
+
+            # Save visualization result
+            if visualization:
+                original_img = cv2.imread(image_path)
+                bbox_img = draw_bbox_xyxy(original_img, curr_bbox)
+                cv2.imwrite(os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), bbox_img)
+
+    # save the bboxes as a pickle file
+    with open(os.path.join(bbox_dir, "bbox.pkl"), "wb") as f:
+        pickle.dump(bboxes, f)
+        
+
+
+def mode_body_pose2d(config: Config):
+    #################################
+    visualization = True
+    #################################
+
+    # Load dataset info
+    ctx = get_context(config)
+    dset = SyncedEgoExoCaptureDset(
+        data_dir=config.data_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False
+    )
+    # Load body keypoints estimation model
+    pose_model = PoseModel(
+        pose_config=ctx.pose_config, pose_checkpoint=ctx.pose_checkpoint
+    )
+
+    # Create directory to store body pose2d results and visualization
+    pose2d_dir = os.path.join(ctx.dataset_dir, 'body/pose2d')
+    if not os.path.exists(pose2d_dir):
+        os.makedirs(pose2d_dir)
+    if visualization:
+        vis_pose2d_dir = os.path.join(ctx.dataset_dir, 'body/vis_pose2d')
+        if not os.path.exists(vis_pose2d_dir):
+            os.makedirs(vis_pose2d_dir)
+
+    # load bboxes from bbox_dir/bbox.pkl
+    bbox_dir = os.path.join(ctx.dataset_dir, 'body/bbox')
+    bbox_file = os.path.join(bbox_dir, "bbox.pkl")
+    if not os.path.exists(bbox_file):
+        print(f"bbox path does not exist: {bbox_file}")
+        print("NOTE: run mode_bbox")
+        sys.exit(1)
+    with open(bbox_file, "rb") as f:
+        bboxes = pickle.load(f)
+    
+    # Iterate through every frame
+    poses2d = {}
+    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+        info = dset[time_stamp]
+        poses2d[time_stamp] = {}
+        # Iterate through every cameras
+        for exo_camera_name in ctx.exo_cam_names:
+            # image_path = info[exo_camera_name]["abs_frame_path"] //prev
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
+            image = cv2.imread(image_path)
+            
+            # Directory to store body kpts visualization for current camera
+            if visualization:
+                vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, exo_camera_name)
+                if not os.path.exists(vis_pose2d_cam_dir):
+                    os.makedirs(vis_pose2d_cam_dir)
+            
+            # Load in body bbox 
+            bbox_xyxy = bboxes[time_stamp][exo_camera_name]  # x1, y1, x2, y2
+            if bbox_xyxy is not None:
+                # add confidence score to the bbox
+                bbox_xyxy = np.append(bbox_xyxy, 1.0)
+                
+                # Inference to get body 2d kpts
+                pose_results = pose_model.get_poses2d(
+                    bboxes=[{"bbox": bbox_xyxy}],
+                    image_name=image_path,
+                )
+                assert len(pose_results) == 1
+                # Save results and visualization
+                if visualization:
+                    save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
+                    pose_model.draw_poses2d(pose_results, image, save_path)
+                pose_result = pose_results[0]
+                pose2d = pose_result["keypoints"]
+            else:
+                pose2d = None
+                if visualization:
+                    save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
+                    cv2.imwrite(save_path, image)
+
+            poses2d[time_stamp][exo_camera_name] = pose2d
+
+    # save poses2d to pose2d_dir/pose2d.pkl
+    with open(os.path.join(pose2d_dir, "pose2d.pkl"), "wb") as f:
+        pickle.dump(poses2d, f)
+
+
+
+def mode_body_pose3d(config: Config):
+    """
+    Body pose3d estimation with exo cameras, only uses first 17 body kpts for faster speed
+    """
+    ############################
+    visualization = True
+    ############################
+
+    ctx = get_context(config)
+    # Load dataset info
+    dset = SyncedEgoExoCaptureDset(
+        data_dir=config.data_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+    # Load body keypoints estimation model (dummy model for faster visualization)
+    pose_model = PoseModel(
+        pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint
+    )  # lightweight for visualization only!
+
+    # Load exo cameras 
+    # exo_cameras = {
+    #     exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
+    #     for exo_camera_name in ctx.exo_cam_names
+    # } //prev
+    exo_cameras = {
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
+        for exo_camera_name in ctx.exo_cam_names
+    }
+
+    # Directory to store pose3d result and visualization
+    pose3d_dir = os.path.join(ctx.dataset_dir, 'body/pose3d')
+    if not os.path.exists(pose3d_dir):
+        os.makedirs(pose3d_dir)
+    if visualization:
+        vis_pose3d_dir = os.path.join(ctx.dataset_dir, 'body/vis_pose3d/body_dummy')
+        if not os.path.exists(vis_pose3d_dir):
+            os.makedirs(vis_pose3d_dir)
+
+    # Load body pose2d estimation result
+    pose2d_file = os.path.join(ctx.dataset_dir, 'body/pose2d', 'pose2d.pkl')
+    assert os.path.exists(pose2d_file), f"{pose2d_file} does not exist"
+    with open(pose2d_file, "rb") as f:
+        poses2d = pickle.load(f)
+
+    # Body pose3d estimation starts
+    poses3d = {}
+    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+        info = dset[time_stamp]
+
+        multi_view_pose2d = {
+            exo_camera_name: poses2d[time_stamp][exo_camera_name]
+            for exo_camera_name in ctx.exo_cam_names
+        }
+
+        # triangulate
+        triangulator = Triangulator(
+            time_stamp, 
+            ctx.exo_cam_names, 
+            exo_cameras, 
+            multi_view_pose2d
+        )
+
+        pose3d = triangulator.run(debug=False)  ## 17 x 4 (x, y, z, confidence)
+        poses3d[time_stamp] = pose3d
+
+        # visualize pose3d
+        if visualization:
+            for exo_camera_name in ctx.exo_cam_names:
+                # image_path = info[exo_camera_name]["abs_frame_path"] //prev
+                image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
+                image = cv2.imread(image_path)
+                exo_camera = exo_cameras[exo_camera_name]
+
+                vis_pose3d_cam_dir = os.path.join(vis_pose3d_dir, exo_camera_name)
+                if not os.path.exists(vis_pose3d_cam_dir):
+                    os.makedirs(vis_pose3d_cam_dir)
+
+                projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
+                projected_pose3d = np.concatenate(
+                    [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
+                )  ## 17 x 3
+
+                save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
+                pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
+                # pose_model.draw_projected_poses3d([projected_pose3d[:21], projected_pose3d[21:]], image, save_path)
+
+    with open(os.path.join(pose3d_dir, "body_dummy_pose3d.pkl"), "wb") as f:
+        pickle.dump(poses3d, f)
+
+
 
 
 def mode_preprocess_legacy(config: Config):
@@ -1145,45 +1380,79 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
     os.system(command)
 
 
+# @hydra.main(config_path="configs", config_name=None, version_base=None)
+# def run(config: Config):
+#     if config.mode == "preprocess":
+#         mode_preprocess(config)
+#     elif config.mode == "bbox":
+#         mode_bbox(config)
+#     elif config.mode == "pose2d":
+#         mode_pose2d(config)
+#     elif config.mode == "pose3d":
+#         mode_pose3d(config)
+#     elif config.mode == "refine_pose3d":
+#         mode_refine_pose3d(config)
+#     elif config.mode == "multi_view_vis_bbox":
+#         mode_multi_view_vis(config, "bbox")
+#     elif config.mode == "multi_view_vis_pose2d":
+#         mode_multi_view_vis(config, "pose2d")
+#     elif config.mode == "multi_view_vis_pose3d":
+#         mode_multi_view_vis(config, "pose3d")
+#     elif config.mode == "multi_view_vis_refine_pose3d":
+#         mode_multi_view_vis(config, "refine_pose3d")
+#     else:
+#         raise AssertionError(f"unknown mode: {config.mode}")
+
+
 @hydra.main(config_path="configs", config_name=None, version_base=None)
 def run(config: Config):
     if config.mode == "preprocess":
         mode_preprocess(config)
-    elif config.mode == "bbox":
-        mode_bbox(config)
-    elif config.mode == "pose2d":
-        mode_pose2d(config)
-    elif config.mode == "pose3d":
-        mode_pose3d(config)
-    elif config.mode == "refine_pose3d":
-        mode_refine_pose3d(config)
-    elif config.mode == "multi_view_vis_bbox":
-        mode_multi_view_vis(config, "bbox")
-    elif config.mode == "multi_view_vis_pose2d":
-        mode_multi_view_vis(config, "pose2d")
-    elif config.mode == "multi_view_vis_pose3d":
-        mode_multi_view_vis(config, "pose3d")
-    elif config.mode == "multi_view_vis_refine_pose3d":
-        mode_multi_view_vis(config, "refine_pose3d")
+    elif config.mode == "body_bbox":
+        """
+        mode_body_bbox(config): Detect bbox with pretrained detector (NOTE:Make sure only one person in the frame)
+        mode_bbox(config): Propose body bbox with aria position as heuristics
+        """
+        # mode_bbox(config)
+        mode_body_bbox(config)
+    elif config.mode == "body_pose2d":
+        mode_body_pose2d(config)
+    elif config.mode == "body_pose3d":
+        mode_body_pose3d(config)
+    # elif config.mode == "wholebodyHand_pose3d":
+    #     mode_wholebodyHand_pose3d(config)
+    # elif config.mode == "hand_pose2d_exo":
+    #     mode_exo_hand_pose2d(config)
+    # elif config.mode == "hand_pose2d_ego":
+    #     mode_ego_hand_pose2d(config)
+    # elif config.mode == "hand_pose3d_exo":
+    #     mode_exo_hand_pose3d(config)
+    # elif config.mode == 'hand_pose3d_egoexo':
+    #     mode_egoexo_hand_pose3d(config)
+    elif config.mode == "multi_view_vis":
+        mode_multi_view_vis(config)
+    elif config.mode == "show_all_config":
+        ctx = get_context(config)
+        print(ctx)
     else:
         raise AssertionError(f"unknown mode: {config.mode}")
 
 
 def add_arguments(parser):
-    parser.add_argument("--config-name", default="unc_T1")
+    parser.add_argument("--config-name", default="dev_release_base_jinxu")
     parser.add_argument(
         "--config_path", default="configs", help="Path to the config folder"
     )
     parser.add_argument(
         "--take_name",
-        default="uniandes_dance_007_3",
+        default="iiith_cooking_01_1",
         type=str,
         help="take names to run, concatenated by '+', "
         + "e.g., uniandes_dance_007_3+iiith_cooking_23+nus_covidtest_01",
     )
     parser.add_argument(
         "--steps",
-        default="",
+        default="bbox",
         type=str,
         help="steps to run concatenated by '+', e.g., preprocess+bbox+pose2d+pose3d",
     )
@@ -1227,7 +1496,7 @@ def get_hydra_config(args):
     cfg = hydra.compose(
         config_name=args.config_name,
         # args.opts contains config overrides, e.g., ["inputs.from_frame_number=7000",]
-        overrides=args.opts + [f"inputs.take_name={args.take_name}"],
+        # overrides=args.opts + [f"inputs.take_name={args.take_name}"],
     )
     print("Final config:", cfg)
     return cfg
@@ -1266,6 +1535,6 @@ def main(args):
 if __name__ == "__main__":
     # Using hydra:
     run()
-    # Not using hydra:
+    # # Not using hydra:
     # args = parse_args()
     # main(args)

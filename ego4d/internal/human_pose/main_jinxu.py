@@ -412,6 +412,7 @@ def mode_bbox(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
 
     detector_model = DetectorModel(
@@ -524,6 +525,7 @@ def mode_body_bbox(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
     # Pre-trained human bounding box detector
     detector = init_detector(ctx.detector_config, ctx.detector_checkpoint, device='cuda:0')
@@ -568,8 +570,6 @@ def mode_body_bbox(config: Config):
     with open(os.path.join(bbox_dir, "bbox.pkl"), "wb") as f:
         pickle.dump(bboxes, f)
 
-    print('=============== mode_bbox_jinxu finished ===============')
-
 
 def mode_body_pose2d(config: Config):
     #################################
@@ -582,6 +582,7 @@ def mode_body_pose2d(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
     # Load body keypoints estimation model
     pose_model = PoseModel(
@@ -752,7 +753,7 @@ def mode_wholebodyHand_pose3d(config: Config):
     ##################################
     exo_cam_names = ctx.exo_cam_names # ctx.exo_cam_names ['cam01','cam02']
     tri_threshold = 0.5
-    visualization = False
+    visualization = True
     ##################################
 
     # Load dataset info
@@ -760,6 +761,7 @@ def mode_wholebodyHand_pose3d(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
     # Load body keypoints estimation model (dummy model for faster visualization)
     # pose_model = PoseModel(
@@ -1873,8 +1875,8 @@ def run(config: Config):
         mode_body_bbox(config): Detect bbox with pretrained detector (NOTE:Make sure only one person in the frame)
         mode_bbox(config): Propose body bbox with aria position as heuristics
         """
-        # mode_bbox(config)
-        mode_body_bbox(config)
+        mode_bbox(config)
+        # mode_body_bbox(config)
     elif config.mode == "body_pose2d":
         mode_body_pose2d(config)
     elif config.mode == "body_pose3d":

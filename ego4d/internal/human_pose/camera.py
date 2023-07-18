@@ -182,6 +182,20 @@ def create_camera_data(
         "device_row": device_row,
     }
 
+
+# ########################## Latest Ego4D repo ##############################
+# def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
+#     if cam.camera_type == "aria":
+#         assert cam.camera_model is not None
+#         ret = cam.camera_model.projectionModel.project(pt_device)
+#     elif cam.camera_type == "colmap":
+#         assert cam.camera_model is not None
+#         ret = cam.camera_model.world_to_image(pt_device[0:2] / pt_device[2])
+#     else:
+#         raise AssertionError(f"Unexpected camera type: {cam.camera_type}")
+#     return ret
+# ###########################################################################
+
 ########## Modified #############
 # def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
 #     if cam.camera_type == "aria":
