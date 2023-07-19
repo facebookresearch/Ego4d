@@ -112,7 +112,7 @@ class Triangulator:
                                     f"ts:{self.time_stamp}",
                                     f"kp_idx:{keypoint_idx}",
                                     f"kp_name:{COCO_KP_ORDER[keypoint_idx]}",
-                                    f"kps_error:{reprojection_error_vector.mean():.5f}"
+                                    f"kps_error:{reprojection_error_vector.mean():.5f}",
                                     f"inliers:{len(inlier_views)}",
                                     f"{[choosen_cameras[index] for index in inlier_views]}",
                                 ]

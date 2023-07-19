@@ -10,7 +10,7 @@ def check_and_convert_bbox(
     bbox_2d_all,
     image_width,
     image_height,
-    bbox_thres=0.005,
+    min_area_ratio=0.005,
     max_aspect_ratio_thres=5.0,
     min_aspect_ratio_thres=0.5,
 ):
@@ -40,7 +40,7 @@ def check_and_convert_bbox(
     bbox_area_ratio = area * 1.0 / image_area
 
     ## if bbox is too small
-    if bbox_area_ratio < bbox_thres:
+    if bbox_area_ratio < min_area_ratio:
         return None
 
     aspect_ratio = bbox_height / bbox_width  ## height/width

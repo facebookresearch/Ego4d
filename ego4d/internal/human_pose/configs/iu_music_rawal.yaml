@@ -34,6 +34,7 @@ mode_bbox:
   human_height: 0.6
   human_radius: 0.3
   min_bbox_score: 0.7
+  min_area_ratio: 0.005
 
 mode_pose2d:
   pose_config: "ego4d/internal/human_pose/external/mmlab/mmpose/configs/wholebody/2d_kpt_sview_rgb_img/topdown_heatmap/coco-wholebody/hrnet_w48_coco_wholebody_384x288_dark_plus.py"
