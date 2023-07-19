@@ -179,16 +179,29 @@ def get_bbox_fromKpts(kpts, img_W, img_H, padding=50):
     return np.array([bbox_x1, bbox_y1, bbox_x2, bbox_y2])
 
 
-def aria_rotate_kpts(kpts, img_shape=(1408,1408,3)):
+def aria_extracted_to_original(kpts, img_shape=(1408,1408)):
     """
-    Rotate coordinates from corrected aria view images to original view (tilted).
-    img_shape is the shape of original image!!!!
+    Rotate kpts coordinates from extracted view (hand vertical) to original view (hand horizontal)
+    img_shape is the shape of original view image
     """
     assert len(kpts.shape) == 2, "Only can rotate 2D arrays"
-    H,_,_ = img_shape
+    H,W = img_shape
     new_kpts = kpts.copy()
     new_kpts[:,0] = kpts[:,1]
     new_kpts[:,1] = H - kpts[:,0]
+    return new_kpts
+
+
+def aria_original_to_extracted(kpts, img_shape=(1408,1408)):
+    """
+    Rotate kpts coordinates from original view (hand horizontal) to extracted view (hand vertical)
+    img_shape is the shape of original view image
+    """
+    assert len(kpts.shape) == 2, "Only can rotate 2D arrays"
+    H,W = img_shape
+    new_kpts = kpts.copy()
+    new_kpts[:,0] = H - kpts[:,1]
+    new_kpts[:,1] = kpts[:,0]
     return new_kpts
 
 
