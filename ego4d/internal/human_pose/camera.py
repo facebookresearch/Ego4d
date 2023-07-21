@@ -104,7 +104,7 @@ def create_customized_camera(camera_data, intrinsics, img_shape):
 def create_camera(camera_data, camera_model):
     ret = copy.deepcopy(camera_data)
     if camera_data["camera_type"] == "aria":
-        ret["camera_model"] = _create_aria_camera()
+        ret["camera_model"] = camera_model # _create_aria_camera()
     else:
         ret["camera_model"] = _create_exo_camera(ret["device_row"])
 
@@ -183,19 +183,6 @@ def create_camera_data(
     }
 
 
-# ########################## Latest Ego4D repo ##############################
-# def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
-#     if cam.camera_type == "aria":
-#         assert cam.camera_model is not None
-#         ret = cam.camera_model.projectionModel.project(pt_device)
-#     elif cam.camera_type == "colmap":
-#         assert cam.camera_model is not None
-#         ret = cam.camera_model.world_to_image(pt_device[0:2] / pt_device[2])
-#     else:
-#         raise AssertionError(f"Unexpected camera type: {cam.camera_type}")
-#     return ret
-# ###########################################################################
-
 ########## Modified #############
 # def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
 #     if cam.camera_type == "aria":
@@ -237,7 +224,6 @@ def xworld_to_yimage(pt3d: Vec3, to_cam: Camera):
 
 def batch_xworld_to_yimage(pts3d: Vec3, to_cam: Camera):
     assert pts3d.shape[1] == 3
-
     pts2d = []
 
     # TODO: optimize
@@ -246,7 +232,6 @@ def batch_xworld_to_yimage(pts3d: Vec3, to_cam: Camera):
         T_to_world = to_cam.extrinsics
         pt_target = np.matmul(T_to_world, np.array(pt3d.tolist() + [1.0]))[0:3]
         pts2d.append(xdevice_to_ximage(pt_target, to_cam).reshape(1, -1))
-
     pts2d = np.concatenate(pts2d, axis=0)
     return pts2d
 
@@ -312,6 +297,6 @@ def get_aria_camera_models(aria_path):
 
     return {
         "1201-1": slam_left,
-        "1201-2": slam_left,
+        "1201-2": slam_right, ####### Intentional?
         "214-1": rgb_cam,
     }

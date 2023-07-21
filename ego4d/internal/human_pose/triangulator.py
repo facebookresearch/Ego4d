@@ -1,7 +1,6 @@
 import random
-
 import numpy as np
-
+import itertools
 import torch
 from ego4d.internal.human_pose.utils import COCO_KP_ORDER
 from scipy.optimize import least_squares
@@ -9,7 +8,11 @@ from scipy.optimize import least_squares
 # ------------------------------------------------------------------------------------
 ## performs triangulation
 class Triangulator:
-    def __init__(self, time_stamp, camera_names, cameras, multiview_pose2d, keypoint_thres=0.7, num_keypoints=17, reprojection_error_epsilon=0.01):
+    def __init__(self, time_stamp, 
+                 camera_names, 
+                 cameras, 
+                 multiview_pose2d, 
+                 keypoint_thres=0.7, num_keypoints=17, reprojection_error_epsilon=0.01):
         self.camera_names = camera_names
         self.cameras = cameras
         self.time_stamp = time_stamp
@@ -81,8 +84,16 @@ class Triangulator:
                         extrinsics = camera.extrinsics[:3, :]  ## 3x4
 
                         ## get the ray in 3D
+                        
                         ray_3d = camera.camera_model.image_to_world(point_2d)  ## 1 x 2
                         ray_3d = np.append(ray_3d, 1)
+                        
+                        
+                        # ###########################
+                        # print(camera_name)
+                        # print('point_2d:\n',point_2d)
+                        # print('ray_3d:\n',ray_3d)
+                        # ###########################
 
                         assert len(ray_3d) == 3
 
@@ -132,7 +143,11 @@ class Triangulator:
 
         return points_3d["aria01"]
 
-    # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
+
+    #####################################################################################################################
+    # Modified by jinxu: Instead of using RANSAC to select camera views to perform triangulation, we iterate through
+    # all possible combinations of views
+    #####################################################################################################################
     def triangulate_ransac(
         self,
         proj_matricies,
@@ -141,19 +156,30 @@ class Triangulator:
         reprojection_error_epsilon=0.1,
         direct_optimization=True,
     ):
+        
+        # ########################################
+        # print(points)
+        # ########################################
+
         assert len(proj_matricies) == len(points)
         assert len(points) >= 2
 
         proj_matricies = np.array(proj_matricies)
         points = np.array(points)
-
         n_views = len(points)
 
         # determine inliers
         view_set = set(range(n_views))
         inlier_set = set()
+
+        # All possible combinations of camera view
+        all_comb = itertools.combinations(list(range(n_views)), 2)
+        all_comb_list = [list(curr_comb) for curr_comb in all_comb]
+        n_iters = len(all_comb_list)
+
         for i in range(n_iters):
-            sampled_views = sorted(random.sample(view_set, 2))  ## sample two views
+            # sampled_views = sorted(random.sample(view_set, 2))  ## sample two views
+            sampled_views = all_comb_list[i]
 
             keypoint_3d_in_base_camera = (
                 self.triangulate_point_from_multiple_views_linear(
@@ -227,6 +253,105 @@ class Triangulator:
 
         return keypoint_3d_in_base_camera, inlier_list, reprojection_error_vector
 
+
+    # Original implementation
+    # # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
+    # def triangulate_ransac(
+    #     self,
+    #     proj_matricies,
+    #     points,
+    #     n_iters=50,
+    #     reprojection_error_epsilon=0.1,
+    #     direct_optimization=True,
+    # ):
+    #     assert len(proj_matricies) == len(points)
+    #     assert len(points) >= 2
+
+    #     proj_matricies = np.array(proj_matricies)
+    #     points = np.array(points)
+
+    #     n_views = len(points)
+
+    #     # determine inliers
+    #     view_set = set(range(n_views))
+    #     inlier_set = set()
+    #     for i in range(n_iters):
+    #         sampled_views = sorted(random.sample(view_set, 2))  ## sample two views
+
+    #         keypoint_3d_in_base_camera = (
+    #             self.triangulate_point_from_multiple_views_linear(
+    #                 proj_matricies[sampled_views], points[sampled_views]
+    #             )
+    #         )
+    #         reprojection_error_vector = self.calc_reprojection_error_matrix(
+    #             np.array([keypoint_3d_in_base_camera]), points, proj_matricies
+    #         )[0]
+
+    #         new_inlier_set = set(sampled_views)
+    #         for view in view_set:
+    #             current_reprojection_error = reprojection_error_vector[view]
+
+    #             if current_reprojection_error < reprojection_error_epsilon:
+    #                 new_inlier_set.add(view)
+
+    #         if len(new_inlier_set) > len(inlier_set):
+    #             inlier_set = new_inlier_set
+
+    #     # triangulate using inlier_set
+    #     if len(inlier_set) == 0:
+    #         inlier_set = view_set.copy()
+
+    #     ##-------------------------------
+    #     inlier_list = np.array(sorted(inlier_set))
+    #     inlier_proj_matricies = proj_matricies[inlier_list]
+    #     inlier_points = points[inlier_list]
+
+    #     keypoint_3d_in_base_camera = self.triangulate_point_from_multiple_views_linear(
+    #         inlier_proj_matricies, inlier_points, self.include_confidence
+    #     )
+    #     reprojection_error_vector = self.calc_reprojection_error_matrix(
+    #         np.array([keypoint_3d_in_base_camera]), inlier_points, inlier_proj_matricies
+    #     )[0]
+    #     reprojection_error_mean = np.mean(reprojection_error_vector)
+
+    #     keypoint_3d_in_base_camera_before_direct_optimization = (
+    #         keypoint_3d_in_base_camera
+    #     )
+    #     reprojection_error_before_direct_optimization = reprojection_error_mean
+
+    #     # direct reprojection error minimization
+    #     if direct_optimization:
+
+    #         def residual_function(x):
+    #             reprojection_error_vector = self.calc_reprojection_error_matrix(
+    #                 np.array([x]), inlier_points, inlier_proj_matricies
+    #             )[0]
+    #             residuals = reprojection_error_vector
+    #             return residuals
+
+    #         x_0 = np.array(keypoint_3d_in_base_camera)
+    #         res = least_squares(residual_function, x_0, loss="huber", method="trf")
+
+    #         keypoint_3d_in_base_camera = res.x
+    #         reprojection_error_vector = self.calc_reprojection_error_matrix(
+    #             np.array([keypoint_3d_in_base_camera]),
+    #             inlier_points,
+    #             inlier_proj_matricies,
+    #         )[0]
+    #         res = least_squares(residual_function, x_0, loss="huber", method="trf")
+
+    #         keypoint_3d_in_base_camera = res.x
+    #         reprojection_error_vector = self.calc_reprojection_error_matrix(
+    #             np.array([keypoint_3d_in_base_camera]),
+    #             inlier_points,
+    #             inlier_proj_matricies,
+    #         )[0]
+    #         reprojection_error_mean = np.mean(reprojection_error_vector)
+
+    #     return keypoint_3d_in_base_camera, inlier_list, reprojection_error_vector
+
+
+
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/utils/multiview.py#L113
     def triangulate_point_from_multiple_views_linear(
         self, proj_matricies, points, include_confidence=True
@@ -258,12 +383,26 @@ class Triangulator:
                 points[j][1] * proj_matricies[j][2, :] - proj_matricies[j][1, :]
             )
 
+            # ##########################
+            # print('points[j][0]:\n', points[j][0])
+            # print('points[j][1]:\n', points[j][1])
+            # print('A:\n',A)
+
             # weight by the point confidence
             if include_confidence == True:
                 A[j * 2 + 0] *= points_confidence[j]
                 A[j * 2 + 1] *= points_confidence[j]
 
-        u, s, vh = np.linalg.svd(A, full_matrices=False)
+                # ###############################
+                # print('include_confidence_A:\n',A)
+
+            u, s, vh = np.linalg.svd(A, full_matrices=False)
+            # try:
+            #     u, s, vh = np.linalg.svd(A, full_matrices=False) ############################ MODIFIED
+            # except:
+            #     print(A)
+            #     vh = np.zeros(vh.shape)
+
         point_3d_homo = vh[3, :]
 
         point_3d = self.homogeneous_to_euclidean(point_3d_homo)

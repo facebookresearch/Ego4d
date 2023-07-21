@@ -70,7 +70,7 @@ module load cuda/11.2 cudnn/v8.1.1.33-cuda.11.0
 Configurations are written with Hydra/OmegaConf as YAML files. New
 configurations must be added to `ego4d/internal/human_pose/configs`.
 
-### Run Pipeline
+### Run Pipeline (Jinxu's pipeline)
 
 Please ensure you have run the setup step first. From the repository root:
 

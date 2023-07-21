@@ -1,6 +1,12 @@
 #!/bin/bash
+#############################################################################################
+# This bash file runs all body&hand pose 2d&3d estimation using Jinxu's pipeline, and
+# tracks the running time of each mode and store the summary in [SAVE_PATH]/[TAKE_NAME].txt
+#############################################################################################
+
 ############### MODIFY ###############
-CONFIG_NAME="dev_release_base_copy"
+CONFIG_NAME="nus_covidtest_02_3"
+TAKE_NAME="nus_covidtest_02_3"
 SAVE_PATH='handPose_time_log/'
 # MODE="preprocess
 #       body_bbox
@@ -11,26 +17,26 @@ SAVE_PATH='handPose_time_log/'
 #       hand_pose3d_exo
 #       hand_pose3d_egoexo
 #       "
-MODE="body_pose2d
-      wholebodyHand_pose3d
-      hand_pose2d_exo
-      hand_pose2d_ego
-      hand_pose3d_exo
-      hand_pose3d_egoexo"
-
+MODE="preprocess
+      body_bbox
+      body_pose2d
+      "
 ######################################
+
+# Set-up
+mkdir -p $SAVE_PATH
 very_start=`date +%s`
 
 # Iterate each mode in the pipeline
 for mode in $MODE
 do
-    echo ============================ Running $mode ============================
+    echo ============================ $mode starts ============================
     start=`date +%s`
     python3 ego4d/internal/human_pose/main.py --config-name $CONFIG_NAME mode=$mode
     end=`date +%s`
     curr_time=`expr $end - $start`
-    echo $mode: "$(($curr_time / 3600))hrs $((($curr_time / 60) % 60))min $(($curr_time % 60))sec" >> $SAVE_PATH$CONFIG_NAME.txt
-    echo ============================ $mode finished ============================
+    echo $mode: "$(($curr_time / 3600))hrs $((($curr_time / 60) % 60))min $(($curr_time % 60))sec" >> $SAVE_PATH$TAKE_NAME.txt
+    echo ============================ $mode finished ============================ $'\n\n'
 done
 
 # # Total running time

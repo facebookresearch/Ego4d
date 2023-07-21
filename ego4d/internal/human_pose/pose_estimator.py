@@ -10,6 +10,7 @@ from mmpose.apis import (
     process_mmdet_results,
     vis_pose_result,
 )
+
 from mmpose.core.bbox.transforms import (
     bbox_cs2xywh,
     bbox_xywh2cs,

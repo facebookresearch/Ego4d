@@ -197,10 +197,23 @@ def aria_original_to_extracted(kpts, img_shape=(1408,1408)):
     Rotate kpts coordinates from original view (hand horizontal) to extracted view (hand vertical)
     img_shape is the shape of original view image
     """
-    assert len(kpts.shape) == 2, "Only can rotate 2D arrays"
+    # assert len(kpts.shape) == 2, "Only can rotate 2D arrays"
     H,W = img_shape
     new_kpts = kpts.copy()
     new_kpts[:,0] = H - kpts[:,1]
+    new_kpts[:,1] = kpts[:,0]
+    return new_kpts
+
+
+def aria_slamOriginal_to_extracted(kpts, img_shape=(1408,1408)):
+    """
+    Rotate kpts coordinates from original view (hand horizontal) to extracted view (hand vertical)
+    img_shape is the shape of original view image
+    """
+    # assert len(kpts.shape) == 2, "Only can rotate 2D arrays"
+    H,W = img_shape
+    new_kpts = kpts.copy()
+    new_kpts[:,0] = H - kpts[:,1] + 80
     new_kpts[:,1] = kpts[:,0]
     return new_kpts
 

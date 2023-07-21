@@ -43,8 +43,8 @@ from ego4d.internal.human_pose.utils import (
     get_exo_camera_plane,
     get_region_proposal,
     get_bbox_fromKpts,
-    aria_rotate_kpts,
-    left_right_bboxes_div
+    aria_extracted_to_original,
+    aria_original_to_extracted
 )
 
 from iopath.common.file_io import PathManager
@@ -670,6 +670,7 @@ def mode_body_pose3d(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
     # Load body keypoints estimation model (dummy model for faster visualization)
     pose_model = PoseModel(
@@ -753,7 +754,7 @@ def mode_wholebodyHand_pose3d(config: Config):
     ##################################
     exo_cam_names = ctx.exo_cam_names # ctx.exo_cam_names ['cam01','cam02']
     tri_threshold = 0.5
-    visualization = True
+    visualization = False
     ##################################
 
     # Load dataset info
@@ -810,7 +811,8 @@ def mode_wholebodyHand_pose3d(config: Config):
         multi_view_pose2d = {}
         for exo_camera_name in exo_cam_names:
             curr_exo_hand_pose2d_kpts = poses2d[time_stamp][exo_camera_name][-42:]
-            curr_exo_hand_pose2d_kpts[[0,21],2] = 1
+            if np.mean(curr_exo_hand_pose2d_kpts[:,-1]) > 0.3:
+                curr_exo_hand_pose2d_kpts[[0,21],2] = 1
             multi_view_pose2d[exo_camera_name] = curr_exo_hand_pose2d_kpts
         ##################################################################################################
 
@@ -866,6 +868,7 @@ def mode_exo_hand_pose2d(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
     # Hand pose estimation model
     ### COCOWholebody hand ###
@@ -1001,6 +1004,7 @@ def mode_ego_hand_pose2d(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
 
     # Hand pose estimation model
@@ -1055,9 +1059,13 @@ def mode_ego_hand_pose2d(config: Config):
                 [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
             )
         # Propose hand bbox based on projected hand kpts 
-        img_H, img_W = image.shape[:2]
+        img_H, img_W = image.shape[:2] # image shape of original view aria images
+        # Clip hand kpts into valid range
+        projected_pose3d[:,0] = np.clip(projected_pose3d[:,0], 0, img_H)
+        projected_pose3d[:,1] = np.clip(projected_pose3d[:,1], 0, img_W)
         right_hand_kpts, left_hand_kpts = projected_pose3d[21:], projected_pose3d[:21]
-        right_hand_kpts, left_hand_kpts = right_hand_kpts[right_hand_kpts[:,2]!=0][:,:2], left_hand_kpts[left_hand_kpts[:,2]!=0][:,:2]
+        # Select only nonzero confidence kpts
+        right_hand_kpts, left_hand_kpts = right_hand_kpts[right_hand_kpts[:,2]!=0, :2], left_hand_kpts[left_hand_kpts[:,2]!=0, :2]
         right_hand_bbox = get_bbox_fromKpts(right_hand_kpts, img_W, img_H, padding=30)  # Adjust padding as needed
         left_hand_bbox = get_bbox_fromKpts(left_hand_kpts, img_W, img_H, padding=30)    # Adjust padding as needed
         # Save result
@@ -1113,6 +1121,7 @@ def mode_exo_hand_pose3d(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
 
     # Hand pose estimation model (same as hand_pose2d)
@@ -1236,6 +1245,7 @@ def mode_egoexo_hand_pose3d(config: Config):
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
+        legacy=config.legacy
     )
     # Hand pose estimation model (same as hand_pose2d)
     hand_pose_config = 'ego4d/internal/human_pose/external/mmlab/mmpose/configs/hand/2d_kpt_sview_rgb_img/topdown_heatmap/coco_wholebody_hand/hrnetv2_w18_coco_wholebody_hand_256x256_dark.py'
@@ -1875,8 +1885,8 @@ def run(config: Config):
         mode_body_bbox(config): Detect bbox with pretrained detector (NOTE:Make sure only one person in the frame)
         mode_bbox(config): Propose body bbox with aria position as heuristics
         """
-        mode_bbox(config)
-        # mode_body_bbox(config)
+        # mode_bbox(config)
+        mode_body_bbox(config)
     elif config.mode == "body_pose2d":
         mode_body_pose2d(config)
     elif config.mode == "body_pose3d":

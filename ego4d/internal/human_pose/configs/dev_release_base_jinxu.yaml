@@ -7,7 +7,7 @@ mode: "preprocess"
 inputs:
   from_frame_number: 5000
   to_frame_number: 5100
-  take_name: "iiith_cooking_01_1"
+  take_name: ""
   take_uid: null
   metadata_json_path: null
   aria_trajectory_path: null
