@@ -87,13 +87,6 @@ class Triangulator:
                         
                         ray_3d = camera.camera_model.image_to_world(point_2d)  ## 1 x 2
                         ray_3d = np.append(ray_3d, 1)
-                        
-                        
-                        # ###########################
-                        # print(camera_name)
-                        # print('point_2d:\n',point_2d)
-                        # print('ray_3d:\n',ray_3d)
-                        # ###########################
 
                         assert len(ray_3d) == 3
 
@@ -156,11 +149,6 @@ class Triangulator:
         reprojection_error_epsilon=0.1,
         direct_optimization=True,
     ):
-        
-        # ########################################
-        # print(points)
-        # ########################################
-
         assert len(proj_matricies) == len(points)
         assert len(points) >= 2
 

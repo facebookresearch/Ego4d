@@ -91,6 +91,20 @@ class Context:
     frame_rel_dir: str = None
 
 
+class legacy_aria_cameraModel:
+    def __init__(self, camera_name, camera_model):
+        self.camera_name = camera_name
+        self.camera_model = camera_model
+
+    def image_to_world(self, point_2d):
+        return self.camera_model.projectionModel.unproject(point_2d)[:2]
+    
+    def world_to_image(self, pt):
+        pt_padded = np.append(pt, 1)
+        return self.camera_model.projectionModel.project(pt_padded)
+
+
+
 def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
     assert capture_dir is not None
 
@@ -895,10 +909,6 @@ def mode_body_pose3d(config: Config):
     )  # lightweight for visualization only!
 
     # Load exo cameras 
-    # exo_cameras = {
-    #     exo_camera_name: create_camera(dset[0][exo_camera_name]["camera_data"], None)
-    #     for exo_camera_name in ctx.exo_cam_names
-    # } //prev
     exo_cameras = {
         exo_camera_name: create_camera(
             dset[0][f"{exo_camera_name}_0"]["camera_data"], None
@@ -1118,11 +1128,6 @@ def mode_exo_hand_pose2d(config: Config):
     ### COCOWholebody hand ###
     hand_pose_config = 'ego4d/internal/human_pose/external/mmlab/mmpose/configs/hand/2d_kpt_sview_rgb_img/topdown_heatmap/coco_wholebody_hand/hrnetv2_w18_coco_wholebody_hand_256x256_dark.py'
     hand_pose_ckpt = 'https://download.openmmlab.com/mmpose/hand/dark/hrnetv2_w18_coco_wholebody_hand_256x256_dark-a9228c9c_20210908.pth'
-    
-    # #### RTM
-    # hand_pose_config = "ego4d/internal/human_pose/external/mmlab/mmpose/configs/hand/2d_kpt_sview_rgb_img/topdown_heatmap/coco_wholebody_hand/rtmdet_nano_320-8xb32_hand.py"
-    # hand_pose_ckpt = "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/rtmdet_nano_8xb32-300e_hand-267f9c8f.pth"
-    
     hand_pose_model = PoseModel(
         hand_pose_config, 
         hand_pose_ckpt, 
@@ -1139,7 +1144,7 @@ def mode_exo_hand_pose2d(config: Config):
 
     if visualization:
         # Directory to store pose2d estimation
-        vis_pose2d_dir = os.path.join(ctx.dataset_dir, f'hand/vis_pose2d/visThresh={kpts_vis_threshold}_RTM')
+        vis_pose2d_dir = os.path.join(ctx.dataset_dir, f'hand/vis_pose2d/visThresh={kpts_vis_threshold}')
         if not os.path.exists(vis_pose2d_dir):
             os.makedirs(vis_pose2d_dir)
         # Directory to store hand bbox 
@@ -1186,8 +1191,8 @@ def mode_exo_hand_pose2d(config: Config):
 
             ############## Hand bbox ##############
             img_H, img_W = image.shape[:2]
-            right_hand_bbox = get_bbox_fromKpts(right_hand_kpts, img_W, img_H, padding=30)
-            left_hand_bbox = get_bbox_fromKpts(left_hand_kpts, img_W, img_H, padding=30)
+            right_hand_bbox = get_bbox_fromKpts(right_hand_kpts, img_W, img_H, padding=50)
+            left_hand_bbox = get_bbox_fromKpts(left_hand_kpts, img_W, img_H, padding=50)
             ################# Heuristic Check: If wholeBody-Hand kpts confidence is too low, then assign zero bbox #################
             right_kpts_avgConf, left_kpts_avgConf = np.mean(right_hand_kpts[:,2]), np.mean(left_hand_kpts[:,2])
             if right_kpts_avgConf < 0.5:
@@ -1229,7 +1234,7 @@ def mode_exo_hand_pose2d(config: Config):
                 hand_pose_model.draw_poses2d([pose_results[1]], vis_pose2d_img, save_path)
 
     # save poses2d key points result
-    with open(os.path.join(pose2d_dir, "exo_pose2d_RTM.pkl"), "wb") as f:
+    with open(os.path.join(pose2d_dir, "exo_pose2d.pkl"), "wb") as f:
         pickle.dump(poses2d, f)
     
     # save the bboxes as a pickle file
@@ -1291,7 +1296,7 @@ def mode_ego_hand_pose2d(config: Config):
         wholebodyHand_pose3d = pickle.load(f)
 
 
-    ############### Create aria camera model ##################
+    # Create aria camera model
     capture_dir = os.path.join(ctx.data_dir, "captures", ctx.take["capture"]["root_dir"])
     aria_path = os.path.join(capture_dir, "videos/aria01.vrs")
     assert os.path.exists(aria_path), f"{aria_path} doesn\'t exit. Need aria video downloaded"
@@ -1302,8 +1307,6 @@ def mode_ego_hand_pose2d(config: Config):
         "slam-right": "1201-2",
     }
 
-
-    ############################################################
     # Iterate through every frame
     poses2d = {}
     bboxes = {}
@@ -1313,7 +1316,9 @@ def mode_ego_hand_pose2d(config: Config):
         image = cv2.imread(image_path)
         
         # Create aria camera at this timestamp
-        aria_camera = create_camera(dset[time_stamp][ego_cam_name]["camera_data"], None)
+        # aria_camera = create_camera(dset[time_stamp][ego_cam_name]["camera_data"], None) //prev
+        ari_calib_model = legacy_aria_cameraModel(ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]])
+        aria_camera = create_camera(dset[time_stamp][ego_cam_name]["camera_data"], ari_calib_model)
 
         ########################## Hand bbox from re-projected wholebody-Hand kpts ############################
         # Project wholebody-Hand pose3d kpts onto current aria image plane
@@ -1338,8 +1343,8 @@ def mode_ego_hand_pose2d(config: Config):
                                                     aria_original_to_extracted(left_hand_kpts, (orig_H, orig_W))
         ########################################################################################
         
-        right_hand_bbox = get_bbox_fromKpts(rot_right_hand_kpts, img_W, img_H, padding=30)  # Adjust padding as needed
-        left_hand_bbox = get_bbox_fromKpts(rot_left_hand_kpts, img_W, img_H, padding=30)    # Adjust padding as needed
+        right_hand_bbox = get_bbox_fromKpts(rot_right_hand_kpts, img_W, img_H, padding=50)  # Adjust padding as needed
+        left_hand_bbox = get_bbox_fromKpts(rot_left_hand_kpts, img_W, img_H, padding=50)    # Adjust padding as needed
         # Save result
         bboxes[time_stamp] = [right_hand_bbox, left_hand_bbox]
         # Hand bbox visualization
@@ -1438,8 +1443,12 @@ def mode_exo_hand_pose3d(config: Config):
         multi_view_pose2d = {}
         for exo_camera_name in exo_cam_names:
             curr_exo_hand_pose2d_kpts = exo_poses2d[time_stamp][exo_camera_name].reshape(-1,3)
-            if np.mean(curr_exo_hand_pose2d_kpts[:,-1]) > 0.3:
-                curr_exo_hand_pose2d_kpts[[0,21],2] = 1
+            # Heuristics
+            if np.mean(curr_exo_hand_pose2d_kpts[:21,-1]) > 0.3:
+                curr_exo_hand_pose2d_kpts[0,-1] = 1
+            if np.mean(curr_exo_hand_pose2d_kpts[21:,-1]) > 0.3:
+                curr_exo_hand_pose2d_kpts[21,-1] = 1
+            # Append kpts result
             multi_view_pose2d[exo_camera_name] = curr_exo_hand_pose2d_kpts
 
         ##################################################################################################
@@ -1497,18 +1506,6 @@ def mode_exo_hand_pose3d(config: Config):
         pickle.dump(poses3d, f)
 
 
-class legacy_aria_cameraModel:
-    def __init__(self, camera_name, camera_model):
-        self.camera_name = camera_name
-        self.camera_model = camera_model
-
-    def image_to_world(self, point_2d):
-        return self.camera_model.projectionModel.unproject(point_2d)[:2]
-    
-    def world_to_image(self, pt):
-        pt_padded = np.append(pt, 1)
-        return self.camera_model.projectionModel.project(pt_padded)
-
 
 def mode_egoexo_hand_pose3d(config: Config):
     """
@@ -1518,7 +1515,7 @@ def mode_egoexo_hand_pose3d(config: Config):
     ########### Change as needed #############
     exo_cam_names = ctx.exo_cam_names # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
     ego_cam_name = 'aria01_rgb'
-    tri_threshold = 0.1
+    tri_threshold = 0.3
     visualization = True
     ##########################################
 
@@ -1531,7 +1528,6 @@ def mode_egoexo_hand_pose3d(config: Config):
     # COCOWholeBody-hrnet
     hand_pose_config = 'ego4d/internal/human_pose/external/mmlab/mmpose/configs/hand/2d_kpt_sview_rgb_img/topdown_heatmap/coco_wholebody_hand/hrnetv2_w18_coco_wholebody_hand_256x256_dark.py'
     hand_pose_ckpt = 'https://download.openmmlab.com/mmpose/hand/dark/hrnetv2_w18_coco_wholebody_hand_256x256_dark-a9228c9c_20210908.pth'
-    
     # # Debug config file:
     # hand_pose_config = 'external/mmlab/mmpose/configs/hand/2d_kpt_sview_rgb_img/topdown_heatmap/coco_wholebody_hand/hrnetv2_w18_coco_wholebody_hand_256x256_dark.py'
     # hand_pose_ckpt = 'https://download.openmmlab.com/mmpose/hand/dark/hrnetv2_w18_coco_wholebody_hand_256x256_dark-a9228c9c_20210908.pth'
@@ -1564,18 +1560,16 @@ def mode_egoexo_hand_pose3d(config: Config):
             os.makedirs(vis_pose3d_dir)
 
     # Load hand pose2d keypoints from both cam and aria
-    cam_pose2d_file = os.path.join(ctx.dataset_dir, 'hand/pose2d', "exo_pose2d.pkl")
+    cam_pose2d_file = os.path.join(ctx.dataset_dir, 'hand/pose2d', "exo_pose2d_rtmpose.pkl")
     assert os.path.exists(cam_pose2d_file), f"{cam_pose2d_file} does not exist"
     with open(cam_pose2d_file, "rb") as f:
         exo_poses2d = pickle.load(f)
-    aria_pose2d_file = os.path.join(ctx.dataset_dir, 'hand/pose2d', "ego_pose2d.pkl")
+    aria_pose2d_file = os.path.join(ctx.dataset_dir, 'hand/pose2d', "ego_pose2d_rtmpose.pkl")
     assert os.path.exists(aria_pose2d_file), f"{aria_pose2d_file} does not exist"
     with open(aria_pose2d_file, "rb") as f:
         aria_poses2d = pickle.load(f)
 
-    poses3d = {}
-
-    ################## Create aria calibration model ##############
+    # Create aria calibration model
     capture_dir = os.path.join(ctx.data_dir, "captures", ctx.take["capture"]["root_dir"])
     aria_path = os.path.join(capture_dir, "videos/aria01.vrs")
     assert os.path.exists(aria_path), f"{aria_path} doesn\'t exit. Need aria video downloaded"
@@ -1585,9 +1579,9 @@ def mode_egoexo_hand_pose3d(config: Config):
         "slam-left": "1201-1",
         "slam-right": "1201-2",
     }
-    ################################################################
 
-    # for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+    # Iterate through all images and inference
+    poses3d = {}
     for time_stamp in tqdm(range(len(dset)), total=len(dset)):
         info = dset[time_stamp]
 
@@ -1596,13 +1590,21 @@ def mode_egoexo_hand_pose3d(config: Config):
         # Add exo camera keypoints
         for exo_camera_name in exo_cam_names:
             curr_exo_hand_pose2d_kpts = exo_poses2d[time_stamp][exo_camera_name].reshape(-1,3)
-            if np.mean(curr_exo_hand_pose2d_kpts[:,-1]) > 0.3:
-                curr_exo_hand_pose2d_kpts[[0,21],2] = 1
+            # Heuristics
+            if np.mean(curr_exo_hand_pose2d_kpts[:21,-1]) > 0.3:
+                curr_exo_hand_pose2d_kpts[0,-1] = 1
+            if np.mean(curr_exo_hand_pose2d_kpts[21:,-1]) > 0.3:
+                curr_exo_hand_pose2d_kpts[21,-1] = 1
+            # Append kpts result
             multi_view_pose2d[exo_camera_name] = curr_exo_hand_pose2d_kpts
         # Add ego camera keypoints (Rotate from extracted view to original view since extri/intri is with original view)
         ego_hand_pose2d_kpts = aria_extracted_to_original(aria_poses2d[time_stamp].reshape(-1,3))
-        if np.mean(ego_hand_pose2d_kpts[:,-1]) > 0.3:
-            ego_hand_pose2d_kpts[[0,21],2] = 1
+        # Heuristics
+        if np.mean(ego_hand_pose2d_kpts[:21,-1]) > 0.3:
+            ego_hand_pose2d_kpts[0,-1] = 1
+        if np.mean(ego_hand_pose2d_kpts[21:,-1]) > 0.3:
+            ego_hand_pose2d_kpts[21,-1] = 1
+        # Append kpts result
         multi_view_pose2d[ego_cam_name] = ego_hand_pose2d_kpts
         ###############################################################################
         
@@ -1611,7 +1613,7 @@ def mode_egoexo_hand_pose3d(config: Config):
         ########################## Add Aria calibration model ###############################
         ari_calib_model = legacy_aria_cameraModel(ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]])
         aria_exo_cameras[ego_cam_name] = create_camera(info[ego_cam_name]["camera_data"], ari_calib_model)
-        ############################################################
+        #####################################################################################
 
         ###### Heuristic Check: If two hands are too close, then drop the one with lower confidence ######
         ###### TODO: Instead of dropping one with lower confidence, input both hand's kpts during triangulation and rely on RANSAC to choose the best
@@ -1684,7 +1686,7 @@ def mode_egoexo_hand_pose3d(config: Config):
             save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
             hand_pose_model.draw_projected_poses3d([extracted_projected_pose3d[:21], extracted_projected_pose3d[21:]], image, save_path)
 
-    with open(os.path.join(pose3d_dir, f"egoexo_pose3d_triThresh={tri_threshold}.pkl"), "wb") as f:
+    with open(os.path.join(pose3d_dir, f"egoexo_pose3d_triThresh={tri_threshold}_rtmpose.pkl"), "wb") as f:
         pickle.dump(poses3d, f)
 
 
@@ -2131,8 +2133,8 @@ def run(config: Config):
         mode_body_bbox(config): Detect bbox with pretrained detector (NOTE:Make sure only one person in the frame)
         mode_bbox(config): Propose body bbox with aria position as heuristics
         """
-        mode_bbox(config)
-        # mode_body_bbox(config)
+        # mode_bbox(config)
+        mode_body_bbox(config)
     elif config.mode == "body_pose2d":
         mode_body_pose2d(config)
     elif config.mode == "body_pose3d":

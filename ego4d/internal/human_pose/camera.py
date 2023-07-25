@@ -61,44 +61,44 @@ def _create_exo_camera(exo_cam_desc):
     return camera
 
 
-### Added by jinxu
-def _create_aria_camera():
-    # Hardcode aria intrinsics according to parameter order in https://github.com/colmap/colmap/blob/master/src/base/camera_models.h
-    params = [609.938803895,
-              609.938803895,
-              717.6932089646,
-              708.50651112051,
-              0.4008460861458725,
-              -0.4652816734111045,
-              0.1005307050279029,
-              0]
-    camera = pycolmap.Camera(
-        model="OPENCV_FISHEYE",
-        width=1408,
-        height=1408,
-        params=params,
-    )
-    return camera
+# ### Added by jinxu
+# def _create_aria_camera():
+#     # Hardcode aria intrinsics according to parameter order in https://github.com/colmap/colmap/blob/master/src/base/camera_models.h
+#     params = [609.938803895,
+#               609.938803895,
+#               717.6932089646,
+#               708.50651112051,
+#               0.4008460861458725,
+#               -0.4652816734111045,
+#               0.1005307050279029,
+#               0]
+#     camera = pycolmap.Camera(
+#         model="OPENCV_FISHEYE",
+#         width=1408,
+#         height=1408,
+#         params=params,
+#     )
+#     return camera
 
 
-##### Added by jinxu
-def _create_customized_exo_camera(intrinsics, img_shape):
-    params = [curr_param for curr_param in intrinsics]
-    H,W = img_shape
-    camera = pycolmap.Camera(
-        model="OPENCV_FISHEYE",
-        width=W,
-        height=H,
-        params=params,
-    )
-    return camera
+# ##### Added by jinxu
+# def _create_customized_exo_camera(intrinsics, img_shape):
+#     params = [curr_param for curr_param in intrinsics]
+#     H,W = img_shape
+#     camera = pycolmap.Camera(
+#         model="OPENCV_FISHEYE",
+#         width=W,
+#         height=H,
+#         params=params,
+#     )
+#     return camera
 
 
-##### Added by jinxu
-def create_customized_camera(camera_data, intrinsics, img_shape):
-    ret = copy.deepcopy(camera_data)
-    ret["camera_model"] = _create_customized_exo_camera(intrinsics, img_shape)
-    return Camera(**ret)
+# ##### Added by jinxu
+# def create_customized_camera(camera_data, intrinsics, img_shape):
+#     ret = copy.deepcopy(camera_data)
+#     ret["camera_model"] = _create_customized_exo_camera(intrinsics, img_shape)
+#     return Camera(**ret)
 
 
 def create_camera(camera_data, camera_model):

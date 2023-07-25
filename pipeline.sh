@@ -5,8 +5,8 @@
 #############################################################################################
 
 ############### MODIFY ###############
-CONFIG_NAME="nus_covidtest_02_3"
-TAKE_NAME="nus_covidtest_02_3"
+CONFIG_NAME="sfu_cooking_007_3"
+TAKE_NAME="sfu_cooking_007_3"
 SAVE_PATH='handPose_time_log/'
 # MODE="preprocess
 #       body_bbox
@@ -17,10 +17,10 @@ SAVE_PATH='handPose_time_log/'
 #       hand_pose3d_exo
 #       hand_pose3d_egoexo
 #       "
-MODE="preprocess
-      body_bbox
-      body_pose2d
-      "
+MODE="body_pose2d
+      wholebodyHand_pose3d
+      hand_pose2d_exo
+      hand_pose2d_ego"
 ######################################
 
 # Set-up
