@@ -19,7 +19,7 @@ inputs:
   exo_timesync_name_to_calib_name: null
 mode_preprocess:
   dataset_name: "dataset"
-  vrs_bin_path: "/home/jinxu/code/vrs/build/tools/vrs/vrs"
+  vrs_bin_path: "vrs"
   download_video_files: true
   force_download: false
   extract_all_aria_frames: false

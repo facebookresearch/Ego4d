@@ -1036,6 +1036,7 @@ def mode_wholebodyHand_pose3d(config: Config):
     """
     Body pose3d estimation with exo cameras, but with only Wholebody-hand kpts (42 points)
     """
+    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ##################################
     exo_cam_names = ctx.exo_cam_names # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
@@ -1044,7 +1045,6 @@ def mode_wholebodyHand_pose3d(config: Config):
     ##################################
 
     # Load dataset info
-    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -1153,6 +1153,7 @@ def mode_exo_hand_pose2d(config: Config):
     """
     Hand pose2d estimation for all exo cameras, using hand bbox proposed from wholebody-hand kpts
     """
+    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ##################################
     exo_cam_names = ctx.exo_cam_names  # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
@@ -1161,7 +1162,6 @@ def mode_exo_hand_pose2d(config: Config):
     ##################################
 
     # Load dataset info
-    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -1286,6 +1286,7 @@ def mode_ego_hand_pose2d(config: Config):
     """
     Hand bbox detection & pose2d estimation for aria images.
     """
+    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ################# Modified as needed #####################
     ego_cam_name = 'aria01_rgb'
@@ -1295,7 +1296,6 @@ def mode_ego_hand_pose2d(config: Config):
     ##########################################################
     
     # Load dataset info
-    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -1421,6 +1421,7 @@ def mode_exo_hand_pose3d(config: Config):
     """
     Hand pose3d estimation with only exo cameras
     """
+    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ################### Modify as needed #################################
     exo_cam_names = ctx.exo_cam_names # ctx.exo_cam_names  ['cam01','cam02']
@@ -1429,7 +1430,6 @@ def mode_exo_hand_pose3d(config: Config):
     ######################################################################
 
     # Load dataset info
-    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -1545,6 +1545,7 @@ def mode_egoexo_hand_pose3d(config: Config):
     """
     Hand pose3d estimation with both ego and exo cameras
     """
+    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ########### Modify as needed #############
     exo_cam_names = ctx.exo_cam_names # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
@@ -1554,7 +1555,6 @@ def mode_egoexo_hand_pose3d(config: Config):
     ##########################################
 
     # Load dataset info
-    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
