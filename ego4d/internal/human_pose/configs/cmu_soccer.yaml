@@ -1,0 +1,35 @@
+repo_root_dir: null
+data_dir: "colmap_experiments/"
+gpu_id: 0
+mode: "preprocess"
+inputs:
+  from_frame_number: 12000
+  to_frame_number: 12599
+  metadata_json_path: "s3://ego4d-consortium-sharing/internal/egoexo_pilot/cmu/take_0/metadata.json"
+  aria_trajectory_path: "s3://ego4d-consortium-sharing/internal/temple3_egoexo/cmu_soccer_nopointcloud/closed_loop_trajectory.csv"
+  exo_trajectory_path: "s3://ego4d-consortium-sharing/internal/temple3_egoexo/cmu_soccer_nopointcloud/gopro_calibs.csv"
+  aria_streams:
+    - 214-1
+    - 1201-1
+    - 1201-2
+  exo_timesync_name_to_calib_name:
+    cam01: "cam01"
+    cam02: "cam02"
+    cam03: "cam03"
+    cam04: "cam04"
+mode_preprocess:
+  dataset_name: "dataset"
+  vrs_bin_path: "vrs"
+  download_video_files: true
+  force_download: false
+  extract_all_aria_frames: false
+mode_bbox:
+  detector_config: "tp/mmlab/mmpose/demo/mmdetection_cfg/faster_rcnn_x101_64x4d_fpn_mstrain_3x_coco.py"
+  detector_checkpoint: 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_x101_64x4d_fpn_mstrain_3x_coco/faster_rcnn_x101_64x4d_fpn_mstrain_3x_coco_20210524_124528-26c63de6.pth'
+  use_aria_trajectory: true
+  human_height: 1.5
+mode_pose2d:
+  pose_config: "tp/mmlab/mmpose/configs/wholebody/2d_kpt_sview_rgb_img/topdown_heatmap/coco-wholebody/hrnet_w48_coco_wholebody_384x288_dark_plus.py"
+  pose_checkpoint: "https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w48_coco_wholebody_384x288_dark-f5726563_20200918.pth"
+  dummy_pose_config: 'tp/mmlab/mmpose/configs/body/2d_kpt_sview_rgb_img/topdown_heatmap/coco/hrnet_w32_coco_256x192.py'
+  dummy_pose_checkpoint: 'https://download.openmmlab.com/mmpose/top_down/hrnet/hrnet_w32_coco_256x192-c78dce93_20200708.pth'

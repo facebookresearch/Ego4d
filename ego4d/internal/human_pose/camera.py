@@ -61,50 +61,10 @@ def _create_exo_camera(exo_cam_desc):
     return camera
 
 
-# ### Added by jinxu
-# def _create_aria_camera():
-#     # Hardcode aria intrinsics according to parameter order in https://github.com/colmap/colmap/blob/master/src/base/camera_models.h
-#     params = [609.938803895,
-#               609.938803895,
-#               717.6932089646,
-#               708.50651112051,
-#               0.4008460861458725,
-#               -0.4652816734111045,
-#               0.1005307050279029,
-#               0]
-#     camera = pycolmap.Camera(
-#         model="OPENCV_FISHEYE",
-#         width=1408,
-#         height=1408,
-#         params=params,
-#     )
-#     return camera
-
-
-# ##### Added by jinxu
-# def _create_customized_exo_camera(intrinsics, img_shape):
-#     params = [curr_param for curr_param in intrinsics]
-#     H,W = img_shape
-#     camera = pycolmap.Camera(
-#         model="OPENCV_FISHEYE",
-#         width=W,
-#         height=H,
-#         params=params,
-#     )
-#     return camera
-
-
-# ##### Added by jinxu
-# def create_customized_camera(camera_data, intrinsics, img_shape):
-#     ret = copy.deepcopy(camera_data)
-#     ret["camera_model"] = _create_customized_exo_camera(intrinsics, img_shape)
-#     return Camera(**ret)
-
-
 def create_camera(camera_data, camera_model):
     ret = copy.deepcopy(camera_data)
     if camera_data["camera_type"] == "aria":
-        ret["camera_model"] = camera_model # _create_aria_camera()
+        ret["camera_model"] = camera_model
     else:
         ret["camera_model"] = _create_exo_camera(ret["device_row"])
 
@@ -183,19 +143,8 @@ def create_camera_data(
     }
 
 
-########## Modified #############
-# def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
-#     if cam.camera_type == "aria":
-#         assert cam.camera_model is not None
-#         ret = cam.camera_model.projectionModel.project(pt_device)
-#     elif cam.camera_type == "colmap":
-#         assert cam.camera_model is not None
-#         ret = cam.camera_model.world_to_image(pt_device[0:2] / pt_device[2])
-#     else:
-#         raise AssertionError(f"Unexpected camera type: {cam.camera_type}")
-#     return ret
 def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
-    if cam.camera_type == "aria" or "colmap":
+    if cam.camera_type in ("aria", "colmap"):
         assert cam.camera_model is not None
         ret = cam.camera_model.world_to_image(pt_device[0:2] / pt_device[2])
     else:
@@ -228,7 +177,6 @@ def batch_xworld_to_yimage(pts3d: Vec3, to_cam: Camera):
 
     # TODO: optimize
     for pt3d in pts3d:
-        # T_to_world = np.matmul(to_cam.T_camera_device, to_cam.T_device_world) ##### Modified by jinxu
         T_to_world = to_cam.extrinsics
         pt_target = np.matmul(T_to_world, np.array(pt3d.tolist() + [1.0]))[0:3]
         pts2d.append(xdevice_to_ximage(pt_target, to_cam).reshape(1, -1))
@@ -297,6 +245,6 @@ def get_aria_camera_models(aria_path):
 
     return {
         "1201-1": slam_left,
-        "1201-2": slam_right, ####### Intentional?
+        "1201-2": slam_right,
         "214-1": rgb_cam,
     }

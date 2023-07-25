@@ -40,7 +40,7 @@ from ego4d.internal.human_pose.utils import (
     draw_points_2d,
     get_exo_camera_plane,
     get_region_proposal,
-    get_bbox_fromKpts,
+    get_bbox_from_kpts,
     aria_original_to_extracted,
     aria_extracted_to_original
 )
@@ -93,7 +93,7 @@ class Context:
     frame_rel_dir: str = None
 
 
-class legacy_aria_cameraModel:
+class aria_camera_model:
     def __init__(self, camera_name, camera_model):
         self.camera_name = camera_name
         self.camera_model = camera_model
@@ -331,18 +331,422 @@ def get_context(config: Config) -> Context:
     )
 
 
-# ------------------------------------------------ Jinxu's pipeline starts ------------------------------------------------#
-
+##-------------------------------------------------------------------------------
 def mode_bbox(config: Config):
+    ctx = get_context(config)
+
+    dset = SyncedEgoExoCaptureDset(
+        data_dir=config.cache_root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+
+    detector_model = DetectorModel(
+        detector_config=ctx.detector_config,
+        detector_checkpoint=ctx.detector_checkpoint,
+    )
+
+    # construct ground plane, it is parallel to the plane with all gopro camera centers
+    exo_cameras = {
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
+        for exo_camera_name in ctx.exo_cam_names
+    }
+    exo_camera_centers = np.array(
+        [exo_camera.center for exo_camera_name, exo_camera in exo_cameras.items()]
+    )
+    _, camera_plane_unit_normal = get_exo_camera_plane(exo_camera_centers)
+
+    os.makedirs(ctx.bbox_dir, exist_ok=True)
+    os.makedirs(ctx.vis_bbox_dir, exist_ok=True)
+
+    bboxes = {}
+
+    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+        info = dset[time_stamp]
+        bboxes[time_stamp] = {}
+
+        for exo_camera_name in ctx.exo_cam_names:
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
+            image = cv2.imread(image_path)
+
+            vis_bbox_cam_dir = os.path.join(ctx.vis_bbox_dir, exo_camera_name)
+            if not os.path.exists(vis_bbox_cam_dir):
+                os.makedirs(vis_bbox_cam_dir)
+
+            exo_camera = create_camera(
+                info[f"{exo_camera_name}_0"]["camera_data"], None
+            )
+            left_camera = create_camera(
+                info["aria01_slam-left"]["camera_data"], None
+            )  # TODO: use the camera model of the aria camera
+            right_camera = create_camera(
+                info["aria01_slam-right"]["camera_data"], None
+            )  # TODO: use the camera model of the aria camera
+            human_center_3d = (left_camera.center + right_camera.center) / 2
+
+            proposal_points_3d = get_region_proposal(
+                human_center_3d,
+                unit_normal=camera_plane_unit_normal,
+                human_height=ctx.human_height,
+            )
+            proposal_points_2d = batch_xworld_to_yimage(proposal_points_3d, exo_camera)
+            proposal_bbox = check_and_convert_bbox(
+                proposal_points_2d,
+                exo_camera.camera_model.width,
+                exo_camera.camera_model.height,
+                min_area_ratio=config.mode_bbox.min_area_ratio,
+            )
+
+            bbox_xyxy = None
+            offshelf_bboxes = None
+
+            if proposal_bbox is not None:
+                proposal_bbox = np.array(
+                    [
+                        proposal_bbox[0],
+                        proposal_bbox[1],
+                        proposal_bbox[2],
+                        proposal_bbox[3],
+                        1,
+                    ]
+                )  ## add confidnece
+                proposal_bboxes = [{"bbox": proposal_bbox}]
+                offshelf_bboxes = detector_model.get_bboxes(
+                    image_name=image_path, bboxes=proposal_bboxes
+                )
+
+            if offshelf_bboxes is not None:
+                assert len(offshelf_bboxes) == 1  ## single human per scene
+                bbox_xyxy = offshelf_bboxes[0]["bbox"][:4]
+
+                # uncomment to visualize the bounding box
+                # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
+                bbox_image = draw_bbox_xyxy(image, bbox_xyxy, color=(0, 255, 0))
+            #
+            else:
+                bbox_image = image
+
+            # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
+
+            cv2.imwrite(
+                os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), bbox_image
+            )
+            bboxes[time_stamp][exo_camera_name] = bbox_xyxy
+
+    # save the bboxes as a pickle file
+    with open(os.path.join(ctx.bbox_dir, "bbox.pkl"), "wb") as f:
+        pickle.dump(bboxes, f)
+
+
+##-------------------------------------------------------------------------------
+def mode_pose2d(config: Config):
+    ctx = get_context(config)
+
+    dset = SyncedEgoExoCaptureDset(
+        data_dir=config.cache_root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+    all_cam_ids = set(dset.all_cam_ids())
+
+    # ---------------construct pose model-------------------
+    pose_model = PoseModel(
+        pose_config=ctx.pose_config, pose_checkpoint=ctx.pose_checkpoint
+    )
+
+    ##--------construct ground plane, it is parallel to the plane with all gopro camera centers----------------
+    exo_cameras = {
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
+        for exo_camera_name in ctx.exo_cam_names
+    }
+
+    if not os.path.exists(ctx.pose2d_dir):
+        os.makedirs(ctx.pose2d_dir)
+
+    ## if ctx.vis_pose_dir does not exist make it
+    if not os.path.exists(ctx.vis_pose2d_dir):
+        os.makedirs(ctx.vis_pose2d_dir)
+
+    poses2d = {}
+
+    # load bboxes from bbox_dir/bbox.pkl
+    bbox_file = os.path.join(ctx.bbox_dir, "bbox.pkl")
+
+    if not os.path.exists(bbox_file):
+        print(f"bbox path does not exist: {bbox_file}")
+        print("NOTE: run mode_bbox")
+        sys.exit(1)
+
+    with open(bbox_file, "rb") as f:
+        bboxes = pickle.load(f)
+
+    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
+        info = dset[time_stamp]
+
+        poses2d[time_stamp] = {}
+
+        for exo_camera_name in ctx.exo_cam_names:
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
+            image = cv2.imread(image_path)
+
+            vis_pose2d_cam_dir = os.path.join(ctx.vis_pose2d_dir, exo_camera_name)
+            if not os.path.exists(vis_pose2d_cam_dir):
+                os.makedirs(vis_pose2d_cam_dir)
+
+            bbox_xyxy = bboxes[time_stamp][exo_camera_name]  # x1, y1, x2, y2
+
+            if bbox_xyxy is not None:
+                # add confidence score to the bbox
+                bbox_xyxy = np.append(bbox_xyxy, 1.0)
+
+                pose_results = pose_model.get_poses2d(
+                    bboxes=[{"bbox": bbox_xyxy}],
+                    image_name=image_path,
+                )
+
+                assert len(pose_results) == 1
+
+                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
+                pose_model.draw_poses2d(pose_results, image, save_path)
+
+                pose_result = pose_results[0]
+                pose2d = pose_result["keypoints"]
+            else:
+                pose2d = None
+                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
+                cv2.imwrite(save_path, image)
+
+            poses2d[time_stamp][exo_camera_name] = pose2d
+
+    # save poses2d to pose2d_dir/pose2d.pkl
+    with open(os.path.join(ctx.pose2d_dir, "pose2d.pkl"), "wb") as f:
+        pickle.dump(poses2d, f)
+
+
+##-------------------------------------------------------------------------------
+def mode_pose3d(config: Config):
+    ctx = get_context(config)
+
+    dset = SyncedEgoExoCaptureDset(
+        data_dir=config.cache_root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+
+    # ---------------import triangulator-------------------
+    pose_model = PoseModel(
+        pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint
+    )  # lightweight for visualization only!
+
+    exo_cameras = {
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
+        for exo_camera_name in ctx.exo_cam_names
+    }
+
+    os.makedirs(ctx.pose3d_dir, exist_ok=True)
+    os.makedirs(ctx.vis_pose3d_dir, exist_ok=True)
+
+    start_time_stamp = ctx.pose3d_start_frame
+    end_time_stamp = ctx.pose3d_end_frame if ctx.pose3d_end_frame > 0 else len(dset)
+    time_stamps = range(start_time_stamp, end_time_stamp)
+
+    ## check if ctx.pose2d_dir
+    camera_pose2d_files = [
+        os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+        for exo_camera_name in ctx.exo_cam_names
+    ]
+
+    ## check if all camera pose2d files exist
+    is_parallel = True
+    for camera_pose2d_file in camera_pose2d_files:
+        if not os.path.exists(camera_pose2d_file):
+            is_parallel = False
+            break
+
+    if is_parallel:
+        poses2d = {
+            time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names}
+            for time_stamp in time_stamps
+        }
+        for exo_camera_name in ctx.exo_cam_names:
+            pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+            with open(pose2d_file, "rb") as f:
+                poses2d_camera = pickle.load(f)
+
+            for time_stamp in time_stamps:
+                poses2d[time_stamp][exo_camera_name] = poses2d_camera[time_stamp][
+                    exo_camera_name
+                ]
+
+    else:
+        ## load pose2d.pkl
+        pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
+        with open(pose2d_file, "rb") as f:
+            poses2d = pickle.load(f)
+
+    for time_stamp in tqdm(time_stamps):
+        info = dset[time_stamp]
+
+        multi_view_pose2d = {
+            exo_camera_name: poses2d[time_stamp][exo_camera_name]
+            for exo_camera_name in ctx.exo_cam_names
+        }
+
+        # triangulate
+        triangulator = Triangulator(
+            time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d
+        )
+        pose3d = triangulator.run(debug=True)  ## 17 x 4 (x, y, z, confidence)
+
+        # visualize pose3d
+        for exo_camera_name in ctx.exo_cam_names:
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
+            image = cv2.imread(image_path)
+            exo_camera = exo_cameras[exo_camera_name]
+
+            vis_pose3d_cam_dir = os.path.join(ctx.vis_pose3d_dir, exo_camera_name)
+            os.makedirs(vis_pose3d_cam_dir, exist_ok=True)
+
+            projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
+            projected_pose3d = np.concatenate(
+                [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
+            )  ## 17 x 3
+
+            save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
+            pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
+
+        # save pose3d as timestamp.npy
+        np.save(os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy"), pose3d)
+
+
+##-------------------------------------------------------------------------------
+def mode_refine_pose3d(config: Config):
+    ctx = get_context(config)
+
+    dset = SyncedEgoExoCaptureDset(
+        data_dir=config.cache_root_dir,
+        dataset_json_path=ctx.dataset_json_path,
+        read_frames=False,
+    )
+
+    # ---------------import triangulator-------------------
+    pose_model = PoseModel(
+        pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint
+    )  ## lightweight for visualization only!
+
+    exo_cameras = {
+        exo_camera_name: create_camera(
+            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+        )
+        for exo_camera_name in ctx.exo_cam_names
+    }
+    os.makedirs(ctx.refine_pose3d_dir, exist_ok=True)
+    os.makedirs(ctx.vis_refine_pose3d_dir, exist_ok=True)
+
+    ## load all pose3d from ctx.pose3d_dir, they are 00000.npy, 00001.npy, using os.listdir ending in .npy and is 05d, do not use dset
+    time_stamps = sorted(
+        [int(f.split(".")[0]) for f in os.listdir(ctx.pose3d_dir) if f.endswith(".npy")]
+    )
+    pose3d_files = [
+        os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy")
+        for time_stamp in time_stamps
+    ]
+
+    poses3d = []
+    for time_stamp, pose3d_file in enumerate(pose3d_files):
+        poses3d.append(np.load(pose3d_file))
+
+    poses3d = np.stack(poses3d, axis=0)  ## T x 17 x 4 (x, y, z, confidence)
+
+    ## check if ctx.pose2d_dir,
+    camera_pose2d_files = [
+        os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+        for exo_camera_name in ctx.exo_cam_names
+    ]
+
+    ## check if all camera pose2d files exist
+    is_parallel = True
+    for camera_pose2d_file in camera_pose2d_files:
+        if not os.path.exists(camera_pose2d_file):
+            is_parallel = False
+            break
+
+    if is_parallel:
+        poses2d = {
+            time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names}
+            for time_stamp in time_stamps
+        }
+        for exo_camera_name in ctx.exo_cam_names:
+            pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+            with open(pose2d_file, "rb") as f:
+                poses2d_camera = pickle.load(f)
+
+            for time_stamp in time_stamps:
+                poses2d[time_stamp][exo_camera_name] = poses2d_camera[time_stamp][
+                    exo_camera_name
+                ]
+
+    else:
+        ## load pose2d.pkl
+        pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
+        with open(pose2d_file, "rb") as f:
+            poses2d = pickle.load(f)
+
+    ## detect outliers and replace with interpolated values, basic smoothing
+    poses3d = detect_outliers_and_interpolate(poses3d)
+
+    ## refine pose3d
+    poses3d = get_refined_pose3d(poses3d)
+
+    for time_stamp in tqdm(range(len(time_stamps)), total=len(time_stamps)):
+        info = dset[time_stamp]
+        pose3d = poses3d[time_stamp]
+
+        ## visualize pose3d
+        for exo_camera_name in ctx.exo_cam_names:
+            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
+            image = cv2.imread(image_path)
+            exo_camera = exo_cameras[exo_camera_name]
+
+            # pyre-ignore
+            vis_refine_pose3d_cam_dir = os.path.join(
+                ctx.vis_refine_pose3d_dir, exo_camera_name
+            )
+            os.makedirs(vis_refine_pose3d_cam_dir, exist_ok=True)
+
+            projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
+            projected_pose3d = np.concatenate(
+                [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
+            )  ## 17 x 3
+
+            save_path = os.path.join(vis_refine_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
+            pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
+
+    ## save poses3d.pkl
+    # pyre-ignore
+    with open(os.path.join(ctx.refine_pose3d_dir, "pose3d.pkl"), "wb") as f:
+        pickle.dump(poses3d, f)
+
+
+
+
+# -------------------------------------------- New pipeline's code start -------------------------------------------- #
+def mode_body_bbox(config: Config):
     """
     Detect human body bbox with aria position as heuristics
     """
-    ctx = get_context(config)
     #################################### << Hard coded to show visualization. Can be integrated into args
     visualization = True
     ####################################
-
+    
     # Load dataset info
+    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -453,6 +857,9 @@ def mode_bbox(config: Config):
 
 
 def mode_body_pose2d(config: Config):
+    """
+    Human body pose2d estimation with all exo cameras
+    """
     ################################# << Hard coded to show visualization. Can be integrated into args
     visualization = True
     #################################
@@ -495,7 +902,6 @@ def mode_body_pose2d(config: Config):
         poses2d[time_stamp] = {}
         # Iterate through every cameras
         for exo_camera_name in ctx.exo_cam_names:
-            # image_path = info[exo_camera_name]["abs_frame_path"] //prev
             image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
             image = cv2.imread(image_path)
             
@@ -544,9 +950,9 @@ def mode_body_pose3d(config: Config):
     ############################ << Hard coded to show visualization. Can be integrated into args
     visualization = True
     ############################
-
-    ctx = get_context(config)
+    
     # Load dataset info
+    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -604,7 +1010,6 @@ def mode_body_pose3d(config: Config):
         # visualize pose3d
         if visualization:
             for exo_camera_name in ctx.exo_cam_names:
-                # image_path = info[exo_camera_name]["abs_frame_path"] //prev
                 image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
                 image = cv2.imread(image_path)
                 exo_camera = exo_cameras[exo_camera_name]
@@ -631,7 +1036,6 @@ def mode_wholebodyHand_pose3d(config: Config):
     """
     Body pose3d estimation with exo cameras, but with only Wholebody-hand kpts (42 points)
     """
-    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ##################################
     exo_cam_names = ctx.exo_cam_names # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
@@ -640,6 +1044,7 @@ def mode_wholebodyHand_pose3d(config: Config):
     ##################################
 
     # Load dataset info
+    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -723,7 +1128,6 @@ def mode_wholebodyHand_pose3d(config: Config):
         # visualize pose3d
         if visualization:
             for exo_camera_name in exo_cam_names:
-                # image_path = info[exo_camera_name]["abs_frame_path"] //prev
                 image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
                 image = cv2.imread(image_path)
                 exo_camera = exo_cameras[exo_camera_name]
@@ -749,7 +1153,6 @@ def mode_exo_hand_pose2d(config: Config):
     """
     Hand pose2d estimation for all exo cameras, using hand bbox proposed from wholebody-hand kpts
     """
-    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ##################################
     exo_cam_names = ctx.exo_cam_names  # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
@@ -758,6 +1161,7 @@ def mode_exo_hand_pose2d(config: Config):
     ##################################
 
     # Load dataset info
+    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -802,7 +1206,6 @@ def mode_exo_hand_pose2d(config: Config):
         bboxes[time_stamp] = {}
         # Iterate through every cameras
         for exo_camera_name in exo_cam_names:
-            # image_path = info[exo_camera_name]["abs_frame_path"] //prev
             image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
             image = cv2.imread(image_path)
             
@@ -827,8 +1230,8 @@ def mode_exo_hand_pose2d(config: Config):
 
             ############## Hand bbox ##############
             img_H, img_W = image.shape[:2]
-            right_hand_bbox = get_bbox_fromKpts(right_hand_kpts, img_W, img_H, padding=50)
-            left_hand_bbox = get_bbox_fromKpts(left_hand_kpts, img_W, img_H, padding=50)
+            right_hand_bbox = get_bbox_from_kpts(right_hand_kpts, img_W, img_H, padding=50)
+            left_hand_bbox = get_bbox_from_kpts(left_hand_kpts, img_W, img_H, padding=50)
             ################# Heuristic Check: If wholeBody-Hand kpts confidence is too low, then assign zero bbox #################
             right_kpts_avgConf, left_kpts_avgConf = np.mean(right_hand_kpts[:,2]), np.mean(left_hand_kpts[:,2])
             if right_kpts_avgConf < 0.5:
@@ -929,7 +1332,6 @@ def mode_ego_hand_pose2d(config: Config):
     with open(pose3d_dir, "rb") as f:
         wholebodyHand_pose3d = pickle.load(f)
 
-
     # Create aria camera model
     capture_dir = os.path.join(ctx.data_dir, "captures", ctx.take["capture"]["root_dir"])
     aria_path = os.path.join(capture_dir, "videos/aria01.vrs")
@@ -950,8 +1352,7 @@ def mode_ego_hand_pose2d(config: Config):
         image = cv2.imread(image_path)
         
         # Create aria camera at this timestamp
-        # aria_camera = create_camera(dset[time_stamp][ego_cam_name]["camera_data"], None) //prev
-        ari_calib_model = legacy_aria_cameraModel(ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]])
+        ari_calib_model = aria_camera_model(ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]])
         aria_camera = create_camera(dset[time_stamp][ego_cam_name]["camera_data"], ari_calib_model)
 
         ########################## Hand bbox from re-projected wholebody-Hand kpts ############################
@@ -977,8 +1378,8 @@ def mode_ego_hand_pose2d(config: Config):
                                                     aria_original_to_extracted(left_hand_kpts, (orig_H, orig_W))
         ########################################################################################
         
-        right_hand_bbox = get_bbox_fromKpts(rot_right_hand_kpts, img_W, img_H, padding=50)  # Adjust padding as needed
-        left_hand_bbox = get_bbox_fromKpts(rot_left_hand_kpts, img_W, img_H, padding=50)    # Adjust padding as needed
+        right_hand_bbox = get_bbox_from_kpts(rot_right_hand_kpts, img_W, img_H, padding=50)  # Adjust padding as needed
+        left_hand_bbox = get_bbox_from_kpts(rot_left_hand_kpts, img_W, img_H, padding=50)    # Adjust padding as needed
         # Save result
         bboxes[time_stamp] = [right_hand_bbox, left_hand_bbox]
         # Hand bbox visualization
@@ -1020,7 +1421,6 @@ def mode_exo_hand_pose3d(config: Config):
     """
     Hand pose3d estimation with only exo cameras
     """
-    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ################### Modify as needed #################################
     exo_cam_names = ctx.exo_cam_names # ctx.exo_cam_names  ['cam01','cam02']
@@ -1029,6 +1429,7 @@ def mode_exo_hand_pose3d(config: Config):
     ######################################################################
 
     # Load dataset info
+    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -1144,7 +1545,6 @@ def mode_egoexo_hand_pose3d(config: Config):
     """
     Hand pose3d estimation with both ego and exo cameras
     """
-    ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args 
     ########### Modify as needed #############
     exo_cam_names = ctx.exo_cam_names # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
@@ -1153,6 +1553,8 @@ def mode_egoexo_hand_pose3d(config: Config):
     visualization = True
     ##########################################
 
+    # Load dataset info
+    ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
         data_dir=config.data_dir,
         dataset_json_path=ctx.dataset_json_path,
@@ -1235,7 +1637,7 @@ def mode_egoexo_hand_pose3d(config: Config):
         
         # Add ego camera
         ########################## Add Aria calibration model ###############################
-        ari_calib_model = legacy_aria_cameraModel(ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]])
+        ari_calib_model = aria_camera_model(ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]])
         aria_exo_cameras[ego_cam_name] = create_camera(info[ego_cam_name]["camera_data"], ari_calib_model)
         #####################################################################################
 
@@ -1273,7 +1675,6 @@ def mode_egoexo_hand_pose3d(config: Config):
         if visualization:
             ### Exo camera visualization ###
             for camera_name in exo_cam_names:
-                # image_path = info[camera_name]["abs_frame_path"] //prev
                 image_path = info[f"{camera_name}_0"]["abs_frame_path"]
                 image = cv2.imread(image_path)
                 curr_camera = aria_exo_cameras[camera_name]
@@ -1312,8 +1713,7 @@ def mode_egoexo_hand_pose3d(config: Config):
     with open(os.path.join(pose3d_dir, f"egoexo_pose3d_triThresh={tri_threshold}.pkl"), "wb") as f:
         pickle.dump(poses3d, f)
 
-
-# ------------------------------------------------ Jinxu's pipeline end ------------------------------------------------#
+# -------------------------------------------- New pipeline's code end -------------------------------------------- #
 
 
 def mode_preprocess_legacy(config: Config):
@@ -1646,7 +2046,6 @@ def mode_preprocess(config: Config):
 
 
 
-# Not tested with Jinxu's pipeline
 def mode_multi_view_vis(config: Config, flag="pose3d"):
     ctx = get_context(config)
     camera_names = ctx.exo_cam_names
@@ -1671,7 +2070,7 @@ def mode_multi_view_vis(config: Config, flag="pose3d"):
     multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video)
 
 
-# Not tested with Jinxu's pipeline
+
 def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
     os.makedirs(write_dir, exist_ok=True)
 
@@ -1749,13 +2148,42 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
     os.system(command)
 
 
-
+"""
+Original main function to run body pose estimation inference
+"""
 @hydra.main(config_path="configs", config_name=None, version_base=None)
 def run(config: Config):
     if config.mode == "preprocess":
         mode_preprocess(config)
-    elif config.mode == "body_bbox":
+    elif config.mode == "bbox":
         mode_bbox(config)
+    elif config.mode == "pose2d":
+        mode_pose2d(config)
+    elif config.mode == "pose3d":
+        mode_pose3d(config)
+    elif config.mode == "refine_pose3d":
+        mode_refine_pose3d(config)
+    elif config.mode == "multi_view_vis_bbox":
+        mode_multi_view_vis(config, "bbox")
+    elif config.mode == "multi_view_vis_pose2d":
+        mode_multi_view_vis(config, "pose2d")
+    elif config.mode == "multi_view_vis_pose3d":
+        mode_multi_view_vis(config, "pose3d")
+    elif config.mode == "multi_view_vis_refine_pose3d":
+        mode_multi_view_vis(config, "refine_pose3d")
+    else:
+        raise AssertionError(f"unknown mode: {config.mode}")
+
+
+"""
+Newly added main function to run body & hand pose estimation inference
+"""
+@hydra.main(config_path="configs", config_name=None, version_base=None)
+def new_run(config: Config):
+    if config.mode == "preprocess":
+        mode_preprocess(config)
+    elif config.mode == "body_bbox":
+        mode_body_bbox(config)
     elif config.mode == "body_pose2d":
         mode_body_pose2d(config)
     elif config.mode == "body_pose3d":
@@ -1770,8 +2198,6 @@ def run(config: Config):
         mode_exo_hand_pose3d(config)
     elif config.mode == 'hand_pose3d_egoexo':
         mode_egoexo_hand_pose3d(config)
-    elif config.mode == "multi_view_vis":
-        mode_multi_view_vis(config)
     elif config.mode == "show_all_config":
         ctx = get_context(config)
         print(ctx)
@@ -1837,7 +2263,7 @@ def get_hydra_config(args):
     cfg = hydra.compose(
         config_name=args.config_name,
         # args.opts contains config overrides, e.g., ["inputs.from_frame_number=7000",]
-        # overrides=args.opts + [f"inputs.take_name={args.take_name}"],
+        overrides=args.opts + [f"inputs.take_name={args.take_name}"],
     )
     print("Final config:", cfg)
     return cfg
@@ -1853,31 +2279,33 @@ def main(args):
     for step in steps:
         if step == "preprocess":
             mode_preprocess(config)
-        elif step == "body_bbox":
+        elif step == "bbox":
             mode_bbox(config)
-        elif step == "body_pose2d":
-            mode_body_pose2d(config)
-        elif step == "body_pose3d":
-            mode_body_pose3d(config)
-        elif step == "wholebodyHand_pose3d":
-            mode_wholebodyHand_pose3d(config)
-        elif step == "hand_pose2d_exo":
-            mode_exo_hand_pose2d(config)
-        elif step == "hand_pose2d_ego":
-            mode_ego_hand_pose2d(config)
-        elif step == "hand_pose3d_exo":
-            mode_exo_hand_pose3d(config)
-        elif step == 'hand_pose3d_egoexo':
-            mode_egoexo_hand_pose3d(config)
-        elif step == "multi_view_vis":
-            mode_multi_view_vis(config)
+        elif step == "pose2d":
+            mode_pose2d(config)
+        elif step == "pose3d":
+            mode_pose3d(config)
+        elif step == "refine_pose3d":
+            mode_refine_pose3d(config)
+        elif step == "multi_view_vis_bbox":
+            mode_multi_view_vis(config, flag="bbox")
+        elif step == "multi_view_vis_pose2d":
+            mode_multi_view_vis(config, flag="pose2d")
+        elif step == "multi_view_vis_pose3d":
+            mode_multi_view_vis(config, flag="pose3d")
+        elif step == "multi_view_vis_refine_pose3d":
+            mode_multi_view_vis(config, flag="refine_pose3d")
         else:
-            raise AssertionError(f"Unknown mode: {config.mode}")
+            raise Exception(f"Unknown step: {step}")
 
 
 if __name__ == "__main__":
-    # Using hydra:
-    run()
+    # Whether using new pipeline's code to do inference
+    use_new_pipeline=True
+    if use_new_pipeline:
+        new_run()
+    else:
+        run()
     # # Not using hydra:
     # args = parse_args()
     # main(args)

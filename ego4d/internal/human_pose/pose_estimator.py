@@ -22,7 +22,13 @@ from tqdm import tqdm
 
 ##------------------------------------------------------------------------------------
 class PoseModel:
-    def __init__(self,  pose_config=None, pose_checkpoint=None, rgb_keypoint_thres=0.7, rgb_keypoint_vis_thres=0.7, refine_bbox=True, thickness=6):
+    def __init__(self, 
+                 pose_config=None, 
+                 pose_checkpoint=None, 
+                 rgb_keypoint_thres=0.7, 
+                 rgb_keypoint_vis_thres=0.7, 
+                 refine_bbox=True, 
+                 thickness=6):
         self.pose_config = pose_config
         self.pose_checkpoint = pose_checkpoint
 
@@ -66,7 +72,7 @@ class PoseModel:
             )
             / 10.0
         )
-        self.refine_bbox = refine_bbox ### Added by jinxu (No need to refine hand bbox)
+        self.refine_bbox = refine_bbox
 
         ##------hyperparameters-----
         self.bbox_thres = 0.1  ## Bounding box score threshold

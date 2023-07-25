@@ -162,7 +162,7 @@ def get_exo_camera_plane(points):
     return plane, unit_normal
 
 
-def get_bbox_fromKpts(kpts, img_W, img_H, padding=50):
+def get_bbox_from_kpts(kpts, img_W, img_H, padding=50):
     # Get proposed hand bounding box from hand keypoints
     x1, y1, x2, y2 = kpts[:,0].min(), \
                      kpts[:,1].min(), \
@@ -203,83 +203,3 @@ def aria_original_to_extracted(kpts, img_shape=(1408,1408)):
     new_kpts[:,0] = H - kpts[:,1]
     new_kpts[:,1] = kpts[:,0]
     return new_kpts
-
-
-def aria_slamOriginal_to_extracted(kpts, img_shape=(1408,1408)):
-    """
-    Rotate kpts coordinates from original view (hand horizontal) to extracted view (hand vertical)
-    img_shape is the shape of original view image
-    """
-    # assert len(kpts.shape) == 2, "Only can rotate 2D arrays"
-    H,W = img_shape
-    new_kpts = kpts.copy()
-    new_kpts[:,0] = H - kpts[:,1] + 80
-    new_kpts[:,1] = kpts[:,0]
-    return new_kpts
-
-
-def get_two_small_bboxes(bboxes):
-    """
-    Since the hand bbox detection might contain multiple results where one bbox capture both hands, while we want each bbox
-    to contain only one hand, we select most two small bboxes from multiple results.
-    """
-    bbox_area = (bboxes[:,2] - bboxes[:,0]) * (bboxes[:,3] - bboxes[:,1])
-    min_idx = np.argsort(bbox_area)[:2]
-    return bboxes[min_idx,:4]
-
-
-def get_largest_bboxes(bboxes):
-    """
-    If there are multiple persons detected, then assume the largest one is the subject of interest. Used in 0630_Cooking_4 as heuristics
-    """
-    bbox_area = (bboxes[:,2] - bboxes[:,0]) * (bboxes[:,3] - bboxes[:,1])
-    max_idx = np.argmax(bbox_area)
-    return bboxes[max_idx, :4]
-
-
-
-def left_right_bboxes_div(bboxes):
-    """
-    Since the bbox for hand detection in aria view is from pretrained hand detector that doesn't provide left/right hand label,
-    we apply some heuristics to separate left/right bboxes from their center location. Bbox whose center has smaller x-coor is 
-    considered as left hand bbox.
-    Return:
-        -  (2,4) where first one is right hand bbox and second is left hand's bbox
-    """
-    # Extract x-coor of bbox center
-    assert len(bboxes) >= 2, "Less than two bboxes detected. Might need manual correction"
-    bbox_1, bbox_2 = bboxes[0], bboxes[1]
-    bbox_1_xc, bbox_2_xc = (bbox_1[2] + bbox_1[0]) / 2, (bbox_2[2] + bbox_2[0]) / 2
-    
-    # Check left/right hand bbox
-    if bbox_1_xc < bbox_2_xc:
-        return np.array([bbox_2,bbox_1])
-    elif bbox_2_xc < bbox_1_xc:
-        return np.array([bbox_1, bbox_2])
-    else:
-        raise Exception("Two hand's bbox cannot be the same.")
-    
-
-def extri_intri_from_json(extr_dir, intri_dir, time_stamp=None, ego=False):
-    """
-    For self-collected data (aprt from Meta's processed data), return camera extrinsic and 
-    instrinsic from calibration JSON file
-    """
-    # Load extrinisc from json file
-    if not ego:
-        extri_raw = json.load(open(extr_dir))
-        extrinsics = np.array(extri_raw['T_camera_world'])
-    else:
-        extri_raw = json.load(open(extr_dir))
-        # index extrinsics with time_stamp
-        curr_key = sorted(list(extri_raw.keys()))[time_stamp]
-        extrinsics = np.array(extri_raw[curr_key]['T_camera_world'])
-    
-    # Load intrinsic from json file 
-    intri_raw = json.load(open(intri_dir))
-    intrinsics = np.zeros(8)
-    intrinsics[0], intrinsics[1] = intri_raw['f'], intri_raw['f'] # f_x,f_y
-    intrinsics[2], intrinsics[3] = float(intri_raw['width'])/2 + float(intri_raw['cx']), float(intri_raw['height'])/2 + float(intri_raw['cy']) # c_x,c_y
-    intrinsics[4],intrinsics[5],intrinsics[6] = intri_raw['k1'], intri_raw['k2'], intri_raw['k3'] # k_1,k_2,k_3,k_4
-
-    return extrinsics, intrinsics

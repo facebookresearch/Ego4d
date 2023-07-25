@@ -176,42 +176,6 @@ def download_andor_generate_streams(
     return by_dev_id
 
 
-
-# def download_andor_generate_streams_jinxu(
-#     metadata: Dict[str, Any],
-#     download_video_files: bool,
-#     force_download: bool,
-#     output_dir: str,
-# ) -> Dict[str, Any]:
-#     """
-#     Created by jinxu to follow similar pipeline in given code to develop by_dev_id object without downloading videos.
-#     """
-#     os.makedirs(output_dir, exist_ok=True)
-#     # if metadata["timesync_csv_path"] is not None:
-#     #     _download_s3_path(
-#     #         metadata["timesync_csv_path"], os.path.join(output_dir, "timesync.csv")
-#     #     )
-
-#     by_dev_id = {}
-#     for v in tqdm(metadata["videos"]):
-#         by_dev_id[v["device_id"]] = v
-#         s3_path = v["s3_path"]
-#         if s3_path.startswith("s3://") and (
-#             download_video_files or "aria" in v["device_id"]
-#         ):
-#             local_path = os.path.join(output_dir, v["device_id"])
-#             by_dev_id[v["device_id"]]["local_path"] = local_path
-#             if os.path.exists(local_path) and not force_download:
-#                 continue
-#             print(f"Fetching {s3_path} to {local_path}")
-#             _download_s3_path(s3_path, local_path)
-#         else:
-#             by_dev_id[v["device_id"]]["local_path"] = s3_path
-#     return by_dev_id
-
-
-
-
 def _download_data(config: ColmapConfig, force_download: bool) -> Dict[str, Any]:
     assert config.output_dir is not None, "Please set the output directory"
 
