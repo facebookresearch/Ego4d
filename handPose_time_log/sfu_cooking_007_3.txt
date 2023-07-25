@@ -1,6 +1,0 @@
-preprocess: 0hrs 18min 41sec
-body_bbox: 0hrs 2min 46sec
-body_pose2d: 0hrs 3min 59sec
-wholebodyHand_pose3d: 0hrs 5min 3sec
-hand_pose2d_exo: 0hrs 8min 37sec
-hand_pose2d_ego: 0hrs 0min 30sec

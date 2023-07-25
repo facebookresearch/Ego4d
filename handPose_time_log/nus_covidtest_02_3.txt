@@ -1,3 +1,0 @@
-preprocess: 0hrs 12min 16sec
-body_bbox: 0hrs 0min 6sec
-body_pose2d: 0hrs 0min 6sec
