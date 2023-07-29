@@ -1477,7 +1477,7 @@ def validate_egoexo_files(
     if not manifest.participants:
         ret.append(
             Error(
-                ErrorLevel.WARN,
+                ErrorLevel.ERROR,
                 "participants",
                 "no_participant_metadata",
                 "missing participant metadata (null or empty)",
@@ -1489,7 +1489,7 @@ def validate_egoexo_files(
     if not manifest.physical_setting:
         ret.append(
             Error(
-                ErrorLevel.WARN,
+                ErrorLevel.ERROR,
                 "physical_setting",
                 "no_physical_setting_metadata",
                 "missing physical setting metadata (null or empty)",
@@ -1499,7 +1499,7 @@ def validate_egoexo_files(
     if not manifest.objects:
         ret.append(
             Error(
-                ErrorLevel.WARN,
+                ErrorLevel.ERROR,
                 "objects",
                 "no_objects_metadata",
                 "missing object metadata (null or empty)",
@@ -1509,6 +1509,7 @@ def validate_egoexo_files(
         ret.extend(_check_objects(manifest))
 
     provided_capture_uids = set(manifest.captures.keys())
+    provided_participant_ids = set(x[0] for x in manifest.participants.keys())
     for capture_uid, takes in manifest.takes.items():
         take = takes[0]
         if capture_uid not in provided_capture_uids:
@@ -1520,6 +1521,17 @@ def validate_egoexo_files(
                     f"take {take.take_id} has incorrect capture uid: {capture_uid} (typo or misisng capture in metadata?)",
                 )
             )
+        for take in takes:
+            if take.recording_participant_id not in provided_participant_ids:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        take.take_id,
+                        "participant_id_missing",
+                        f"participant {take.recording_participant_id} is missing from participant_metadata, but referenced in capture {capture_uid} take {take.take_id}"
+                    )
+                )
+        
 
     ret.extend(_check_video_metadata(manifest, metadata))
     ret.extend(_check_video_components(manifest))
