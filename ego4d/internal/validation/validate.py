@@ -2,7 +2,6 @@
 import functools
 import itertools
 import os
-import traceback
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -822,7 +821,18 @@ def _check_associated_takes_metadata(
             )
         )
 
+    seen_take_ids = set()
     for take in takes:
+        if take.take_id in seen_take_ids:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    take.take_id,
+                    "repeated_take_id",
+                    f"take {take.take_id} for capture {capture_uid} is listed multiple times"
+                )
+            )
+        seen_take_ids.add(take.take_id)
         if take.scenario_id not in metadata.scenarios:
             ret.append(
                 Error(
@@ -832,7 +842,7 @@ def _check_associated_takes_metadata(
                     f"take {take.take_id} for capture {capture_uid} has incorrect scenario ID {take.scenario_id}",
                 )
             )
-        if take.recording_participant_id is None:
+        if take.recording_participant_id is None and not take.is_dropped :
             ret.append(
                 Error(
                     ErrorLevel.WARN,
@@ -1056,26 +1066,26 @@ def _check_participants(
                     v = p.pre_survey_data["has_taught_scenario"]
                     try:
                         _ = bool(v)
-                    except Exception:
+                    except Exception as e:
                         ret.append(
                             Error(
                                 ErrorLevel.WARN,
                                 participant_id,
                                 "participant_pre_survey_data_contraints",
-                                f"has_taught_scenario could not be converted to boolean: {traceback.format_exc()}",
+                                f"has_taught_scenario could not be converted to boolean: {e}",
                             )
                         )
                 if "has_recorded_scenario_howto" in given_ks:
                     v = p.pre_survey_data["has_recorded_scenario_howto"]
                     try:
                         _ = bool(v)
-                    except Exception:
+                    except Exception as e:
                         ret.append(
                             Error(
                                 ErrorLevel.WARN,
                                 participant_id,
                                 "participant_pre_survey_data_contraints",
-                                f"has_recorded_scenario_howto could not be converted to boolean: {traceback.format_exc()}",
+                                f"has_recorded_scenario_howto could not be converted to boolean: {e}",
                             )
                         )
 
@@ -1083,13 +1093,13 @@ def _check_participants(
                     v = p.pre_survey_data["typical_time_to_complete_scenario_minutes"]
                     try:
                         _ = int(v)
-                    except Exception:
+                    except Exception as e:
                         ret.append(
                             Error(
                                 ErrorLevel.WARN,
                                 participant_id,
-                                "participant_pre_survey_data_contraints",
-                                f"typical_time_to_complete_scenario_minutes could not be converted to integer: {traceback.format_exc()}",
+                                "participant_pre_survey_data_constraints",
+                                f"typical_time_to_complete_scenario_minutes could not be converted to integer: {e}",
                             )
                         )
 
@@ -1522,7 +1532,9 @@ def validate_egoexo_files(
                 )
             )
         for take in takes:
-            if take.recording_participant_id not in provided_participant_ids:
+            if take.recording_participant_id is None:
+                continue
+            elif take.recording_participant_id not in provided_participant_ids:
                 ret.append(
                     Error(
                         ErrorLevel.ERROR,
