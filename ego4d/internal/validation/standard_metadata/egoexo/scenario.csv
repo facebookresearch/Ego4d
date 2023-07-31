@@ -79,14 +79,25 @@ scenario_id,name
 7023,LosAndes_V3_R2
 7024,LosAndes_V4_R2
 7025,LosAndes_V3_R3
+7026,LosAndes_V1_R2
+7027,LosAndes_V4_R3
+7028,LosAndes_V4_R4
+7029,LosAndes_V6_R1
+7030,LosAndes_V2_R3
+7031,LosAndes_V3_R4
+7032,LosAndes_V5_R1
+7033,LosAndes_V5_R2
 8000,Soccer
 8001,Soccer Drills - Inside Trap and Outside Play
 8002,Soccer Drills - Outside Trap and Outside Play
 8003,Soccer Drills - Dribbling
 8004,Soccer Drills - Juggling
-8005,Soccer Drills - Penalty Kick 
+8005,Soccer Drills - Penalty Kick
 9000,Dance
 9001,Performing the basic choreography
 9002,Performing the advanced choreography
 9003,Teaching the basic choreography
 9004,Teaching the advanced choreography
+9005,LosAndes_Basic_Salsa
+9006,LosAndes_Intermediate_Salsa
+9007,LosAndes_Advanced_Salsa
