@@ -1345,7 +1345,7 @@ def _check_files_exist(
     def _check_file(f: ReferencedFile) -> List[Error]:
         errs = []
         assert f.root_dir is not None
-        if f.relative_path.startswith("s3"):
+        if f.relative_path is not None and f.relative_path.startswith("s3"):
             path = f.relative_path
         else:
             path = os.path.join(f.root_dir, f.relative_path or "")
