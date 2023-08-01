@@ -237,7 +237,7 @@ def get_context(config: Config) -> Context:
     takes = json.load(open(take_json_path))
     take = [t for t in takes if t["root_dir"] == config.inputs.take_name]
     if len(take) != 1:
-        print("Take: {config.inputs.take_name} does not exist")
+        print(f"Take: {config.inputs.take_name} does not exist")
         sys.exit(1)
     take = take[0]
 
@@ -629,6 +629,8 @@ def mode_pose3d(config: Config):
 
 ##-------------------------------------------------------------------------------
 def mode_refine_pose3d(config: Config):
+    skel_type = "body"
+
     ctx = get_context(config)
 
     dset = SyncedEgoExoCaptureDset(
@@ -648,16 +650,24 @@ def mode_refine_pose3d(config: Config):
         )
         for exo_camera_name in ctx.exo_cam_names
     }
-    os.makedirs(ctx.refine_pose3d_dir, exist_ok=True)
-    os.makedirs(ctx.vis_refine_pose3d_dir, exist_ok=True)
 
-    ## load all pose3d from ctx.pose3d_dir, they are 00000.npy, 00001.npy, using os.listdir ending in .npy and is 05d, do not use dset
+    pose2d_dir = os.path.join(ctx.dataset_dir, skel_type, "pose2d")
+    pose3d_dir = os.path.join(ctx.dataset_dir, skel_type, "pose3d")
+    refine_pose3d_dir = os.path.join(ctx.dataset_dir, skel_type, "refine_pose3d")
+    vis_refine_pose3d_dir = os.path.join(
+        ctx.dataset_dir, skel_type, "vis_refine_pose3d"
+    )
+
+    os.makedirs(refine_pose3d_dir, exist_ok=True)
+    os.makedirs(vis_refine_pose3d_dir, exist_ok=True)
+
+    # load all pose3d from pose3d_dir, they are 00000.npy, 00001.npy,
+    # using os.listdir ending in .npy and is 05d, do not use dset
     time_stamps = sorted(
-        [int(f.split(".")[0]) for f in os.listdir(ctx.pose3d_dir) if f.endswith(".npy")]
+        [int(f.split(".")[0]) for f in os.listdir(pose3d_dir) if f.endswith(".npy")]
     )
     pose3d_files = [
-        os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy")
-        for time_stamp in time_stamps
+        os.path.join(pose3d_dir, f"{time_stamp:05d}.npy") for time_stamp in time_stamps
     ]
 
     poses3d = []
@@ -668,7 +678,7 @@ def mode_refine_pose3d(config: Config):
 
     ## check if ctx.pose2d_dir,
     camera_pose2d_files = [
-        os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+        os.path.join(pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
         for exo_camera_name in ctx.exo_cam_names
     ]
 
@@ -685,7 +695,7 @@ def mode_refine_pose3d(config: Config):
             for time_stamp in time_stamps
         }
         for exo_camera_name in ctx.exo_cam_names:
-            pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
+            pose2d_file = os.path.join(pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
             with open(pose2d_file, "rb") as f:
                 poses2d_camera = pickle.load(f)
 
@@ -696,7 +706,7 @@ def mode_refine_pose3d(config: Config):
 
     else:
         ## load pose2d.pkl
-        pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
+        pose2d_file = os.path.join(pose2d_dir, "pose2d.pkl")
         with open(pose2d_file, "rb") as f:
             poses2d = pickle.load(f)
 
@@ -718,7 +728,7 @@ def mode_refine_pose3d(config: Config):
 
             # pyre-ignore
             vis_refine_pose3d_cam_dir = os.path.join(
-                ctx.vis_refine_pose3d_dir, exo_camera_name
+                vis_refine_pose3d_dir, exo_camera_name
             )
             os.makedirs(vis_refine_pose3d_cam_dir, exist_ok=True)
 
@@ -732,7 +742,7 @@ def mode_refine_pose3d(config: Config):
 
     ## save poses3d.pkl
     # pyre-ignore
-    with open(os.path.join(ctx.refine_pose3d_dir, "pose3d.pkl"), "wb") as f:
+    with open(os.path.join(refine_pose3d_dir, "pose3d.pkl"), "wb") as f:
         pickle.dump(poses3d, f)
 
 
@@ -744,6 +754,7 @@ def mode_body_bbox(config: Config):
     #################################### << Hard coded to show visualization. Can be integrated into args
     visualization = True
     ####################################
+    skel_type = "body"
 
     # Load dataset info
     ctx = get_context(config)
@@ -771,10 +782,10 @@ def mode_body_bbox(config: Config):
     _, camera_plane_unit_normal = get_exo_camera_plane(exo_camera_centers)
 
     # Directory to store bbox result and visualization
-    bbox_dir = os.path.join(ctx.dataset_dir, "body/bbox")
+    bbox_dir = os.path.join(ctx.dataset_dir, skel_type, "bbox")
     os.makedirs(bbox_dir, exist_ok=True)
     if visualization:
-        vis_bbox_dir = os.path.join(ctx.dataset_dir, "body/vis_bbox")
+        vis_bbox_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_bbox")
         os.makedirs(vis_bbox_dir, exist_ok=True)
 
     bboxes = {}
@@ -864,11 +875,13 @@ def mode_body_pose2d(config: Config):
     ################################# << Hard coded to show visualization. Can be integrated into args
     visualization = True
     #################################
+    skel_type = "body"
+    step = "pose2d"
 
     # Load dataset info
     ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -878,16 +891,17 @@ def mode_body_pose2d(config: Config):
     )
 
     # Create directory to store body pose2d results and visualization
-    pose2d_dir = os.path.join(ctx.dataset_dir, "body/pose2d")
+    pose2d_dir = os.path.join(ctx.dataset_dir, skel_type, step)
     if not os.path.exists(pose2d_dir):
         os.makedirs(pose2d_dir)
+
     if visualization:
-        vis_pose2d_dir = os.path.join(ctx.dataset_dir, "body/vis_pose2d")
+        vis_pose2d_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_pose2d")
         if not os.path.exists(vis_pose2d_dir):
             os.makedirs(vis_pose2d_dir)
 
     # load bboxes from bbox_dir/bbox.pkl
-    bbox_dir = os.path.join(ctx.dataset_dir, "body/bbox")
+    bbox_dir = os.path.join(ctx.dataset_dir, skel_type, "bbox")
     bbox_file = os.path.join(bbox_dir, "bbox.pkl")
     if not os.path.exists(bbox_file):
         print(f"bbox path does not exist: {bbox_file}")
@@ -954,11 +968,12 @@ def mode_body_pose3d(config: Config):
     ############################ << Hard coded to show visualization. Can be integrated into args
     visualization = True
     ############################
+    skel_type = "body"
 
     # Load dataset info
     ctx = get_context(config)
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -976,16 +991,16 @@ def mode_body_pose3d(config: Config):
     }
 
     # Directory to store pose3d result and visualization
-    pose3d_dir = os.path.join(ctx.dataset_dir, "body/pose3d")
+    pose3d_dir = os.path.join(ctx.dataset_dir, skel_type, "pose3d")
     if not os.path.exists(pose3d_dir):
         os.makedirs(pose3d_dir)
     if visualization:
-        vis_pose3d_dir = os.path.join(ctx.dataset_dir, "body/vis_pose3d/body_dummy")
+        vis_pose3d_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_pose3d")
         if not os.path.exists(vis_pose3d_dir):
             os.makedirs(vis_pose3d_dir)
 
     # Load body pose2d estimation result
-    pose2d_file = os.path.join(ctx.dataset_dir, "body/pose2d", "pose2d.pkl")
+    pose2d_file = os.path.join(ctx.dataset_dir, skel_type, "pose2d", "pose2d.pkl")
     assert os.path.exists(pose2d_file), f"{pose2d_file} does not exist"
     with open(pose2d_file, "rb") as f:
         poses2d = pickle.load(f)
@@ -1008,6 +1023,9 @@ def mode_body_pose3d(config: Config):
         pose3d = triangulator.run(debug=False)  ## 17 x 4 (x, y, z, confidence)
         poses3d[time_stamp] = pose3d
 
+        # save pose3d as timestamp.npy
+        np.save(os.path.join(pose3d_dir, f"{time_stamp:05d}.npy"), pose3d)
+
         # visualize pose3d
         if visualization:
             for exo_camera_name in ctx.exo_cam_names:
@@ -1028,7 +1046,7 @@ def mode_body_pose3d(config: Config):
                 pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
                 # pose_model.draw_projected_poses3d([projected_pose3d[:21], projected_pose3d[21:]], image, save_path)
 
-    with open(os.path.join(pose3d_dir, "body_dummy_pose3d.pkl"), "wb") as f:
+    with open(os.path.join(pose3d_dir, "body_pose3d.pkl"), "wb") as f:
         pickle.dump(poses3d, f)
 
 
@@ -1048,7 +1066,7 @@ def mode_wholebodyHand_pose3d(config: Config):
 
     # Load dataset info
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -1181,7 +1199,7 @@ def mode_exo_hand_pose2d(config: Config):
 
     # Load dataset info
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -1333,7 +1351,7 @@ def mode_ego_hand_pose2d(config: Config):
 
     # Load dataset info
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -1501,7 +1519,7 @@ def mode_exo_hand_pose3d(config: Config):
 
     # Load dataset info
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -1646,7 +1664,7 @@ def mode_egoexo_hand_pose3d(config: Config):
 
     # Load dataset info
     dset = SyncedEgoExoCaptureDset(
-        data_dir=config.data_dir,
+        data_dir=config.cache_root_dir,
         dataset_json_path=ctx.dataset_json_path,
         read_frames=False,
     )
@@ -2099,7 +2117,15 @@ def mode_preprocess(config: Config):
         "slam-left": "1201-1",
         "slam-right": "1201-2",
     }
-    aria_path = os.path.join(capture_dir, "videos/aria01.vrs")
+    aria_dir = os.path.join(capture_dir, "videos")
+    count_vrs = 0
+    aria_cam_id = None
+    for name in os.listdir(aria_dir):
+        if name.endswith(".vrs"):
+            aria_cam_id = name.split(".vrs")[0]  # aria01, aria02, etc.
+            aria_path = os.path.join(aria_dir, name)
+            count_vrs += 1
+    assert count_vrs == 1, f"Expecting 1 but found {count_vrs} vrs files in {aria_dir}"
     assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
     assert os.path.exists(aria_path), "need aria video downloaded"
     aria_camera_models = get_aria_camera_models(aria_path)
@@ -2110,15 +2136,14 @@ def mode_preprocess(config: Config):
         row_df = synced_df.iloc[idx]
         for stream_name in config.inputs.aria_streams:
             # TODO: support multiple aria cameras?
-            cam_id = "aria01"
-            key = (cam_id, stream_name)
+            key = (aria_cam_id, stream_name)
             key_str = "_".join(key)
             frame_path = frame_paths[key][idx]
 
             stream_id = stream_name_to_id[stream_name]
-            frame_num = int(row_df[f"aria01_{stream_id}_frame_number"])
-            frame_t = row_df[f"aria01_{stream_id}_capture_timestamp_ns"] / 1e9
-            aria_t = row_df[f"aria01_{stream_id}_capture_timestamp_ns"] / 1e3
+            frame_num = int(row_df[f"{aria_cam_id}_{stream_id}_frame_number"])
+            frame_t = row_df[f"{aria_cam_id}_{stream_id}_capture_timestamp_ns"] / 1e9
+            aria_t = row_df[f"{aria_cam_id}_{stream_id}_capture_timestamp_ns"] / 1e3
             frame_t = f"{frame_t:.3f}"
             aria_pose = aria_traj_df.iloc[
                 (aria_traj_df.tracking_timestamp_us - aria_t).abs().argsort().iloc[0]
@@ -2169,26 +2194,15 @@ def mode_preprocess(config: Config):
     json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
 
 
-def mode_multi_view_vis(config: Config, flag="pose3d"):
+def mode_multi_view_vis(config: Config, step="pose3d", skel_type="body"):
     ctx = get_context(config)
     camera_names = ctx.exo_cam_names
+    os.makedirs(ctx.vis_pose3d_dir, exist_ok=True)
 
-    if flag == "pose3d":
-        read_dir = ctx.vis_pose3d_dir
-        write_dir = os.path.join(ctx.vis_pose3d_dir, "multi_view")
-        write_video = os.path.join(ctx.vis_pose3d_dir, "pose3d.mp4")
-    if flag == "refine_pose3d":
-        read_dir = ctx.vis_refine_pose3d_dir
-        write_dir = os.path.join(ctx.vis_refine_pose3d_dir, "multi_view")
-        write_video = os.path.join(ctx.vis_pose3d_dir, "refine_pose3d.mp4")
-    elif flag == "bbox":
-        read_dir = ctx.vis_bbox_dir
-        write_dir = os.path.join(ctx.vis_bbox_dir, "multi_view")
-        write_video = os.path.join(ctx.vis_pose3d_dir, "bbox.mp4")
-    elif flag == "pose2d":
-        read_dir = ctx.vis_pose2d_dir
-        write_dir = os.path.join(ctx.vis_pose2d_dir, "multi_view")
-        write_video = os.path.join(ctx.vis_pose3d_dir, "pose2d.mp4")
+    if step in ["bbox", "pose2d", "pose3d", "refine_pose3d"]:
+        read_dir = os.path.join(ctx.dataset_dir, skel_type, f"vis_{step}")
+        write_dir = os.path.join(ctx.dataset_dir, skel_type, step)
+        write_video = os.path.join(ctx.vis_pose3d_dir, f"{step}.mp4")
 
     multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video)
 
@@ -2287,14 +2301,14 @@ def run(config: Config):
         mode_pose3d(config)
     elif config.mode == "refine_pose3d":
         mode_refine_pose3d(config)
-    elif config.mode == "multi_view_vis_bbox":
-        mode_multi_view_vis(config, "bbox")
-    elif config.mode == "multi_view_vis_pose2d":
-        mode_multi_view_vis(config, "pose2d")
-    elif config.mode == "multi_view_vis_pose3d":
-        mode_multi_view_vis(config, "pose3d")
-    elif config.mode == "multi_view_vis_refine_pose3d":
-        mode_multi_view_vis(config, "refine_pose3d")
+    elif config.mode == "vis_body_bbox":
+        mode_multi_view_vis(config, step="bbox", skel_type="body")
+    elif config.mode == "vis_body_pose2d":
+        mode_multi_view_vis(config, step="pose2d", skel_type="body")
+    elif config.mode == "vis_body_pose3d":
+        mode_multi_view_vis(config, step="pose3d", skel_type="body")
+    elif config.mode == "vis_body_refine_pose3d":
+        mode_multi_view_vis(config, step="refine_pose3d", skel_type="body")
     else:
         raise AssertionError(f"unknown mode: {config.mode}")
 
@@ -2367,7 +2381,7 @@ def create_job_list(args):
     args.name_list = []
 
     for take_name in args.take_name_list:
-        name = args.name + "_" + take_name
+        name = take_name
         args.name_list.append(name)
         args.job_list.append(name)
 
@@ -2396,7 +2410,7 @@ def get_hydra_config(args):
 
 
 def main(args):
-    # Note: this function is called from launch_train.py
+    # Note: this function is called from launch_main.py
     config = get_hydra_config(args)
 
     steps = args.steps.split("+")
@@ -2405,22 +2419,32 @@ def main(args):
     for step in steps:
         if step == "preprocess":
             mode_preprocess(config)
-        elif step == "bbox":
-            mode_bbox(config)
-        elif step == "pose2d":
-            mode_pose2d(config)
-        elif step == "pose3d":
-            mode_pose3d(config)
+        elif step == "body_bbox":
+            mode_body_bbox(config)
+        elif step == "body_pose2d":
+            mode_body_pose2d(config)
+        elif step == "body_pose3d":
+            mode_body_pose3d(config)
+        elif step == "wholebodyHand_pose3d":
+            mode_wholebodyHand_pose3d(config)
+        elif step == "hand_pose2d_exo":
+            mode_exo_hand_pose2d(config)
+        elif step == "hand_pose2d_ego":
+            mode_ego_hand_pose2d(config)
+        elif step == "hand_pose3d_exo":
+            mode_exo_hand_pose3d(config)
+        elif step == "hand_pose3d_egoexo":
+            mode_egoexo_hand_pose3d(config)
         elif step == "refine_pose3d":
             mode_refine_pose3d(config)
-        elif step == "multi_view_vis_bbox":
-            mode_multi_view_vis(config, flag="bbox")
-        elif step == "multi_view_vis_pose2d":
-            mode_multi_view_vis(config, flag="pose2d")
-        elif step == "multi_view_vis_pose3d":
-            mode_multi_view_vis(config, flag="pose3d")
-        elif step == "multi_view_vis_refine_pose3d":
-            mode_multi_view_vis(config, flag="refine_pose3d")
+        elif step == "vis_body_bbox":
+            mode_multi_view_vis(config, step="bbox", skel_type="body")
+        elif step == "vis_body_pose2d":
+            mode_multi_view_vis(config, step="pose2d", skel_type="body")
+        elif step == "vis_body_pose3d":
+            mode_multi_view_vis(config, step="pose3d", skel_type="body")
+        elif step == "vis_body_refine_pose3d":
+            mode_multi_view_vis(config, step="refine_pose3d", skel_type="body")
         else:
             raise Exception(f"Unknown step: {step}")
 

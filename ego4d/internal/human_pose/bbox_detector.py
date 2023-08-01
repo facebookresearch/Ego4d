@@ -33,8 +33,6 @@ class DetectorModel:
 
     ## iou_threshold: the threshold to decide whether to use the offshelf bbox or not
     def get_bboxes(self, image_name, bboxes, iou_threshold=0.3):
-        refined_bboxes = bboxes.copy()
-
         det_results = inference_detector(self.detector, image_name)
         person_results = process_mmdet_results(
             det_results, 1
