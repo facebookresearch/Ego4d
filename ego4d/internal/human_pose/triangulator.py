@@ -1,7 +1,7 @@
+import itertools
 import random
 
 import numpy as np
-
 import torch
 from ego4d.internal.human_pose.utils import COCO_KP_ORDER
 from scipy.optimize import least_squares
@@ -9,29 +9,32 @@ from scipy.optimize import least_squares
 # ------------------------------------------------------------------------------------
 ## performs triangulation
 class Triangulator:
-    def __init__(self, time_stamp, camera_names, cameras, multiview_pose2d):
+    def __init__(
+        self,
+        time_stamp,
+        camera_names,
+        cameras,
+        multiview_pose2d,
+        keypoint_thres=0.7,
+        num_keypoints=17,
+    ):
         self.camera_names = camera_names
         self.cameras = cameras
         self.time_stamp = time_stamp
-        self.keypoint_thres = 0.7  ## Keypoint score threshold
+        self.keypoint_thres = keypoint_thres  ## Keypoint score threshold
         self.n_iters = 1000
         self.reprojection_error_epsilon = 0.01
         self.min_views = 2
         self.min_inliers = 2
         self.include_confidence = False
-
-        self.coco_17_keypoints_idxs = np.array(
-            range(17)
-        )  # indexes of the COCO keypoints
-        self.keypoints_idxs = self.coco_17_keypoints_idxs
-        self.num_keypoints = len(self.keypoints_idxs)
+        self.num_keypoints = num_keypoints
+        self.keypoints_idxs = np.array(range(self.num_keypoints))
 
         # parse the pose2d results, reaarange from camera view to human
         # pose2d is a dictionary,
         # key = (camera_name, camera_mode), val = pose2d_results
         # restructure to (human_id) = [(camera_name, camera_mode): pose2d]
         self.pose2d = {}
-
         for camera_name, pose2d in multiview_pose2d.items():
             num_humans = 1  ## number of humans detected in this view
             human_name = "aria01"
@@ -66,6 +69,7 @@ class Triangulator:
                 choosen_cameras = []
 
                 for view_idx, camera_name in enumerate(self.pose2d[human_name].keys()):
+
                     point_2d = self.pose2d[human_name][camera_name][
                         keypoint_idx, :2
                     ]  ## chop off the confidnece
@@ -77,6 +81,7 @@ class Triangulator:
                         extrinsics = camera.extrinsics[:3, :]  ## 3x4
 
                         ## get the ray in 3D
+
                         ray_3d = camera.camera_model.image_to_world(point_2d)  ## 1 x 2
                         ray_3d = np.append(ray_3d, 1)
 
@@ -103,6 +108,7 @@ class Triangulator:
                         n_iters=self.n_iters,
                         reprojection_error_epsilon=self.reprojection_error_epsilon,
                         direct_optimization=True,
+                        sample_all_combinations=True,
                     )
 
                     if debug:
@@ -128,6 +134,7 @@ class Triangulator:
 
         return points_3d["aria01"]
 
+    # Original implementation
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
     def triangulate_ransac(
         self,
@@ -136,20 +143,30 @@ class Triangulator:
         n_iters=50,
         reprojection_error_epsilon=0.1,
         direct_optimization=True,
+        sample_all_combinations=True,
     ):
         assert len(proj_matricies) == len(points)
         assert len(points) >= 2
 
         proj_matricies = np.array(proj_matricies)
         points = np.array(points)
-
         n_views = len(points)
 
         # determine inliers
         view_set = set(range(n_views))
         inlier_set = set()
+
+        # All possible combinations of camera view
+        all_comb = itertools.combinations(list(range(n_views)), 2)
+        all_comb_list = [list(curr_comb) for curr_comb in all_comb]
+        n_iters = len(all_comb_list)
+
         for i in range(n_iters):
-            sampled_views = sorted(random.sample(view_set, 2))  ## sample two views
+            # Whether sample two views from combination or random sample
+            if sample_all_combinations:
+                sampled_views = all_comb_list[i]
+            else:
+                sampled_views = sorted(random.sample(view_set, 2))  ## sample two views
 
             keypoint_3d_in_base_camera = (
                 self.triangulate_point_from_multiple_views_linear(
@@ -259,7 +276,8 @@ class Triangulator:
                 A[j * 2 + 0] *= points_confidence[j]
                 A[j * 2 + 1] *= points_confidence[j]
 
-        u, s, vh = np.linalg.svd(A, full_matrices=False)
+            u, s, vh = np.linalg.svd(A, full_matrices=False)
+
         point_3d_homo = vh[3, :]
 
         point_3d = self.homogeneous_to_euclidean(point_3d_homo)

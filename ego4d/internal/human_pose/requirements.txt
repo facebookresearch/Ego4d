@@ -1,5 +1,4 @@
 torch>=2.0.0
-projectaria.oat
 boto3
 numpy==1.24.2
 opencv-python
