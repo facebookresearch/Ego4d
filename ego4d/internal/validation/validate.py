@@ -829,7 +829,7 @@ def _check_associated_takes_metadata(
                     ErrorLevel.ERROR,
                     take.take_id,
                     "repeated_take_id",
-                    f"take {take.take_id} for capture {capture_uid} is listed multiple times"
+                    f"take {take.take_id} for capture {capture_uid} is listed multiple times",
                 )
             )
         seen_take_ids.add(take.take_id)
@@ -842,7 +842,7 @@ def _check_associated_takes_metadata(
                     f"take {take.take_id} for capture {capture_uid} has incorrect scenario ID {take.scenario_id}",
                 )
             )
-        if take.recording_participant_id is None and not take.is_dropped :
+        if take.recording_participant_id is None and not take.is_dropped:
             ret.append(
                 Error(
                     ErrorLevel.WARN,
@@ -1416,7 +1416,11 @@ def _check_files_exist(
 def _check_mp4_files(manifest: ManifestEgoExo, num_workers: int) -> List[Error]:
     ret = []
     vps = {
-        (vc.university_capture_id, vc.university_video_id, vc.component_index,): (
+        (
+            vc.university_capture_id,
+            vc.university_video_id,
+            vc.component_index,
+        ): (
             os.path.join(
                 manifest.captures[
                     vc.university_capture_id
@@ -1519,7 +1523,7 @@ def validate_egoexo_files(
         ret.extend(_check_objects(manifest))
 
     provided_capture_uids = set(manifest.captures.keys())
-    provided_participant_ids = set(x[0] for x in manifest.participants.keys())
+    provided_participant_ids = {x[0] for x in manifest.participants.keys()}
     for capture_uid, takes in manifest.takes.items():
         take = takes[0]
         if capture_uid not in provided_capture_uids:
@@ -1540,10 +1544,9 @@ def validate_egoexo_files(
                         ErrorLevel.ERROR,
                         take.take_id,
                         "participant_id_missing",
-                        f"participant {take.recording_participant_id} is missing from participant_metadata, but referenced in capture {capture_uid} take {take.take_id}"
+                        f"participant {take.recording_participant_id} is missing from participant_metadata, but referenced in capture {capture_uid} take {take.take_id}",
                     )
                 )
-        
 
     ret.extend(_check_video_metadata(manifest, metadata))
     ret.extend(_check_video_components(manifest))
