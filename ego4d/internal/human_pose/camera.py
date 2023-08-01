@@ -90,7 +90,7 @@ def create_camera_data(
     device_row_key: str,
 ) -> Dict[str, Any]:
     if camera_model is None:
-        assert "cam" in name
+        assert "cam" in name or "gp" in name, f"Unrecognized camera name: {name}"
         T_device_camera = np.eye(4)
         T_camera_device = np.eye(4)
         camera_model = _create_exo_camera(device_row)

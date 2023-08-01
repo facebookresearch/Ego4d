@@ -147,7 +147,13 @@ def get_region_proposal(
 
     mesh = trimesh.primitives.Cylinder(radius=radius, height=human_height)
     mesh.apply_transform(transform)
-    bbox_3d = mesh.vertices  ## slower but smoother, all the vertices of the cylinder
+
+    # Note: using all vertices of the cylinder (bbox_3d = mesh.vertices) is not enough
+    # since the bottom could be easily out of the image boundary and
+    # the proposal filter would shrink to just the top of the cylinder
+    # Therefore, we do a uniform sampling around the whole cylinder instead
+    bbox_3d, _face_index = trimesh.sample.sample_surface_even(mesh, count=100)
+
     return bbox_3d
 
 
