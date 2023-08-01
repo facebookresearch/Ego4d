@@ -2,7 +2,6 @@
 import functools
 import itertools
 import os
-import traceback
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -822,7 +821,18 @@ def _check_associated_takes_metadata(
             )
         )
 
+    seen_take_ids = set()
     for take in takes:
+        if take.take_id in seen_take_ids:
+            ret.append(
+                Error(
+                    ErrorLevel.ERROR,
+                    take.take_id,
+                    "repeated_take_id",
+                    f"take {take.take_id} for capture {capture_uid} is listed multiple times",
+                )
+            )
+        seen_take_ids.add(take.take_id)
         if take.scenario_id not in metadata.scenarios:
             ret.append(
                 Error(
@@ -832,7 +842,7 @@ def _check_associated_takes_metadata(
                     f"take {take.take_id} for capture {capture_uid} has incorrect scenario ID {take.scenario_id}",
                 )
             )
-        if take.recording_participant_id is None:
+        if take.recording_participant_id is None and not take.is_dropped:
             ret.append(
                 Error(
                     ErrorLevel.WARN,
@@ -1056,26 +1066,26 @@ def _check_participants(
                     v = p.pre_survey_data["has_taught_scenario"]
                     try:
                         _ = bool(v)
-                    except Exception:
+                    except Exception as e:
                         ret.append(
                             Error(
                                 ErrorLevel.WARN,
                                 participant_id,
                                 "participant_pre_survey_data_contraints",
-                                f"has_taught_scenario could not be converted to boolean: {traceback.format_exc()}",
+                                f"has_taught_scenario could not be converted to boolean: {e}",
                             )
                         )
                 if "has_recorded_scenario_howto" in given_ks:
                     v = p.pre_survey_data["has_recorded_scenario_howto"]
                     try:
                         _ = bool(v)
-                    except Exception:
+                    except Exception as e:
                         ret.append(
                             Error(
                                 ErrorLevel.WARN,
                                 participant_id,
                                 "participant_pre_survey_data_contraints",
-                                f"has_recorded_scenario_howto could not be converted to boolean: {traceback.format_exc()}",
+                                f"has_recorded_scenario_howto could not be converted to boolean: {e}",
                             )
                         )
 
@@ -1083,13 +1093,13 @@ def _check_participants(
                     v = p.pre_survey_data["typical_time_to_complete_scenario_minutes"]
                     try:
                         _ = int(v)
-                    except Exception:
+                    except Exception as e:
                         ret.append(
                             Error(
                                 ErrorLevel.WARN,
                                 participant_id,
-                                "participant_pre_survey_data_contraints",
-                                f"typical_time_to_complete_scenario_minutes could not be converted to integer: {traceback.format_exc()}",
+                                "participant_pre_survey_data_constraints",
+                                f"typical_time_to_complete_scenario_minutes could not be converted to integer: {e}",
                             )
                         )
 
@@ -1345,7 +1355,7 @@ def _check_files_exist(
     def _check_file(f: ReferencedFile) -> List[Error]:
         errs = []
         assert f.root_dir is not None
-        if f.relative_path.startswith("s3"):
+        if f.relative_path is not None and f.relative_path.startswith("s3"):
             path = f.relative_path
         else:
             path = os.path.join(f.root_dir, f.relative_path or "")
@@ -1406,7 +1416,11 @@ def _check_files_exist(
 def _check_mp4_files(manifest: ManifestEgoExo, num_workers: int) -> List[Error]:
     ret = []
     vps = {
-        (vc.university_capture_id, vc.university_video_id, vc.component_index,): (
+        (
+            vc.university_capture_id,
+            vc.university_video_id,
+            vc.component_index,
+        ): (
             os.path.join(
                 manifest.captures[
                     vc.university_capture_id
@@ -1477,7 +1491,7 @@ def validate_egoexo_files(
     if not manifest.participants:
         ret.append(
             Error(
-                ErrorLevel.WARN,
+                ErrorLevel.ERROR,
                 "participants",
                 "no_participant_metadata",
                 "missing participant metadata (null or empty)",
@@ -1489,7 +1503,7 @@ def validate_egoexo_files(
     if not manifest.physical_setting:
         ret.append(
             Error(
-                ErrorLevel.WARN,
+                ErrorLevel.ERROR,
                 "physical_setting",
                 "no_physical_setting_metadata",
                 "missing physical setting metadata (null or empty)",
@@ -1499,7 +1513,7 @@ def validate_egoexo_files(
     if not manifest.objects:
         ret.append(
             Error(
-                ErrorLevel.WARN,
+                ErrorLevel.ERROR,
                 "objects",
                 "no_objects_metadata",
                 "missing object metadata (null or empty)",
@@ -1509,6 +1523,7 @@ def validate_egoexo_files(
         ret.extend(_check_objects(manifest))
 
     provided_capture_uids = set(manifest.captures.keys())
+    provided_participant_ids = {x[0] for x in manifest.participants.keys()}
     for capture_uid, takes in manifest.takes.items():
         take = takes[0]
         if capture_uid not in provided_capture_uids:
@@ -1520,6 +1535,18 @@ def validate_egoexo_files(
                     f"take {take.take_id} has incorrect capture uid: {capture_uid} (typo or misisng capture in metadata?)",
                 )
             )
+        for take in takes:
+            if take.recording_participant_id is None:
+                continue
+            elif take.recording_participant_id not in provided_participant_ids:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        take.take_id,
+                        "participant_id_missing",
+                        f"participant {take.recording_participant_id} is missing from participant_metadata, but referenced in capture {capture_uid} take {take.take_id}",
+                    )
+                )
 
     ret.extend(_check_video_metadata(manifest, metadata))
     ret.extend(_check_video_components(manifest))

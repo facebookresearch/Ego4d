@@ -18,6 +18,7 @@ pathmgr.register_handler(S3PathHandler(profile="default"))
 
 
 DEFAULT_DATE_FORMAT_STR = "%Y-%m-%d %H:%M:%S"
+VALID_DATE_FORMAT_STRS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d"]
 
 
 class ErrorLevel(Enum):
@@ -271,11 +272,13 @@ def default_decode(value: str, datatype: type, name: str) -> Any:
             return []
         return json.loads(value)
     elif datatype == datetime:
-        return (
-            datetime.strptime(value.split(".")[0], DEFAULT_DATE_FORMAT_STR)
-            if len(value) > 0
-            else None
-        )
+        for date_format_str in VALID_DATE_FORMAT_STRS:
+            if len(value) == 0:
+                return None
+            try:
+                return datetime.strptime(value.split(".")[0], date_format_str)
+            except ValueError:
+                pass
     elif datatype == int:
         if len(value) == 0:
             return None
