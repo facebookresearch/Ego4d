@@ -10,6 +10,7 @@ from mmpose.apis import (
     process_mmdet_results,
     vis_pose_result,
 )
+
 from mmpose.core.bbox.transforms import (
     bbox_cs2xywh,
     bbox_xywh2cs,
@@ -21,7 +22,15 @@ from tqdm import tqdm
 
 ##------------------------------------------------------------------------------------
 class PoseModel:
-    def __init__(self, pose_config=None, pose_checkpoint=None):
+    def __init__(
+        self,
+        pose_config=None,
+        pose_checkpoint=None,
+        rgb_keypoint_thres=0.7,
+        rgb_keypoint_vis_thres=0.7,
+        refine_bbox=True,
+        thickness=6,
+    ):
         self.pose_config = pose_config
         self.pose_checkpoint = pose_checkpoint
 
@@ -65,17 +74,20 @@ class PoseModel:
             )
             / 10.0
         )
+        self.refine_bbox = refine_bbox
 
         ##------hyperparameters-----
         self.bbox_thres = 0.1  ## Bounding box score threshold
-        self.rgb_keypoint_thres = 0.7  ## Keypoint score threshold
-        self.rgb_keypoint_vis_thres = 0.7  ## Keypoint score threshold
+        self.rgb_keypoint_thres = rgb_keypoint_thres  ## Keypoint score threshold
+        self.rgb_keypoint_vis_thres = (
+            rgb_keypoint_vis_thres  ## Keypoint score threshold
+        )
 
         ## Keypoint radius for visualization
         self.radius = 4
 
         ## Link thickness for visualization
-        self.thickness = 6
+        self.thickness = thickness
 
         self.min_vis_keypoints = 5  ## coco format, 17 keypoints!
 
@@ -94,7 +106,8 @@ class PoseModel:
         )
 
         ##---------refine the bboxes-------------------
-        pose_results = self.refine_bboxes(pose_results)
+        if self.refine_bbox:
+            pose_results = self.refine_bboxes(pose_results)
 
         if len(pose_results) < len(bboxes):
             for bbox in bboxes:
@@ -172,7 +185,9 @@ class PoseModel:
         ##-----------restructure to the desired format used by mmpose---------
         pose_results_ = []
         for pose in pose_results:
-            pose_ = np.zeros((self.num_keypoints, 3))  ## 17 x 3
+            pose_ = np.zeros(
+                (self.num_keypoints, 3)
+            )  ## N x 3 (17 for body; 21 for hand)
 
             pose_[: len(pose), :3] = pose[:, :]
 

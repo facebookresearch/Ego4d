@@ -58,7 +58,6 @@ def _create_exo_camera(exo_cam_desc):
         height=exo_cam_desc["image_height"],
         params=params,
     )
-
     return camera
 
 
@@ -145,10 +144,7 @@ def create_camera_data(
 
 
 def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
-    if cam.camera_type == "aria":
-        assert cam.camera_model is not None
-        ret = cam.camera_model.projectionModel.project(pt_device)
-    elif cam.camera_type == "colmap":
+    if cam.camera_type in ("aria", "colmap"):
         assert cam.camera_model is not None
         ret = cam.camera_model.world_to_image(pt_device[0:2] / pt_device[2])
     else:
@@ -177,15 +173,13 @@ def xworld_to_yimage(pt3d: Vec3, to_cam: Camera):
 
 def batch_xworld_to_yimage(pts3d: Vec3, to_cam: Camera):
     assert pts3d.shape[1] == 3
-
     pts2d = []
 
     # TODO: optimize
     for pt3d in pts3d:
-        T_to_world = np.matmul(to_cam.T_camera_device, to_cam.T_device_world)
+        T_to_world = to_cam.extrinsics
         pt_target = np.matmul(T_to_world, np.array(pt3d.tolist() + [1.0]))[0:3]
         pts2d.append(xdevice_to_ximage(pt_target, to_cam).reshape(1, -1))
-
     pts2d = np.concatenate(pts2d, axis=0)
     return pts2d
 
@@ -251,6 +245,6 @@ def get_aria_camera_models(aria_path):
 
     return {
         "1201-1": slam_left,
-        "1201-2": slam_left,
+        "1201-2": slam_right,
         "214-1": rgb_cam,
     }

@@ -1,9 +1,65 @@
+import json
+
 import cv2
 import numpy as np
 import pandas as pd
 import trimesh
 from pyntcloud import PyntCloud
 from pyntcloud.geometry.models.plane import Plane
+
+
+COCO_KP_ORDER = [
+    "nose",
+    "left_eye",
+    "right_eye",
+    "left_ear",
+    "right_ear",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+]
+
+COCO_SKELETON = {
+    "left_leg": [13, 15],  ## l-knee to l-ankle
+    "right_leg": [14, 16],  ## r-knee to r-ankle
+    "left_thigh": [11, 13],  ## l-hip to l-knee
+    "right_thigh": [12, 14],  ## r-hip to r-knee
+    "hip": [11, 12],  ## l-hip to r-hip
+    "left_torso": [5, 11],  ## l-shldr to l-hip
+    "right_torso": [6, 12],  ## r-shldr to r-hip
+    "left_bicep": [5, 7],  ## l-shldr to l-elbow
+    "right_bicep": [6, 8],  ## r-shldr to r-elbow
+    "shoulder": [5, 6],  ## l-shldr to r-shldr
+    "left_hand": [7, 9],  ## l-elbow to l-wrist
+    "right_hand": [8, 10],  ## r-elbow to r-wrist
+    "left_face": [1, 0],  ## l-eye to nose
+    "right_face": [2, 0],  ## l-eye to nose
+    "face": [1, 2],  ## l-eye to r-eye
+    "left_ear": [1, 3],  ## l-eye to l-ear
+    "right_ear": [2, 4],  ## l-eye to r-ear
+    "left_neck": [3, 5],  ## l-ear to l-shldr
+    "right_neck": [4, 6],  ## r-ear to r-shldr
+}
+
+COCO_SKELETON_FLIP_PAIRS = {
+    "leg": ("left_leg", "right_leg"),
+    "thigh": ("left_thigh", "right_thigh"),
+    "torso": ("left_torso", "right_torso"),
+    "bicep": ("left_bicep", "right_bicep"),
+    "hand": ("left_hand", "right_hand"),
+    "face": ("left_face", "right_face"),
+    "ear": ("left_ear", "right_ear"),
+    "neck": ("left_neck", "right_neck"),
+}
 
 
 def check_and_convert_bbox(
@@ -107,55 +163,48 @@ def get_exo_camera_plane(points):
     return plane, unit_normal
 
 
-COCO_KP_ORDER = [
-    "nose",
-    "left_eye",
-    "right_eye",
-    "left_ear",
-    "right_ear",
-    "left_shoulder",
-    "right_shoulder",
-    "left_elbow",
-    "right_elbow",
-    "left_wrist",
-    "right_wrist",
-    "left_hip",
-    "right_hip",
-    "left_knee",
-    "right_knee",
-    "left_ankle",
-    "right_ankle",
-]
+def get_bbox_from_kpts(kpts, img_W, img_H, padding=50):
+    # Get proposed hand bounding box from hand keypoints
+    x1, y1, x2, y2 = (
+        kpts[:, 0].min(),
+        kpts[:, 1].min(),
+        kpts[:, 0].max(),
+        kpts[:, 1].max(),
+    )
 
-COCO_SKELETON = {
-    "left_leg": [13, 15],  ## l-knee to l-ankle
-    "right_leg": [14, 16],  ## r-knee to r-ankle
-    "left_thigh": [11, 13],  ## l-hip to l-knee
-    "right_thigh": [12, 14],  ## r-hip to r-knee
-    "hip": [11, 12],  ## l-hip to r-hip
-    "left_torso": [5, 11],  ## l-shldr to l-hip
-    "right_torso": [6, 12],  ## r-shldr to r-hip
-    "left_bicep": [5, 7],  ## l-shldr to l-elbow
-    "right_bicep": [6, 8],  ## r-shldr to r-elbow
-    "shoulder": [5, 6],  ## l-shldr to r-shldr
-    "left_hand": [7, 9],  ## l-elbow to l-wrist
-    "right_hand": [8, 10],  ## r-elbow to r-wrist
-    "left_face": [1, 0],  ## l-eye to nose
-    "right_face": [2, 0],  ## l-eye to nose
-    "face": [1, 2],  ## l-eye to r-eye
-    "left_ear": [1, 3],  ## l-eye to l-ear
-    "right_ear": [2, 4],  ## l-eye to r-ear
-    "left_neck": [3, 5],  ## l-ear to l-shldr
-    "right_neck": [4, 6],  ## r-ear to r-shldr
-}
+    # Proposed hand bounding box with padding
+    bbox_x1, bbox_y1, bbox_x2, bbox_y2 = (
+        np.clip(x1 - padding, 0, img_W - 1),
+        np.clip(y1 - padding, 0, img_H - 1),
+        np.clip(x2 + padding, 0, img_W - 1),
+        np.clip(y2 + padding, 0, img_H - 1),
+    )
 
-COCO_SKELETON_FLIP_PAIRS = {
-    "leg": ("left_leg", "right_leg"),
-    "thigh": ("left_thigh", "right_thigh"),
-    "torso": ("left_torso", "right_torso"),
-    "bicep": ("left_bicep", "right_bicep"),
-    "hand": ("left_hand", "right_hand"),
-    "face": ("left_face", "right_face"),
-    "ear": ("left_ear", "right_ear"),
-    "neck": ("left_neck", "right_neck"),
-}
+    # Return bbox result
+    return np.array([bbox_x1, bbox_y1, bbox_x2, bbox_y2])
+
+
+def aria_extracted_to_original(kpts, img_shape=(1408, 1408)):
+    """
+    Rotate kpts coordinates from extracted view (hand vertical) to original view (hand horizontal)
+    img_shape is the shape of original view image
+    """
+    assert len(kpts.shape) == 2, "Only can rotate 2D arrays"
+    H, W = img_shape
+    new_kpts = kpts.copy()
+    new_kpts[:, 0] = kpts[:, 1]
+    new_kpts[:, 1] = H - kpts[:, 0]
+    return new_kpts
+
+
+def aria_original_to_extracted(kpts, img_shape=(1408, 1408)):
+    """
+    Rotate kpts coordinates from original view (hand horizontal) to extracted view (hand vertical)
+    img_shape is the shape of original view image
+    """
+    # assert len(kpts.shape) == 2, "Only can rotate 2D arrays"
+    H, W = img_shape
+    new_kpts = kpts.copy()
+    new_kpts[:, 0] = H - kpts[:, 1]
+    new_kpts[:, 1] = kpts[:, 0]
+    return new_kpts
