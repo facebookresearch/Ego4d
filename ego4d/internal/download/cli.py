@@ -12,7 +12,7 @@ from typing import Callable, List, Optional, Tuple, TypeVar
 
 from ego4d.cli.progressbar import DownloadProgressBar
 
-from ego4d.internal.download.types import manifest_loads, PathSpecification
+from ego4d.internal.download.manifest import manifest_loads, PathSpecification
 from ego4d.internal.s3 import S3Downloader
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
