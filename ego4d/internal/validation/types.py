@@ -17,6 +17,7 @@ pathmgr = PathManager()
 pathmgr.register_handler(S3PathHandler(profile="default"))
 
 
+DEFAULT_DATE_FORMAT_STR = "%Y-%m-%d %H:%M:%S"
 VALID_DATE_FORMAT_STRS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d"]
 
 
