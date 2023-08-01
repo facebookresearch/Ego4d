@@ -100,11 +100,17 @@ class aria_camera_model:
         self.camera_model = camera_model
 
     def image_to_world(self, point_2d):
-        return self.camera_model.projectionModel.unproject(point_2d)[:2]
+        try:
+            return self.camera_model.projectionModel.unproject(point_2d)[:2]
+        except AttributeError:
+            return self.camera_model.unproject_no_checks(point_2d)[:2]
 
     def world_to_image(self, pt):
         pt_padded = np.append(pt, 1)
-        return self.camera_model.projectionModel.project(pt_padded)
+        try:
+            return self.camera_model.projectionModel.project(pt_padded)
+        except AttributeError:
+            return self.camera_model.project_no_checks(pt_padded)
 
 
 def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
