@@ -132,6 +132,7 @@ def main(args):
     manifests = []
     for part in parts:
         manifest_path = os.path.join(release_dir, part, "manifest.json")
+        print(part)
         assert pathmgr.exists(
             manifest_path
         ), f"{part} does not have a manifest path (looking at {manifest_path})"
@@ -263,21 +264,45 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(usage="""
+    EgoExo downloader CLI
+
+    Simple usage:
+        python ego4d/internal/download/cli.py -o <out_dir>
+
+    Advanced usage examples:
+        - Download point clouds and annotations 
+            python ego4d/internal/download/cli.py -o <out_dir> --parts annotations point_cloud -y
+        - Download VRS files for a capture
+            python ego4d/internal/download/cli.py -o <out_dir> --parts capture_raw_vrs --uids <uid1>
+
+""")
     parser.add_argument(
-        "--base_dir",
+        "-o", "--out_dir",
         type=str,
-        default="s3://ego4d-consortium-sharing/egoexo/releases/",
-        help="base directory for download",
+        default=None,
+        help="Where to download the data",
+        required=True,
     )
     parser.add_argument(
-        "--release_name", type=str, default="dev", help="name of the release"
+        "--parts",
+        type=str,
+        nargs="+",
+        default=["metadata", "captures", "takes", "trajectory", "annotations"],
+        help="""
+What parts of the dataset to download, one of {metadata, takes, trajectory, point_cloud, annotations, capture_raw_vrs, capture_raw_stitched_videos}.
+
+By default the following parts will be downloaded: {metadata, captures, takes, trajectory, annotations}.
+
+Example usage: --parts annotations point_cloud
+""",
     )
     parser.add_argument(
-        "--s3_profile", type=str, default="default", help="profile to use for S3"
-    )
-    parser.add_argument(
-        "-o", "--out_dir", type=str, default=None, help="profile to use for S3"
+        "--uids",
+        type=str,
+        nargs="+",
+        default=None,
+        help="what uids to filter for takes or captures",
     )
     parser.add_argument(
         "--num_workers",
@@ -286,18 +311,7 @@ if __name__ == "__main__":
         help="number of workers to perform download ops",
     )
     parser.add_argument(
-        "--parts",
-        type=str,
-        nargs="+",
-        default=["metadata", "captures", "takes", "trajectory", "annotations"],
-        help="what parts of the dataset to download",
-    )
-    parser.add_argument(
-        "--uids",
-        type=str,
-        nargs="+",
-        default=None,
-        help="what uids to filter for takes or captures",
+        "--release_name", type=str, default="dev", help="name of the release"
     )
     parser.add_argument(
         "-y",
@@ -311,6 +325,18 @@ if __name__ == "__main__":
         default=False,
         help="force a download of all files",
         action="store_true",
+    )
+    parser.add_argument(
+        "--s3_profile",
+        type=str,
+        default="default",
+        help="profile to use for S3",
+    )
+    parser.add_argument(
+        "--base_dir",
+        type=str,
+        default="s3://ego4d-consortium-sharing/egoexo/releases/",
+        help="base directory for download (ADVANCED usage, do not change unless you know what you're doing)",
     )
     args = parser.parse_args()
     main(args)
