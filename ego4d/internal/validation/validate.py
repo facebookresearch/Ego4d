@@ -14,7 +14,7 @@ from ego4d.cli.manifest import VideoMetadata
 from ego4d.cli.universities import BUCKET_TO_UNIV
 from ego4d.internal.s3 import StreamPathMgr
 from ego4d.internal.validation.ffmpeg_utils import get_video_info, VideoInfo
-from ego4d.internal.validation.types import (
+from ego4d.internal.validation.manifest import (
     Annotations,
     AuxiliaryVideoComponentDataFile,
     CaptureMetadataEgoExo,
