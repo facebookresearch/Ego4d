@@ -3,6 +3,7 @@ import ast
 import json
 import os
 import pickle
+import random
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,6 @@ from typing import Any, Dict, List, Optional
 import cv2
 
 import hydra
-
 import numpy as np
 import pandas as pd
 from ego4d.internal.colmap.preprocess import download_andor_generate_streams
@@ -34,6 +34,13 @@ from ego4d.internal.human_pose.pose_refiner import get_refined_pose3d
 from ego4d.internal.human_pose.postprocess_pose3d import detect_outliers_and_interpolate
 from ego4d.internal.human_pose.readers import read_frame_idx_set
 from ego4d.internal.human_pose.triangulator import Triangulator
+from ego4d.internal.human_pose.undistort_to_halo import (
+    body_keypoints_list,
+    get_default_attachment,
+    hand_keypoints_list,
+    process_aria_data,
+    process_exocam_data,
+)
 from ego4d.internal.human_pose.utils import (
     aria_extracted_to_original,
     aria_original_to_extracted,
@@ -48,12 +55,11 @@ from ego4d.research.readers import PyAvReader
 
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
+from projectaria_tools.core import data_provider
 from tqdm.auto import tqdm
 
 pathmgr = PathManager()
 pathmgr.register_handler(S3PathHandler(profile="default"))
-
-from mmdet.apis import inference_detector, init_detector
 
 
 @dataclass
@@ -1857,7 +1863,7 @@ def mode_egoexo_hand_pose3d(config: Config):
         pickle.dump(poses3d, f)
 
 
-# -------------------------------------------- New pipeline's code end -------------------------------------------- #
+# ----------- New pipeline's code end ----------- #
 
 
 def mode_preprocess_legacy(config: Config):
@@ -2286,6 +2292,192 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
     os.system(command)
 
 
+def mode_undistort_to_halo(config: Config, skel_type="body"):
+    ctx = get_context(config)
+
+    id_to_halo_map = {}
+
+    if skel_type == "body":
+        for id, keypoint in enumerate(body_keypoints_list):
+            id_to_halo_map[id] = keypoint["id"]
+    elif skel_type == "hand":
+        for id, keypoint in enumerate(hand_keypoints_list):
+            id_to_halo_map[id] = keypoint["id"]
+
+    capture_id = ctx.cache_dir.strip("/").split("/")[-1]
+
+    if skel_type == "hand":
+        use_ego = True
+    else:
+        use_ego = False
+
+    if use_ego:
+        ###############################
+        # TODO: extract this to a separate function
+        capture_dir = os.path.join(
+            ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
+        )
+        aria_dir = os.path.join(capture_dir, "videos")
+        count_vrs = 0
+        # aria_cam_id = None
+        for name in os.listdir(aria_dir):
+            if name.endswith(".vrs"):
+                # aria_cam_id = name.split(".vrs")[0]  # aria01, aria02, etc.
+                aria_path = os.path.join(aria_dir, name)
+                count_vrs += 1
+        assert (
+            count_vrs == 1
+        ), f"Expecting 1 but found {count_vrs} vrs files in {aria_dir}"
+        assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
+        assert os.path.exists(aria_path), "need aria video downloaded"
+        assert os.path.exists(aria_path)
+        print(f"Creating data provider from {aria_path}")
+        provider = data_provider.create_vrs_data_provider(aria_path)
+        assert provider is not None
+        #
+        ###############################
+
+    ## The naming of aria and gopro might be different; modifiy values below if needed.
+    cam_name_map = {
+        "aria": "aria01_rgb",
+        "cam01": "cam01_0",
+        "cam02": "cam02_0",
+        "cam03": "cam03_0",
+        "cam04": "cam04_0",
+        "cam05": "cam05_0",
+        "gp01": "gp01_0",
+        "gp02": "gp02_0",
+        "gp03": "gp03_0",
+        "gp04": "gp04_0",
+        "gp05": "gp05_0",
+        "gp06": "gp06_0",
+    }
+
+    output_images_dir = os.path.join(ctx.cache_dir, skel_type, "halo", "images")
+    os.makedirs(output_images_dir, exist_ok=True)
+    output_attachments_dir = os.path.join(
+        ctx.cache_dir, skel_type, "halo", "attachments"
+    )
+    os.makedirs(output_attachments_dir, exist_ok=True)
+
+    if skel_type == "hand":
+        pose3d_file = os.path.join(
+            ctx.cache_dir, skel_type, "pose3d", "egoexo_pose3d_triThresh=0.3.pkl"
+        )
+    elif skel_type == "body":
+        pose3d_file = os.path.join(
+            ctx.cache_dir, skel_type, "pose3d", "body_pose3d.pkl"
+        )
+    else:
+        raise Exception(f"Unknown skeleton type: {skel_type}")
+
+    with open(pose3d_file, "rb") as f:
+        poses3d = pickle.load(f)
+
+    # Run through the data.json file and process each timestamp
+    # for corresponding aria-rgb and gopros
+    #
+    # 1. create a temp attachment json
+    # 2. process aria and write K, M
+    # 3. process gopros and write ks and Ms
+    #
+    # naming:
+    # 1. image and json share the same name except the extension (required by halo)
+    # 2. file name = <CAMERA_ID>_<FRAME_NUMBER>.<EXT>
+    # 3. inside the json, frame_number = <FRAME_NUMBER>
+    #
+
+    with open(ctx.dataset_json_path, "r") as f:
+        json_data = json.load(f)
+    frames = json_data["frames"]
+    print(f"Total frame number: {len(frames)}")
+    print(f"images will be saved to {output_images_dir}")
+    print(f"attachments will be saved to {output_attachments_dir}")
+
+    assert len(frames) == len(poses3d)
+
+    id = 0
+
+    for _idx, frame in tqdm(enumerate(frames), total=len(frames)):
+        frame_names = []
+
+        # Process aria
+        if use_ego:
+            aria = cam_name_map["aria"]
+            aria_data = frame[aria]
+            frame_path = aria_data["frame_path"]
+            frame_path = os.path.join(ctx.frame_dir, frame_path)
+            save_name = ("_").join(frame_path.split("/")[-2:])
+            frame_name = save_name.split(".")[0]
+            frame_names.append(frame_name)
+
+        # Process exocams (gopros)
+
+        exocam_list = []
+        for cam in cam_name_map:
+            if "aria" in cam:
+                # skip ego camera
+                continue
+            exocam = cam_name_map[cam]
+            if exocam not in frame:
+                continue
+
+            exocam_list.append(exocam)
+
+            exocam_data = frame[exocam]
+            frame_path = exocam_data["frame_path"]
+            frame_path = os.path.join(ctx.frame_dir, frame_path)
+            save_name = ("_").join(frame_path.split("/")[-2:])
+            frame_name = save_name.split(".")[0]
+            frame_names.append(frame_name)
+
+        high_conf_frame_list = []
+        for _kp_id in range(len(id_to_halo_map)):
+            # randomly sample 2 for each keypoint for now
+            # TODO: use reprojection errors/confidences instead
+            high_conf_frame_list.append(random.sample(frame_names, 2))
+
+        # Process aria
+        if use_ego:
+            default_attachment_json = get_default_attachment()
+
+            default_attachment_json = process_aria_data(
+                aria,
+                aria_data,
+                default_attachment_json,
+                ctx.frame_dir,
+                provider,
+                capture_id,
+                poses3d[id],
+                id_to_halo_map,
+                high_conf_frame_list,
+                output_images_dir,
+                output_attachments_dir,
+            )
+
+        # Process exocams (gopros)
+        for exocam in exocam_list:
+
+            exocam_data = frame[exocam]
+
+            default_attachment_json = get_default_attachment()
+
+            default_attachment_json = process_exocam_data(
+                exocam,
+                exocam_data,
+                default_attachment_json,
+                ctx.frame_dir,
+                capture_id,
+                poses3d[id],
+                id_to_halo_map,
+                high_conf_frame_list,
+                output_images_dir,
+                output_attachments_dir,
+            )
+
+        id += 1
+
+
 """
 Original main function to run body pose estimation inference
 """
@@ -2427,6 +2619,8 @@ def main(args):
             mode_body_pose2d(config)
         elif step == "body_pose3d":
             mode_body_pose3d(config)
+        elif step == "body_undistort_to_halo":
+            mode_undistort_to_halo(config, skel_type="body")
         elif step == "wholebodyHand_pose3d":
             mode_wholebodyHand_pose3d(config)
         elif step == "hand_pose2d_exo":
@@ -2437,6 +2631,8 @@ def main(args):
             mode_exo_hand_pose3d(config)
         elif step == "hand_pose3d_egoexo":
             mode_egoexo_hand_pose3d(config)
+        elif step == "hand_undistort_to_halo":
+            mode_undistort_to_halo(config, skel_type="hand")
         elif step == "refine_pose3d":
             mode_refine_pose3d(config)
         elif step == "vis_body_bbox":
