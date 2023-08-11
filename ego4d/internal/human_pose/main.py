@@ -20,6 +20,7 @@ from ego4d.internal.colmap.preprocess import download_andor_generate_streams
 from ego4d.internal.human_pose.bbox_detector import DetectorModel
 from ego4d.internal.human_pose.camera import (
     batch_xworld_to_yimage,
+    batch_xworld_to_yimage_check_camera_z,
     create_camera,
     create_camera_data,
     get_aria_camera_models,
@@ -1439,7 +1440,7 @@ def mode_ego_hand_pose2d(config: Config):
         ########################## Hand bbox from re-projected wholebody-Hand kpts ############################
         # Project wholebody-Hand pose3d kpts onto current aria image plane
         pose3d = wholebodyHand_pose3d[time_stamp]
-        projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], aria_camera)
+        projected_pose3d = batch_xworld_to_yimage_check_camera_z(pose3d[:, :3], aria_camera)
         projected_pose3d = np.concatenate(
             [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
         )
