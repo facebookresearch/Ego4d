@@ -17,6 +17,8 @@ class Triangulator:
         multiview_pose2d,
         keypoint_thres=0.7,
         num_keypoints=17,
+        sample_all_combinations=True,
+        inlier_reproj_error_check=True
     ):
         self.camera_names = camera_names
         self.cameras = cameras
@@ -29,6 +31,8 @@ class Triangulator:
         self.include_confidence = False
         self.num_keypoints = num_keypoints
         self.keypoints_idxs = np.array(range(self.num_keypoints))
+        self.sample_all_combinations = sample_all_combinations
+        self.inlier_reproj_error_check = inlier_reproj_error_check
 
         # parse the pose2d results, reaarange from camera view to human
         # pose2d is a dictionary,
@@ -108,7 +112,8 @@ class Triangulator:
                         n_iters=self.n_iters,
                         reprojection_error_epsilon=self.reprojection_error_epsilon,
                         direct_optimization=True,
-                        sample_all_combinations=True,
+                        sample_all_combinations=self.sample_all_combinations,
+                        inlier_reproj_error_check=self.inlier_reproj_error_check
                     )
 
                     if debug:
@@ -144,6 +149,7 @@ class Triangulator:
         reprojection_error_epsilon=0.1,
         direct_optimization=True,
         sample_all_combinations=True,
+        inlier_reproj_error_check=True
     ):
         assert len(proj_matricies) == len(points)
         assert len(points) >= 2
@@ -155,11 +161,14 @@ class Triangulator:
         # determine inliers
         view_set = set(range(n_views))
         inlier_set = set()
+        # Initializing averge reprojection error
+        best_avg_reproj_error = np.inf
 
         # All possible combinations of camera view
         all_comb = itertools.combinations(list(range(n_views)), 2)
         all_comb_list = [list(curr_comb) for curr_comb in all_comb]
-        n_iters = len(all_comb_list)
+        if sample_all_combinations:
+            n_iters = len(all_comb_list)
 
         for i in range(n_iters):
             # Whether sample two views from combination or random sample
@@ -184,8 +193,18 @@ class Triangulator:
                 if current_reprojection_error < reprojection_error_epsilon:
                     new_inlier_set.add(view)
 
-            if len(new_inlier_set) > len(inlier_set):
-                inlier_set = new_inlier_set
+            if inlier_reproj_error_check:
+                # Update best inlier selection only if it has more or equal number of inliers view and 
+                # the average reprojection error of those points with lower than threshold error is lower
+                if (len(new_inlier_set) >= len(inlier_set) and 
+                        np.mean(reprojection_error_vector[
+                            reprojection_error_vector<reprojection_error_epsilon
+                        ]) < best_avg_reproj_error):
+                    inlier_set = new_inlier_set
+                    best_avg_reproj_error = np.mean(reprojection_error_vector)
+            else:
+                if len(new_inlier_set) > len(inlier_set):
+                    inlier_set = new_inlier_set
 
         # triangulate using inlier_set
         if len(inlier_set) == 0:

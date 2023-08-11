@@ -1636,6 +1636,7 @@ def mode_exo_hand_pose3d(config: Config):
             multi_view_pose2d,
             keypoint_thres=tri_threshold,
             num_keypoints=42,
+            inlier_reproj_error_check=True,
         )
         pose3d = triangulator.run(debug=False)  ## N x 4 (x, y, z, confidence)
         poses3d[time_stamp] = pose3d
@@ -1820,6 +1821,7 @@ def mode_egoexo_hand_pose3d(config: Config):
             multi_view_pose2d,
             keypoint_thres=tri_threshold,
             num_keypoints=42,
+            inlier_reproj_error_check=True
         )
         pose3d = triangulator.run(debug=False)  ## N x 4 (x, y, z, confidence)
         poses3d[time_stamp] = pose3d
