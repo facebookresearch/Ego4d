@@ -1352,7 +1352,7 @@ def mode_ego_hand_pose2d(config: Config):
     ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args
     ################# Modified as needed #####################
-    ego_cam_name = "aria01_rgb"
+    ego_cam_names = ["aria01_rgb","aria01_slam-right","aria01_slam-left"]
     kpts_vis_threshold = 0.3  # This value determines the threshold to visualize hand pose2d estimated kpts
     tri_threshold = 0.5  # This value determines which wholebody-Hand pose3d kpts to use
     visualization = True
@@ -1384,12 +1384,11 @@ def mode_ego_hand_pose2d(config: Config):
 
     # Directory to store bbox and pose2d estimation
     if visualization:
-        vis_bbox_dir = os.path.join(ctx.dataset_dir, f"hand/vis_bbox", ego_cam_name)
+        vis_bbox_dir = os.path.join(ctx.dataset_dir, f"hand/vis_bbox")
         os.makedirs(vis_bbox_dir, exist_ok=True)
         vis_pose2d_dir = os.path.join(
             ctx.dataset_dir,
             f"hand/vis_pose2d/visThresh={kpts_vis_threshold}",
-            ego_cam_name,
         )
         if not os.path.exists(vis_pose2d_dir):
             os.makedirs(vis_pose2d_dir)
@@ -1417,94 +1416,106 @@ def mode_ego_hand_pose2d(config: Config):
     aria_camera_models = get_aria_camera_models(aria_path)
     stream_name_to_id = {
         "aria01_rgb": "214-1",
-        "slam-left": "1201-1",
-        "slam-right": "1201-2",
+        "aria01_slam-left": "1201-1",
+        "aria01_slam-right": "1201-2",
     }
 
     # Iterate through every frame
     poses2d = {}
     bboxes = {}
     for time_stamp in tqdm(range(len(dset)), total=len(dset)):
-        # Load in original image at first
-        image_path = dset[time_stamp][ego_cam_name]["abs_frame_path"]
-        image = cv2.imread(image_path)
+        info = dset[time_stamp]
+        poses2d[time_stamp] = {}
+        bboxes[time_stamp] = {}
+        
+        # Iterate through every cameras
+        for ego_cam_name in ego_cam_names:
+            # Load in original image at first
+            image_path = info[ego_cam_name]["abs_frame_path"]
+            image = cv2.imread(image_path)
 
-        # Create aria camera at this timestamp
-        ari_calib_model = aria_camera_model(
-            ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]]
-        )
-        aria_camera = create_camera(
-            dset[time_stamp][ego_cam_name]["camera_data"], ari_calib_model
-        )
-
-        ########################## Hand bbox from re-projected wholebody-Hand kpts ############################
-        # Project wholebody-Hand pose3d kpts onto current aria image plane
-        pose3d = wholebodyHand_pose3d[time_stamp]
-        projected_pose3d = batch_xworld_to_yimage_check_camera_z(pose3d[:, :3], aria_camera)
-        projected_pose3d = np.concatenate(
-            [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
-        )
-        # Reproject hand pose2d kpts onto original aria image plane
-        img_H, img_W = image.shape[:2]  # extracted image shape
-        orig_H, orig_W = img_W, img_H
-        # Clip hand kpts into valid range
-        projected_pose3d[:, 0] = np.clip(projected_pose3d[:, 0], 0, orig_W - 1)
-        projected_pose3d[:, 1] = np.clip(projected_pose3d[:, 1], 0, orig_H - 1)
-        right_hand_kpts, left_hand_kpts = projected_pose3d[21:], projected_pose3d[:21]
-        # Select only nonzero confidence kpts
-        right_hand_kpts, left_hand_kpts = (
-            right_hand_kpts[right_hand_kpts[:, 2] != 0, :2],
-            left_hand_kpts[left_hand_kpts[:, 2] != 0, :2],
-        )
-
-        ############## Rotate aria hand kpts from original to extracted frames #################
-        rot_right_hand_kpts, rot_left_hand_kpts = aria_original_to_extracted(
-            right_hand_kpts, (orig_H, orig_W)
-        ), aria_original_to_extracted(left_hand_kpts, (orig_H, orig_W))
-        ########################################################################################
-
-        right_hand_bbox = get_bbox_from_kpts(
-            rot_right_hand_kpts, img_W, img_H, padding=50
-        )  # Adjust padding as needed
-        left_hand_bbox = get_bbox_from_kpts(
-            rot_left_hand_kpts, img_W, img_H, padding=50
-        )  # Adjust padding as needed
-        # Save result
-        bboxes[time_stamp] = [right_hand_bbox, left_hand_bbox]
-        # Hand bbox visualization
-        if visualization:
-            vis_bbox_img = image.copy()
-            vis_bbox_img = draw_bbox_xyxy(
-                vis_bbox_img, right_hand_bbox, color=(255, 0, 0)
+            # Create aria camera at this timestamp
+            aria_calib_model = aria_camera_model(
+                ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]]
             )
-            vis_bbox_img = draw_bbox_xyxy(
-                vis_bbox_img, left_hand_bbox, color=(0, 0, 255)
-            )
-            cv2.imwrite(
-                os.path.join(vis_bbox_dir, f"{time_stamp:05d}.jpg"), vis_bbox_img
+            aria_camera = create_camera(
+                info[ego_cam_name]["camera_data"], aria_calib_model
             )
 
-        ######################### Hand pose2d estimation on ego camera (aria) ##################################
-        # Format hand bbox
-        two_hand_bboxes = [
-            {"bbox": np.append(curr_hand_bbox, 1)}
-            for curr_hand_bbox in [right_hand_bbox, left_hand_bbox]
-        ]
-        # Hand pose estimation
-        pose_results = hand_pose_model.get_poses2d(
-            bboxes=two_hand_bboxes,
-            image_name=image_path,
-        )
-        # Save result
-        curr_pose2d_kpts = np.array([res["keypoints"] for res in pose_results])
-        poses2d[time_stamp] = curr_pose2d_kpts
-        # Visualization
-        if visualization:
-            save_path = os.path.join(vis_pose2d_dir, f"{time_stamp:06d}.jpg")
-            vis_twoHand = cv2.imread(image_path)
-            hand_pose_model.draw_poses2d([pose_results[0]], vis_twoHand, save_path)
-            vis_twoHand = cv2.imread(save_path)
-            hand_pose_model.draw_poses2d([pose_results[1]], vis_twoHand, save_path)
+            # Directory to save visualization
+            if visualization:
+                # Directory to store hand pose2d results
+                vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, ego_cam_name)
+                if not os.path.exists(vis_pose2d_cam_dir):
+                    os.makedirs(vis_pose2d_cam_dir)
+                # Directory to store hand bbox results
+                vis_bbox_cam_dir = os.path.join(vis_bbox_dir, ego_cam_name)
+                if not os.path.exists(vis_bbox_cam_dir):
+                    os.makedirs(vis_bbox_cam_dir)
+
+            ########################## Hand bbox from re-projected wholebody-Hand kpts ############################
+            # Project wholebody-Hand pose3d kpts onto current aria image plane
+            pose3d = wholebodyHand_pose3d[time_stamp]
+            projected_pose3d = batch_xworld_to_yimage_check_camera_z(pose3d[:, :3], aria_camera)
+            projected_pose3d = np.concatenate(
+                [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
+            )
+            # Reproject hand pose2d kpts onto original aria image plane
+            img_H, img_W = image.shape[:2]  # extracted image shape
+            orig_H, orig_W = img_W, img_H
+            # Get out-of-bound kpts index
+            x_valid = np.logical_and(projected_pose3d[:,0]>0, projected_pose3d[:,0]<orig_W-1)
+            y_valid = np.logical_and(projected_pose3d[:,1]>0, projected_pose3d[:,1]<orig_H-1)
+            valid_index = np.logical_and(x_valid, y_valid)
+            # Rotate from original to extracted view
+            extracted_kpts = aria_original_to_extracted(projected_pose3d[:,:2], (orig_H-1, orig_W))
+            rot_right_hand_kpts, rot_left_hand_kpts = extracted_kpts[21:], extracted_kpts[:21]
+            # Filter out zero conf kpts
+            rot_right_hand_kpts, rot_left_hand_kpts = rot_right_hand_kpts[valid_index[21:]], \
+                                                      rot_left_hand_kpts[valid_index[:21]]
+            # Propose both hand's bbox based on projected kpts
+            right_hand_bbox = get_bbox_from_kpts(
+                rot_right_hand_kpts, img_W, img_H, padding=50
+            ) if rot_right_hand_kpts.shape[0] > 10 else np.zeros(4)
+            left_hand_bbox = get_bbox_from_kpts(
+                rot_left_hand_kpts, img_W, img_H, padding=50
+            ) if rot_left_hand_kpts.shape[0] > 10 else np.zeros(4)
+            # Save result
+            bboxes[time_stamp][ego_cam_name] = [right_hand_bbox, left_hand_bbox]
+            # Hand bbox visualization
+            if visualization:
+                vis_bbox_img = image.copy()
+                vis_bbox_img = draw_bbox_xyxy(
+                    vis_bbox_img, right_hand_bbox, color=(255, 0, 0)
+                )
+                vis_bbox_img = draw_bbox_xyxy(
+                    vis_bbox_img, left_hand_bbox, color=(0, 0, 255)
+                )
+                cv2.imwrite(
+                    os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), vis_bbox_img
+                )
+
+            ######################### Hand pose2d estimation on ego camera (aria) ##################################
+            # Format hand bbox
+            two_hand_bboxes = [
+                {"bbox": np.append(curr_hand_bbox, 1)}
+                for curr_hand_bbox in [right_hand_bbox, left_hand_bbox]
+            ]
+            # Hand pose estimation
+            pose_results = hand_pose_model.get_poses2d(
+                bboxes=two_hand_bboxes,
+                image_name=image_path,
+            )
+            # Save result
+            curr_pose2d_kpts = np.array([res["keypoints"] for res in pose_results])
+            poses2d[time_stamp][ego_cam_name] = curr_pose2d_kpts
+            # Visualization
+            if visualization:
+                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:06d}.jpg")
+                vis_twoHand = cv2.imread(image_path)
+                hand_pose_model.draw_poses2d([pose_results[0]], vis_twoHand, save_path)
+                vis_twoHand = cv2.imread(save_path)
+                hand_pose_model.draw_poses2d([pose_results[1]], vis_twoHand, save_path)
 
     # save poses2d key points result
     with open(os.path.join(pose2d_dir, "ego_pose2d.pkl"), "wb") as f:
