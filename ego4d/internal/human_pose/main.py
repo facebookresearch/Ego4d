@@ -1166,7 +1166,7 @@ def mode_wholebodyHand_pose3d(config: Config):
 
         # visualize pose3d
         if visualization:
-            for exo_camera_name in exo_cam_names:
+            for exo_camera_name in ctx.exo_cam_names:
                 image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
                 image = cv2.imread(image_path)
                 exo_camera = exo_cameras[exo_camera_name]
@@ -1642,7 +1642,7 @@ def mode_exo_hand_pose3d(config: Config):
 
         # visualize pose3d
         if visualization:
-            for camera_name in exo_cam_names:
+            for camera_name in ctx.exo_cam_names:
                 image_path = info[f"{camera_name}_0"]["abs_frame_path"]
                 image = cv2.imread(image_path)
                 curr_camera = exo_cameras[camera_name]
@@ -1827,7 +1827,7 @@ def mode_egoexo_hand_pose3d(config: Config):
         # visualize pose3d
         if visualization:
             ### Exo camera visualization ###
-            for camera_name in exo_cam_names:
+            for camera_name in ctx.exo_cam_names:
                 image_path = info[f"{camera_name}_0"]["abs_frame_path"]
                 image = cv2.imread(image_path)
                 curr_camera = aria_exo_cameras[camera_name]
