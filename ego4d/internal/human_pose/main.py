@@ -1594,7 +1594,7 @@ def mode_exo_hand_pose3d(config: Config):
         for exo_camera_name in exo_cam_names:
             curr_exo_hand_pose2d_kpts = exo_poses2d[time_stamp][
                 exo_camera_name
-            ].reshape(-1, 3)
+            ].copy().reshape(-1, 3)
             # Heuristics
             if np.mean(curr_exo_hand_pose2d_kpts[:21, -1]) > 0.3:
                 curr_exo_hand_pose2d_kpts[0, -1] = 1
@@ -1781,7 +1781,7 @@ def mode_egoexo_hand_pose3d(config: Config):
         for exo_camera_name in exo_cam_names:
             curr_exo_hand_pose2d_kpts = exo_poses2d[time_stamp][
                 exo_camera_name
-            ].reshape(-1, 3)
+            ].copy().reshape(-1, 3)
             ### Heuristics: Hardcode hand wrist kpt conf to be 1 if average conf > 0.3 ###
             if np.mean(curr_exo_hand_pose2d_kpts[:21, -1]) > 0.3:
                 curr_exo_hand_pose2d_kpts[0, -1] = 1
@@ -1854,7 +1854,7 @@ def mode_egoexo_hand_pose3d(config: Config):
         if visualization:
             # Visualization of images from all camera views
             for camera_name in ctx.exo_cam_names + ego_cam_names: # Visualize all exo cameras + selected Aria camera
-                img_name_path = camera_name if 'aria' in camera_name or 'slam' in camera_name else f"{camera_name}_0" 
+                img_name_path = camera_name if 'aria' in camera_name else f"{camera_name}_0" 
                 image_path = info[img_name_path]["abs_frame_path"]
                 image = cv2.imread(image_path)
                 curr_camera = aria_exo_cameras[camera_name]
@@ -1868,7 +1868,7 @@ def mode_egoexo_hand_pose3d(config: Config):
                     [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
                 )  ## N x 3 (17 for body,; 42 for hand)
 
-                if 'aria' in camera_name or 'slam' in camera_name:
+                if 'aria' in camera_name:
                     projected_pose3d = aria_original_to_extracted(projected_pose3d)
 
                 save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
@@ -1883,10 +1883,10 @@ def mode_egoexo_hand_pose3d(config: Config):
             curr_camera = aria_exo_cameras[camera_name]
             projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], curr_camera)
             # Rotate projected kpts if is aria camera
-            if 'aria' in camera_name or 'slam' in camera_name:
+            if 'aria' in camera_name:
                     projected_pose3d = aria_original_to_extracted(projected_pose3d)
             # Compute L1-norm between projected 2D kpts and hand_pose2d
-            poses2d = aria_poses2d if 'aria' in camera_name or 'slam' in camera_name else exo_poses2d 
+            poses2d = aria_poses2d if 'aria' in camera_name else exo_poses2d 
             original_pose2d = poses2d[time_stamp][camera_name].reshape(-1,3)[:,:2]
             reprojection_error = np.linalg.norm((original_pose2d-projected_pose3d), ord=1, axis=1)
             # Assign invalid index's reprojection error to be -1
