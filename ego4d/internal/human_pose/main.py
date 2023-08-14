@@ -101,21 +101,6 @@ class Context:
     frame_rel_dir: str = None
 
 
-class aria_camera_model:
-    def __init__(self, camera_name, camera_model):
-        self.camera_name = camera_name
-        self.camera_model = camera_model
-
-    def image_to_world(self, point_2d):
-        # return self.camera_model.projectionModel.unproject(point_2d)[:2] # Legacy aria model
-        return self.camera_model.unproject_no_checks(point_2d)[:2]
-
-    def world_to_image(self, pt):
-        pt_padded = np.append(pt, 1)
-        # return self.camera_model.projectionModel.project(pt_padded) # Legacy aria model
-        return self.camera_model.project_no_checks(pt_padded)
-
-
 def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
     assert capture_dir is not None
 
@@ -1352,7 +1337,7 @@ def mode_ego_hand_pose2d(config: Config):
     ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args
     ################# Modified as needed #####################
-    ego_cam_names = ["aria01_rgb","aria01_slam-right","aria01_slam-left"]
+    ego_cam_names = ["aria01_rgb"]
     kpts_vis_threshold = 0.3  # This value determines the threshold to visualize hand pose2d estimated kpts
     tri_threshold = 0.5  # This value determines which wholebody-Hand pose3d kpts to use
     visualization = True
@@ -1427,7 +1412,7 @@ def mode_ego_hand_pose2d(config: Config):
         info = dset[time_stamp]
         poses2d[time_stamp] = {}
         bboxes[time_stamp] = {}
-        
+
         # Iterate through every cameras
         for ego_cam_name in ego_cam_names:
             # Load in original image at first
@@ -1435,11 +1420,9 @@ def mode_ego_hand_pose2d(config: Config):
             image = cv2.imread(image_path)
 
             # Create aria camera at this timestamp
-            aria_calib_model = aria_camera_model(
-                ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]]
-            )
             aria_camera = create_camera(
-                info[ego_cam_name]["camera_data"], aria_calib_model
+                info[ego_cam_name]["camera_data"],
+                aria_camera_models[stream_name_to_id[ego_cam_name]],
             )
 
             # Directory to save visualization
@@ -1456,7 +1439,9 @@ def mode_ego_hand_pose2d(config: Config):
             ########################## Hand bbox from re-projected wholebody-Hand kpts ############################
             # Project wholebody-Hand pose3d kpts onto current aria image plane
             pose3d = wholebodyHand_pose3d[time_stamp]
-            projected_pose3d = batch_xworld_to_yimage_check_camera_z(pose3d[:, :3], aria_camera)
+            projected_pose3d = batch_xworld_to_yimage_check_camera_z(
+                pose3d[:, :3], aria_camera
+            )
             projected_pose3d = np.concatenate(
                 [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
             )
@@ -1464,22 +1449,37 @@ def mode_ego_hand_pose2d(config: Config):
             img_H, img_W = image.shape[:2]  # extracted image shape
             orig_H, orig_W = img_W, img_H
             # Get out-of-bound kpts index
-            x_valid = np.logical_and(projected_pose3d[:,0]>0, projected_pose3d[:,0]<orig_W-1)
-            y_valid = np.logical_and(projected_pose3d[:,1]>0, projected_pose3d[:,1]<orig_H-1)
+            x_valid = np.logical_and(
+                projected_pose3d[:, 0] > 0, projected_pose3d[:, 0] < orig_W - 1
+            )
+            y_valid = np.logical_and(
+                projected_pose3d[:, 1] > 0, projected_pose3d[:, 1] < orig_H - 1
+            )
             valid_index = np.logical_and(x_valid, y_valid)
             # Rotate from original to extracted view
-            extracted_kpts = aria_original_to_extracted(projected_pose3d[:,:2], (orig_H-1, orig_W))
-            rot_right_hand_kpts, rot_left_hand_kpts = extracted_kpts[21:], extracted_kpts[:21]
+            extracted_kpts = aria_original_to_extracted(
+                projected_pose3d[:, :2], (orig_H - 1, orig_W)
+            )
+            rot_right_hand_kpts, rot_left_hand_kpts = (
+                extracted_kpts[21:],
+                extracted_kpts[:21],
+            )
             # Filter out zero conf kpts
-            rot_right_hand_kpts, rot_left_hand_kpts = rot_right_hand_kpts[valid_index[21:]], \
-                                                      rot_left_hand_kpts[valid_index[:21]]
+            rot_right_hand_kpts, rot_left_hand_kpts = (
+                rot_right_hand_kpts[valid_index[21:]],
+                rot_left_hand_kpts[valid_index[:21]],
+            )
             # Propose both hand's bbox based on projected kpts
-            right_hand_bbox = get_bbox_from_kpts(
-                rot_right_hand_kpts, img_W, img_H, padding=50
-            ) if rot_right_hand_kpts.shape[0] > 10 else np.zeros(4)
-            left_hand_bbox = get_bbox_from_kpts(
-                rot_left_hand_kpts, img_W, img_H, padding=50
-            ) if rot_left_hand_kpts.shape[0] > 10 else np.zeros(4)
+            right_hand_bbox = (
+                get_bbox_from_kpts(rot_right_hand_kpts, img_W, img_H, padding=50)
+                if rot_right_hand_kpts.shape[0] > 10
+                else np.zeros(4)
+            )
+            left_hand_bbox = (
+                get_bbox_from_kpts(rot_left_hand_kpts, img_W, img_H, padding=50)
+                if rot_left_hand_kpts.shape[0] > 10
+                else np.zeros(4)
+            )
             # Save result
             bboxes[time_stamp][ego_cam_name] = [right_hand_bbox, left_hand_bbox]
             # Hand bbox visualization
@@ -1492,7 +1492,8 @@ def mode_ego_hand_pose2d(config: Config):
                     vis_bbox_img, left_hand_bbox, color=(0, 0, 255)
                 )
                 cv2.imwrite(
-                    os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), vis_bbox_img
+                    os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"),
+                    vis_bbox_img,
                 )
 
             ######################### Hand pose2d estimation on ego camera (aria) ##################################
@@ -1592,9 +1593,9 @@ def mode_exo_hand_pose3d(config: Config):
         ########### Heuristic Check: Hardcode hand wrist kpt conf to be 1 ################################
         multi_view_pose2d = {}
         for exo_camera_name in exo_cam_names:
-            curr_exo_hand_pose2d_kpts = exo_poses2d[time_stamp][
-                exo_camera_name
-            ].copy().reshape(-1, 3)
+            curr_exo_hand_pose2d_kpts = (
+                exo_poses2d[time_stamp][exo_camera_name].copy().reshape(-1, 3)
+            )
             # Heuristics
             if np.mean(curr_exo_hand_pose2d_kpts[:21, -1]) > 0.3:
                 curr_exo_hand_pose2d_kpts[0, -1] = 1
@@ -1663,20 +1664,24 @@ def mode_exo_hand_pose3d(config: Config):
                 hand_pose_model.draw_projected_poses3d(
                     [projected_pose3d[:21], projected_pose3d[21:]], image, save_path
                 )
-        
+
         # Compute reprojection error
-        invalid_index = pose3d[:,2] == 0
+        invalid_index = pose3d[:, 2] == 0
         for camera_name in ctx.exo_cam_names:
             # Extract projected pose3d results onto current camera plane
             curr_camera = exo_cameras[camera_name]
             projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], curr_camera)
             # Compute L1-norm between projected 2D kpts and hand_pose2d
-            original_pose2d = exo_poses2d[time_stamp][camera_name].reshape(-1,3)[:,:2]
-            reprojection_error = np.linalg.norm((original_pose2d-projected_pose3d), ord=1, axis=1)
+            original_pose2d = exo_poses2d[time_stamp][camera_name].reshape(-1, 3)[:, :2]
+            reprojection_error = np.linalg.norm(
+                (original_pose2d - projected_pose3d), ord=1, axis=1
+            )
             # Assign invalid index's reprojection error to be -1
             reprojection_error[invalid_index] = -1
             # Append result
-            reprojection_errors[time_stamp][camera_name] = reprojection_error.reshape(-1,1)
+            reprojection_errors[time_stamp][camera_name] = reprojection_error.reshape(
+                -1, 1
+            )
 
     # Save pose3d kpts result
     with open(
@@ -1684,7 +1689,11 @@ def mode_exo_hand_pose3d(config: Config):
     ) as f:
         pickle.dump(poses3d, f)
     # Save reprojection errors
-    with open(os.path.join(pose3d_dir, f"exo_pose3d_triThresh={tri_threshold}_reprojection_error.pkl"), "wb"
+    with open(
+        os.path.join(
+            pose3d_dir, f"exo_pose3d_triThresh={tri_threshold}_reprojection_error.pkl"
+        ),
+        "wb",
     ) as f:
         pickle.dump(reprojection_errors, f)
 
@@ -1779,9 +1788,9 @@ def mode_egoexo_hand_pose3d(config: Config):
         multi_view_pose2d = {}
         # 1. Add exo camera keypoints
         for exo_camera_name in exo_cam_names:
-            curr_exo_hand_pose2d_kpts = exo_poses2d[time_stamp][
-                exo_camera_name
-            ].copy().reshape(-1, 3)
+            curr_exo_hand_pose2d_kpts = (
+                exo_poses2d[time_stamp][exo_camera_name].copy().reshape(-1, 3)
+            )
             ### Heuristics: Hardcode hand wrist kpt conf to be 1 if average conf > 0.3 ###
             if np.mean(curr_exo_hand_pose2d_kpts[:21, -1]) > 0.3:
                 curr_exo_hand_pose2d_kpts[0, -1] = 1
@@ -1805,11 +1814,9 @@ def mode_egoexo_hand_pose3d(config: Config):
 
         # Add ego camera
         for ego_cam_name in ego_cam_names:
-            aria_calib_model = aria_camera_model(
-                ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]]
-            )
             aria_exo_cameras[ego_cam_name] = create_camera(
-                info[ego_cam_name]["camera_data"], aria_calib_model
+                info[ego_cam_name]["camera_data"],
+                aria_camera_models[stream_name_to_id[ego_cam_name]],
             )
 
         ###### Heuristic Check: If two hands are too close, then drop the one with lower confidence ######
@@ -1853,8 +1860,12 @@ def mode_egoexo_hand_pose3d(config: Config):
         # visualize pose3d
         if visualization:
             # Visualization of images from all camera views
-            for camera_name in ctx.exo_cam_names + ego_cam_names: # Visualize all exo cameras + selected Aria camera
-                img_name_path = camera_name if 'aria' in camera_name else f"{camera_name}_0" 
+            for camera_name in (
+                ctx.exo_cam_names + ego_cam_names
+            ):  # Visualize all exo cameras + selected Aria camera
+                img_name_path = (
+                    camera_name if "aria" in camera_name else f"{camera_name}_0"
+                )
                 image_path = info[img_name_path]["abs_frame_path"]
                 image = cv2.imread(image_path)
                 curr_camera = aria_exo_cameras[camera_name]
@@ -1868,7 +1879,7 @@ def mode_egoexo_hand_pose3d(config: Config):
                     [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
                 )  ## N x 3 (17 for body,; 42 for hand)
 
-                if 'aria' in camera_name:
+                if "aria" in camera_name:
                     projected_pose3d = aria_original_to_extracted(projected_pose3d)
 
                 save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
@@ -1877,22 +1888,26 @@ def mode_egoexo_hand_pose3d(config: Config):
                 )
 
             # Compute reprojection error
-        invalid_index = pose3d[:,2] == 0
+        invalid_index = pose3d[:, 2] == 0
         for camera_name in ctx.exo_cam_names + ego_cam_names:
             # Extract projected pose3d results onto current camera plane
             curr_camera = aria_exo_cameras[camera_name]
             projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], curr_camera)
             # Rotate projected kpts if is aria camera
-            if 'aria' in camera_name:
-                    projected_pose3d = aria_original_to_extracted(projected_pose3d)
+            if "aria" in camera_name:
+                projected_pose3d = aria_original_to_extracted(projected_pose3d)
             # Compute L1-norm between projected 2D kpts and hand_pose2d
-            poses2d = aria_poses2d if 'aria' in camera_name else exo_poses2d 
-            original_pose2d = poses2d[time_stamp][camera_name].reshape(-1,3)[:,:2]
-            reprojection_error = np.linalg.norm((original_pose2d-projected_pose3d), ord=1, axis=1)
+            poses2d = aria_poses2d if "aria" in camera_name else exo_poses2d
+            original_pose2d = poses2d[time_stamp][camera_name].reshape(-1, 3)[:, :2]
+            reprojection_error = np.linalg.norm(
+                (original_pose2d - projected_pose3d), ord=1, axis=1
+            )
             # Assign invalid index's reprojection error to be -1
             reprojection_error[invalid_index] = -1
             # Append result
-            reprojection_errors[time_stamp][camera_name] = reprojection_error.reshape(-1,1)
+            reprojection_errors[time_stamp][camera_name] = reprojection_error.reshape(
+                -1, 1
+            )
 
     # Save pose3d kpts result
     with open(
@@ -1900,7 +1915,12 @@ def mode_egoexo_hand_pose3d(config: Config):
     ) as f:
         pickle.dump(poses3d, f)
         # Save reprojection errors
-    with open(os.path.join(pose3d_dir, f"egoexo_pose3d_triThresh={tri_threshold}_reprojection_error.pkl"), "wb"
+    with open(
+        os.path.join(
+            pose3d_dir,
+            f"egoexo_pose3d_triThresh={tri_threshold}_reprojection_error.pkl",
+        ),
+        "wb",
     ) as f:
         pickle.dump(reprojection_errors, f)
 

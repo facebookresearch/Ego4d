@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 import torch
+from ego4d.internal.human_pose.camera import ximage_to_xdevice
 from ego4d.internal.human_pose.utils import COCO_KP_ORDER
 from scipy.optimize import least_squares
 
@@ -18,7 +19,7 @@ class Triangulator:
         keypoint_thres=0.7,
         num_keypoints=17,
         sample_all_combinations=True,
-        inlier_reproj_error_check=True
+        inlier_reproj_error_check=True,
     ):
         self.camera_names = camera_names
         self.cameras = cameras
@@ -86,7 +87,7 @@ class Triangulator:
 
                         ## get the ray in 3D
 
-                        ray_3d = camera.camera_model.image_to_world(point_2d)  ## 1 x 2
+                        ray_3d = ximage_to_xdevice(point_2d, camera)  ## 1 x 2
                         ray_3d = np.append(ray_3d, 1)
 
                         assert len(ray_3d) == 3
@@ -113,7 +114,7 @@ class Triangulator:
                         reprojection_error_epsilon=self.reprojection_error_epsilon,
                         direct_optimization=True,
                         sample_all_combinations=self.sample_all_combinations,
-                        inlier_reproj_error_check=self.inlier_reproj_error_check
+                        inlier_reproj_error_check=self.inlier_reproj_error_check,
                     )
 
                     if debug:
@@ -149,7 +150,7 @@ class Triangulator:
         reprojection_error_epsilon=0.1,
         direct_optimization=True,
         sample_all_combinations=True,
-        inlier_reproj_error_check=True
+        inlier_reproj_error_check=True,
     ):
         assert len(proj_matricies) == len(points)
         assert len(points) >= 2
@@ -194,12 +195,17 @@ class Triangulator:
                     new_inlier_set.add(view)
 
             if inlier_reproj_error_check:
-                # Update best inlier selection only if it has more or equal number of inliers view and 
+                # Update best inlier selection only if it has more or equal number of inliers view and
                 # the average reprojection error of those points with lower than threshold error is lower
-                if (len(new_inlier_set) >= len(inlier_set) and 
-                        np.mean(reprojection_error_vector[
-                            reprojection_error_vector<reprojection_error_epsilon
-                        ]) < best_avg_reproj_error):
+                if (
+                    len(new_inlier_set) >= len(inlier_set)
+                    and np.mean(
+                        reprojection_error_vector[
+                            reprojection_error_vector < reprojection_error_epsilon
+                        ]
+                    )
+                    < best_avg_reproj_error
+                ):
                     inlier_set = new_inlier_set
                     best_avg_reproj_error = np.mean(reprojection_error_vector)
             else:

@@ -144,7 +144,10 @@ def create_camera_data(
 
 
 def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
-    if cam.camera_type in ("aria", "colmap"):
+    if cam.camera_type == "aria":
+        assert cam.camera_model is not None
+        ret = cam.camera_model.project_no_checks(pt_device / pt_device[2])
+    elif cam.camera_type == "colmap":
         assert cam.camera_model is not None
         ret = cam.camera_model.world_to_image(pt_device[0:2] / pt_device[2])
     else:
@@ -155,7 +158,7 @@ def xdevice_to_ximage(pt_device: Vec3, cam: Camera):
 def ximage_to_xdevice(pt_img: Vec2, cam: Camera):
     if cam.camera_type == "aria":
         assert cam.camera_model is not None
-        ret = cam.camera_model.projectionModel.unproject(pt_img)
+        ret = cam.camera_model.unproject_no_checks(pt_img)[:2]
     elif cam.camera_type == "colmap":
         assert cam.camera_model is not None
         ret = cam.camera_model.image_to_world(pt_img)
@@ -194,7 +197,7 @@ def batch_xworld_to_yimage_check_camera_z(pts3d: Vec3, to_cam: Camera):
         pt_target = np.matmul(T_to_world, np.array(pt3d.tolist() + [1.0]))[0:3]
         # For negative z-coor point, assign (-1,-1) as image coordinate (which will be filtered out later)
         if pt_target[-1] < 0:
-            pts2d.append(np.array([[-1,-1]]))
+            pts2d.append(np.array([[-1, -1]]))
         else:
             pts2d.append(xdevice_to_ximage(pt_target, to_cam).reshape(1, -1))
     pts2d = np.concatenate(pts2d, axis=0)
