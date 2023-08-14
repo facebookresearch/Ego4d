@@ -1186,7 +1186,7 @@ def mode_exo_hand_pose2d(config: Config):
     ##################################
     exo_cam_names = (
         ctx.exo_cam_names
-    )  # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
+    )  # Select all default cameras: ctx.exo_cam_names or manual selction: ['cam01','cam02']
     kpts_vis_threshold = 0.3  # This determines the hand pose2d kpts confidence threshold for visualization
     visualization = True  # Whether show visualization
     ##################################
@@ -1887,7 +1887,7 @@ def mode_egoexo_hand_pose3d(config: Config):
                     [projected_pose3d[:21], projected_pose3d[21:]], image, save_path
                 )
 
-            # Compute reprojection error
+        # Compute reprojection error
         invalid_index = pose3d[:, 2] == 0
         for camera_name in ctx.exo_cam_names + ego_cam_names:
             # Extract projected pose3d results onto current camera plane
