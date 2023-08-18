@@ -187,6 +187,24 @@ def batch_xworld_to_yimage(pts3d: Vec3, to_cam: Camera):
     return pts2d
 
 
+def batch_xworld_to_yimage_check_camera_z(pts3d: Vec3, to_cam: Camera):
+    assert pts3d.shape[1] == 3
+    pts2d = []
+
+    # TODO: optimize
+    for pt3d in pts3d:
+        T_to_world = to_cam.extrinsics
+        pt_target = np.matmul(T_to_world, np.array(pt3d.tolist() + [1.0]))[0:3]
+        # For negative z-coor point,
+        # assign (-1,-1) as image coordinate (which will be filtered out later)
+        if pt_target[-1] < 0:
+            pts2d.append(np.array([[-1, -1]]))
+        else:
+            pts2d.append(xdevice_to_ximage(pt_target, to_cam).reshape(1, -1))
+    pts2d = np.concatenate(pts2d, axis=0)
+    return pts2d
+
+
 def xdevice_to_yimage(pt3d: Vec3, from_cam: Camera, to_cam: Camera):
     assert pt3d.shape[0] == 3
     print(to_cam.T_device_camera)

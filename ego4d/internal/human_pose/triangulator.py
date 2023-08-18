@@ -18,6 +18,8 @@ class Triangulator:
         multiview_pose2d,
         keypoint_thres=0.7,
         num_keypoints=17,
+        sample_all_combinations=True,
+        inlier_reproj_error_check=True,
     ):
         self.camera_names = camera_names
         self.cameras = cameras
@@ -30,6 +32,8 @@ class Triangulator:
         self.include_confidence = False
         self.num_keypoints = num_keypoints
         self.keypoints_idxs = np.array(range(self.num_keypoints))
+        self.sample_all_combinations = sample_all_combinations
+        self.inlier_reproj_error_check = inlier_reproj_error_check
 
         # parse the pose2d results, reaarange from camera view to human
         # pose2d is a dictionary,
@@ -73,32 +77,32 @@ class Triangulator:
 
                     point_2d = self.pose2d[human_name][camera_name][
                         keypoint_idx, :2
-                    ]  ## chop off the confidnece
+                    ]  # chop off the confidnece
                     confidence = self.pose2d[human_name][camera_name][keypoint_idx, 2]
                     camera = self.cameras[camera_name]
 
                     # ---------use high confidence predictions------------------
                     if confidence > self.keypoint_thres:
-                        extrinsics = camera.extrinsics[:3, :]  ## 3x4
+                        extrinsics = camera.extrinsics[:3, :]  # 3x4
 
-                        ## get the ray in 3D
+                        # get the ray in 3D
 
-                        ray_3d = ximage_to_xdevice(point_2d, camera)  ## 1 x 2
+                        ray_3d = ximage_to_xdevice(point_2d, camera)  # 1 x 2
                         ray_3d = np.append(ray_3d, 1)
 
                         assert len(ray_3d) == 3
 
                         point = ray_3d.copy()
-                        point[2] = confidence  ## add keypoint confidence to the point
+                        point[2] = confidence  # add keypoint confidence to the point
                         points.append(point)
                         proj_matricies.append(extrinsics)
                         choosen_cameras.append(
                             camera_name
-                        )  ## camera choosen for triangulation for this point
+                        )  # camera chosen for triangulation for this point
 
                 # ---------------------------------------------------------------------------------------------
                 if len(points) >= self.min_views:
-                    ## triangulate for a single point
+                    # triangulate for a single point
                     (
                         point_3d,
                         inlier_views,
@@ -109,7 +113,8 @@ class Triangulator:
                         n_iters=self.n_iters,
                         reprojection_error_epsilon=self.reprojection_error_epsilon,
                         direct_optimization=True,
-                        sample_all_combinations=True,
+                        sample_all_combinations=self.sample_all_combinations,
+                        inlier_reproj_error_check=self.inlier_reproj_error_check,
                     )
 
                     if debug:
@@ -145,6 +150,7 @@ class Triangulator:
         reprojection_error_epsilon=0.1,
         direct_optimization=True,
         sample_all_combinations=True,
+        inlier_reproj_error_check=True,
     ):
         assert len(proj_matricies) == len(points)
         assert len(points) >= 2
@@ -156,11 +162,14 @@ class Triangulator:
         # determine inliers
         view_set = set(range(n_views))
         inlier_set = set()
+        # Initializing averge reprojection error
+        best_avg_reproj_error = np.inf
 
         # All possible combinations of camera view
         all_comb = itertools.combinations(list(range(n_views)), 2)
         all_comb_list = [list(curr_comb) for curr_comb in all_comb]
-        n_iters = len(all_comb_list)
+        if sample_all_combinations:
+            n_iters = len(all_comb_list)
 
         for i in range(n_iters):
             # Whether sample two views from combination or random sample
@@ -185,14 +194,31 @@ class Triangulator:
                 if current_reprojection_error < reprojection_error_epsilon:
                     new_inlier_set.add(view)
 
-            if len(new_inlier_set) > len(inlier_set):
-                inlier_set = new_inlier_set
+            if inlier_reproj_error_check:
+                # Update best inlier selection only if
+                # it has more or equal number of inlier views, and
+                # the average reprojection error of those points
+                # with lower than threshold error is lower
+                if (
+                    len(new_inlier_set) >= len(inlier_set)
+                    and np.mean(
+                        reprojection_error_vector[
+                            reprojection_error_vector < reprojection_error_epsilon
+                        ]
+                    )
+                    < best_avg_reproj_error
+                ):
+                    inlier_set = new_inlier_set
+                    best_avg_reproj_error = np.mean(reprojection_error_vector)
+            else:
+                if len(new_inlier_set) > len(inlier_set):
+                    inlier_set = new_inlier_set
 
         # triangulate using inlier_set
         if len(inlier_set) == 0:
             inlier_set = view_set.copy()
 
-        ##-------------------------------
+        # -------------------------------
         inlier_list = np.array(sorted(inlier_set))
         inlier_proj_matricies = proj_matricies[inlier_list]
         inlier_points = points[inlier_list]
@@ -203,12 +229,12 @@ class Triangulator:
         reprojection_error_vector = self.calc_reprojection_error_matrix(
             np.array([keypoint_3d_in_base_camera]), inlier_points, inlier_proj_matricies
         )[0]
-        reprojection_error_mean = np.mean(reprojection_error_vector)
+        # reprojection_error_mean = np.mean(reprojection_error_vector)
 
-        keypoint_3d_in_base_camera_before_direct_optimization = (
-            keypoint_3d_in_base_camera
-        )
-        reprojection_error_before_direct_optimization = reprojection_error_mean
+        # keypoint_3d_in_base_camera_before_direct_optimization = (
+        #     keypoint_3d_in_base_camera
+        # )
+        # reprojection_error_before_direct_optimization = reprojection_error_mean
 
         # direct reprojection error minimization
         if direct_optimization:
@@ -237,7 +263,7 @@ class Triangulator:
                 inlier_points,
                 inlier_proj_matricies,
             )[0]
-            reprojection_error_mean = np.mean(reprojection_error_vector)
+            # reprojection_error_mean = np.mean(reprojection_error_vector)
 
         return keypoint_3d_in_base_camera, inlier_list, reprojection_error_vector
 
