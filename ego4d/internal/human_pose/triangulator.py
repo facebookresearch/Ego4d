@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 import torch
+from ego4d.internal.human_pose.camera import ximage_to_xdevice
 from ego4d.internal.human_pose.utils import COCO_KP_ORDER
 from scipy.optimize import least_squares
 
@@ -82,7 +83,7 @@ class Triangulator:
 
                         ## get the ray in 3D
 
-                        ray_3d = camera.camera_model.image_to_world(point_2d)  ## 1 x 2
+                        ray_3d = ximage_to_xdevice(point_2d, camera)  ## 1 x 2
                         ray_3d = np.append(ray_3d, 1)
 
                         assert len(ray_3d) == 3

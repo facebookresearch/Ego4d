@@ -100,21 +100,6 @@ class Context:
     frame_rel_dir: str = None
 
 
-class aria_camera_model:
-    def __init__(self, camera_name, camera_model):
-        self.camera_name = camera_name
-        self.camera_model = camera_model
-
-    def image_to_world(self, point_2d):
-        # return self.camera_model.projectionModel.unproject(point_2d)[:2] # Legacy aria model
-        return self.camera_model.unproject_no_checks(point_2d)[:2]
-
-    def world_to_image(self, pt):
-        pt_padded = np.append(pt, 1)
-        # return self.camera_model.projectionModel.project(pt_padded) # Legacy aria model
-        return self.camera_model.project_no_checks(pt_padded)
-
-
 def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
     assert capture_dir is not None
 
@@ -1429,11 +1414,9 @@ def mode_ego_hand_pose2d(config: Config):
         image = cv2.imread(image_path)
 
         # Create aria camera at this timestamp
-        ari_calib_model = aria_camera_model(
-            ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]]
-        )
         aria_camera = create_camera(
-            dset[time_stamp][ego_cam_name]["camera_data"], ari_calib_model
+            dset[time_stamp][ego_cam_name]["camera_data"],
+            aria_camera_models[stream_name_to_id[ego_cam_name]],
         )
 
         ########################## Hand bbox from re-projected wholebody-Hand kpts ############################
@@ -1767,11 +1750,9 @@ def mode_egoexo_hand_pose3d(config: Config):
 
         # Add ego camera
         ########################## Add Aria calibration model ###############################
-        ari_calib_model = aria_camera_model(
-            ego_cam_name, aria_camera_models[stream_name_to_id[ego_cam_name]]
-        )
         aria_exo_cameras[ego_cam_name] = create_camera(
-            info[ego_cam_name]["camera_data"], ari_calib_model
+            info[ego_cam_name]["camera_data"],
+            aria_camera_models[stream_name_to_id[ego_cam_name]],
         )
         #####################################################################################
 
