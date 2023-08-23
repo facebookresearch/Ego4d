@@ -51,6 +51,7 @@ from ego4d.internal.human_pose.utils import (
     get_bbox_from_kpts,
     get_exo_camera_plane,
     get_region_proposal,
+    wholebody_hand_selector,
 )
 from ego4d.research.readers import PyAvReader
 
@@ -1536,6 +1537,8 @@ def mode_exo_hand_pose3d(config: Config):
     exo_cam_names = ctx.exo_cam_names  # ctx.exo_cam_names  ['cam01','cam02']
     tri_threshold = 0.3
     visualization = True
+    wholebody_hand_tri_threshold = 0.5
+    use_wholebody_hand_selector = True
     ######################################################################
 
     # Load dataset info
@@ -1582,6 +1585,16 @@ def mode_exo_hand_pose3d(config: Config):
     assert os.path.exists(exo_pose2d_file), f"{exo_pose2d_file} does not exist"
     with open(exo_pose2d_file, "rb") as f:
         exo_poses2d = pickle.load(f)
+    # Load wholebody-Hand kpts as selector candidate
+    wholebody_hand_pose3d_file = os.path.join(
+        ctx.dataset_dir,
+        f"body/pose3d/wholebodyHand_pose3d_triThresh={wholebody_hand_tri_threshold}.pkl",
+    )
+    assert os.path.exists(
+        wholebody_hand_pose3d_file
+    ), f"{wholebody_hand_pose3d_file} does not exist"
+    with open(wholebody_hand_pose3d_file, "rb") as f:
+        wholebody_hand_poses3d = pickle.load(f)
 
     poses3d = {}
     reprojection_errors = {}
@@ -1642,6 +1655,9 @@ def mode_exo_hand_pose3d(config: Config):
             inlier_reproj_error_check=True,
         )
         pose3d = triangulator.run(debug=False)  ## N x 4 (x, y, z, confidence)
+        # Selector
+        if use_wholebody_hand_selector:
+            pose3d = wholebody_hand_selector(pose3d, wholebody_hand_poses3d[time_stamp])
         poses3d[time_stamp] = pose3d
 
         # visualize pose3d
@@ -1712,6 +1728,8 @@ def mode_egoexo_hand_pose3d(config: Config):
     all_used_cam = exo_cam_names + ego_cam_names
     tri_threshold = 0.3
     visualization = True
+    wholebody_hand_tri_threshold = 0.5
+    use_wholebody_hand_selector = True
     ##########################################
 
     # Load dataset info
@@ -1761,6 +1779,16 @@ def mode_egoexo_hand_pose3d(config: Config):
     assert os.path.exists(aria_pose2d_file), f"{aria_pose2d_file} does not exist"
     with open(aria_pose2d_file, "rb") as f:
         aria_poses2d = pickle.load(f)
+    # Load wholebody-Hand kpts as selector candidate
+    wholebody_hand_pose3d_file = os.path.join(
+        ctx.dataset_dir,
+        f"body/pose3d/wholebodyHand_pose3d_triThresh={wholebody_hand_tri_threshold}.pkl",
+    )
+    assert os.path.exists(
+        wholebody_hand_pose3d_file
+    ), f"{wholebody_hand_pose3d_file} does not exist"
+    with open(wholebody_hand_pose3d_file, "rb") as f:
+        wholebody_hand_poses3d = pickle.load(f)
 
     # Create aria calibration model
     capture_dir = os.path.join(
@@ -1856,6 +1884,9 @@ def mode_egoexo_hand_pose3d(config: Config):
             inlier_reproj_error_check=True,
         )
         pose3d = triangulator.run(debug=False)  ## N x 4 (x, y, z, confidence)
+        # Selector
+        if use_wholebody_hand_selector:
+            pose3d = wholebody_hand_selector(pose3d, wholebody_hand_poses3d[time_stamp])
         poses3d[time_stamp] = pose3d
 
         # visualize pose3d

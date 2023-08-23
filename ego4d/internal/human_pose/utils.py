@@ -214,3 +214,138 @@ def aria_original_to_extracted(kpts, img_shape=(1408, 1408)):
     new_kpts[:, 0] = H - kpts[:, 1]
     new_kpts[:, 1] = kpts[:, 0]
     return new_kpts
+
+
+def compute_hand_pose3d_joint_angles(hand_pose3d):
+    """
+    Compute the joint angles from pose3d estimation result
+    """
+    # Joint index of interest
+    joint_index = [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        9,
+        10,
+        11,
+        13,
+        14,
+        15,
+        17,
+        18,
+        19,
+        22,
+        23,
+        24,
+        26,
+        27,
+        28,
+        30,
+        31,
+        32,
+        34,
+        35,
+        36,
+        38,
+        39,
+        40,
+    ]
+    wrist_angle_index = [1, 5, 9, 13, 17, 22, 26, 30, 34, 38]
+
+    # Exclude invalid joints (with zero confidence)
+    hand_pose3d[hand_pose3d[:, -1] == 0] = None
+
+    # Compute joint angles
+    joint_angles = []
+    for joint_idx in joint_index:
+        # If current joint has pose3d estimation
+        if joint_idx in wrist_angle_index:
+            if joint_idx < 21:
+                vec1 = hand_pose3d[0, :3] - hand_pose3d[joint_idx, :3]
+            else:
+                vec1 = hand_pose3d[21, :3] - hand_pose3d[joint_idx, :3]
+        else:
+            vec1 = hand_pose3d[joint_idx - 1, :3] - hand_pose3d[joint_idx, :3]
+        vec2 = hand_pose3d[joint_idx + 1, :3] - hand_pose3d[joint_idx, :3]
+        # Compute angle
+        v1_u = vec1 / np.linalg.norm(vec1)
+        v2_u = vec2 / np.linalg.norm(vec2)
+        angles = np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0)) * 180.0 / np.pi
+        joint_angles.append(angles)
+
+    return np.array(joint_angles)
+
+
+def whether_use_selector(joint_angles, pose3d, num_threshold):
+    """
+    Compute the number of joint angle outliers and invalid joints; return True if it
+    is higher than the max limit and False otherwise.
+    """
+    # Compute number of joint angle outliers
+    joint_angle_min_threshold = np.array(
+        [
+            100,
+            90,
+            90,
+            60,
+            70,
+            80,
+            60,
+            70,
+            80,
+            60,
+            70,
+            80,
+            60,
+            70,
+            80,
+        ]
+    )
+    right_joint_angles, left_joint_angles = joint_angles[:15], joint_angles[15:]
+    # All joints can reach maximum 180 degrees so only check for minimum threshold
+    right_joint_angle_outliers, left_joint_angle_outliers = np.sum(
+        right_joint_angles < joint_angle_min_threshold
+    ), np.sum(left_joint_angles < joint_angle_min_threshold)
+
+    # Compute number of invalid joints
+    right_invalid_count, left_invalid_count = np.sum(pose3d[:21, -1] == 0), np.sum(
+        pose3d[21:, -1] == 0
+    )
+
+    # Determine whether use selector for both hands
+    right_selector_flag = (
+        right_joint_angle_outliers + right_invalid_count
+    ) > num_threshold
+    left_selector_flag = (
+        left_joint_angle_outliers + left_invalid_count
+    ) > num_threshold
+    return right_selector_flag, left_selector_flag
+
+
+def wholebody_hand_selector(pose3d, wholebody_hand_poses3d, num_threshold=5):
+    """
+    Check estimated hand pose3d based on two standards:
+        1. Number of joint angle outliers
+        2. Number of invalid joints
+    If the total count of those two standards exceeds the limit then assign wholebody-hand pose3d as the
+    final pose3d results. Lowering the value of num_threshold to make the selector more easily to be
+    triggered.
+    """
+    # Compute joint angles
+    pred_pose3d = pose3d.copy()
+    joint_angles = compute_hand_pose3d_joint_angles(pred_pose3d)
+
+    # Determine whether use wholebody-Hand pose3d based on two standards
+    right_selector_flag, left_selector_flag = whether_use_selector(
+        joint_angles, pose3d, num_threshold
+    )
+
+    # Assign wholebody-Hand pose3d if necessary
+    if right_selector_flag:
+        pose3d[:21, :] = wholebody_hand_poses3d[21:, :]
+    if left_selector_flag:
+        pose3d[21:, :] = wholebody_hand_poses3d[:21, :]
+    return pose3d
