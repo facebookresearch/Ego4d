@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Dict, List, Optional, Tuple
 
-from ego4d.internal.validation.types import Error, ErrorLevel
+from ego4d.internal.validation.manifest import Error, ErrorLevel
 
 
 @dataclass(frozen=True)
