@@ -349,3 +349,63 @@ def wholebody_hand_selector(pose3d, wholebody_hand_poses3d, num_threshold=5):
     if left_selector_flag:
         pose3d[21:, :] = wholebody_hand_poses3d[:21, :]
     return pose3d
+
+
+def normalize_reprojection_error(reproj_error, bboxes, skel_type):
+    """
+    Normalize the reprojection error to account for the scale effect across different views
+    Args:
+        reproj_error: Dict of (N,) ~ Dict of (# of views,) ~ (42,1)
+        bbox: Dict of (N,) ~ Dict of (# of views,) ~ List of (2,)
+    """
+    new_reproj_error = {}
+    for ts in reproj_error.keys():
+        new_reproj_error[ts] = {}
+        for cam in reproj_error[ts].keys():
+            # Get current camera view's reprojection error and bboxes
+            curr_reproj_error = reproj_error[ts][cam].flatten()
+            # Get index of invalid reprojection error (-1)
+            invalid_reproj_index = np.argwhere(curr_reproj_error == -1).flatten()
+
+            # Normalize reprojection error
+            if skel_type == "hand":
+                curr_right_bbox, curr_left_bbox = bboxes[ts][cam]
+                # Caculate left and right hand's bbox area
+                right_hand_bbox_area = (curr_right_bbox[2] - curr_right_bbox[0]) * (
+                    curr_right_bbox[3] - curr_right_bbox[1]
+                )
+                left_hand_bbox_area = (curr_left_bbox[2] - curr_left_bbox[0]) * (
+                    curr_left_bbox[3] - curr_left_bbox[1]
+                )
+                # Normalize reprojection error with corresponding hand bbox
+                curr_reproj_error[:21] /= (
+                    right_hand_bbox_area
+                    if right_hand_bbox_area != 0
+                    else curr_reproj_error[:21]
+                )
+                curr_reproj_error[21:] /= (
+                    left_hand_bbox_area
+                    if left_hand_bbox_area != 0
+                    else curr_reproj_error[:21]
+                )
+            elif skel_type == "body":
+                # Calculate body bbox area
+                curr_body_bbox = bboxes[ts][cam]
+                body_bbox_area = (curr_body_bbox[2] - curr_body_bbox[0]) * (
+                    curr_body_bbox[3] - curr_body_bbox[1]
+                )
+                # Normalize body reprojection error with body bbox
+                curr_reproj_error /= (
+                    body_bbox_area if body_bbox_area != 0 else curr_reproj_error
+                )
+            else:
+                raise Exception(
+                    f"Unknown skeleton type: {skel_type}. Valid skel_type: [body, hand]."
+                )
+
+            # Re-assign invalid reprojection error
+            curr_reproj_error[invalid_reproj_index] = -1
+            # Re-assign reprojection error
+            new_reproj_error[ts][cam] = curr_reproj_error
+
+    return new_reproj_error

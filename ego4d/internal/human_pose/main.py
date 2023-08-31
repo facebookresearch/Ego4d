@@ -51,6 +51,7 @@ from ego4d.internal.human_pose.utils import (
     get_bbox_from_kpts,
     get_exo_camera_plane,
     get_region_proposal,
+    normalize_reprojection_error,
     wholebody_hand_selector,
 )
 from ego4d.research.readers import PyAvReader
@@ -1002,8 +1003,10 @@ def mode_body_pose3d(config: Config):
 
     # Body pose3d estimation starts
     poses3d = {}
+    reprojection_errors = {}
     for time_stamp in tqdm(range(len(dset)), total=len(dset)):
         info = dset[time_stamp]
+        reprojection_errors[time_stamp] = {}
 
         multi_view_pose2d = {
             exo_camera_name: poses2d[time_stamp][exo_camera_name]
@@ -1039,10 +1042,33 @@ def mode_body_pose3d(config: Config):
 
                 save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
                 pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
-                # pose_model.draw_projected_poses3d([projected_pose3d[:21], projected_pose3d[21:]], image, save_path)
 
+        # Compute reprojection error
+        invalid_index = pose3d[:, 2] == 0
+        for camera_name in ctx.exo_cam_names:
+            # Extract projected pose3d results onto current camera plane
+            curr_camera = exo_cameras[camera_name]
+            projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], curr_camera)
+            # Compute L1-norm between projected 2D kpts and hand_pose2d
+            original_pose2d = poses2d[time_stamp][camera_name][:17, :2]
+            reprojection_error = np.linalg.norm(
+                (original_pose2d - projected_pose3d), ord=1, axis=1
+            )
+            # Assign invalid index's reprojection error to be -1
+            reprojection_error[invalid_index] = -1
+            # Append result
+            reprojection_errors[time_stamp][camera_name] = reprojection_error.reshape(
+                -1, 1
+            )
+
+    # Save pose3d kpts result
     with open(os.path.join(pose3d_dir, "body_pose3d.pkl"), "wb") as f:
         pickle.dump(poses3d, f)
+    # Save reprojection errors
+    with open(
+        os.path.join(pose3d_dir, "body_pose3d_reprojection_error.pkl"), "wb"
+    ) as f:
+        pickle.dump(reprojection_errors, f)
 
 
 def mode_wholebodyHand_pose3d(config: Config):
@@ -1052,11 +1078,12 @@ def mode_wholebodyHand_pose3d(config: Config):
     ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args
     ##################################
-    exo_cam_names = (
-        ctx.exo_cam_names
-    )  # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
-    tri_threshold = 0.5  # This determines the wholebody-Hand kpts confidence threshold to perform triangulation
-    visualization = True  # Whether show visualization
+    # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
+    exo_cam_names = ctx.exo_cam_names
+    # wholebody-Hand kpts confidence threshold to perform triangulation
+    tri_threshold = 0.5
+    # Whether show visualization
+    visualization = True
     ##################################
 
     # Load dataset info
@@ -2388,6 +2415,7 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
 
 def mode_undistort_to_halo(config: Config, skel_type="body"):
     ctx = get_context(config)
+    use_reproj_error_sample = True
 
     id_to_halo_map = {}
 
@@ -2455,18 +2483,62 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
     os.makedirs(output_attachments_dir, exist_ok=True)
 
     if skel_type == "hand":
+        # Hand pose3d results file path
         pose3d_file = os.path.join(
             ctx.cache_dir, skel_type, "pose3d", "egoexo_pose3d_triThresh=0.3.pkl"
         )
+        # Reprojection error file path
+        reproj_error_file = os.path.join(
+            ctx.cache_dir,
+            skel_type,
+            "pose3d",
+            "egoexo_pose3d_triThresh=0.3_reprojection_error.pkl",
+        )
+        # Load in ego and exo hand bbox
+        exo_hand_bbox_dir = os.path.join(
+            ctx.cache_dir, skel_type, "bbox", "exo_bbox.pkl"
+        )
+        with open(exo_hand_bbox_dir, "rb") as f:
+            exo_hand_bboxes = pickle.load(f)
+        ego_hand_bbox_dir = os.path.join(
+            ctx.cache_dir, skel_type, "bbox", "ego_bbox.pkl"
+        )
+        with open(ego_hand_bbox_dir, "rb") as f:
+            ego_hand_bboxes = pickle.load(f)
+        # Concatenated ego and exo hand bboxes as hand bboxes
+        all_bboxes = {
+            curr_ts: {**exo_hand_bboxes[curr_ts], **ego_hand_bboxes[curr_ts]}
+            for curr_ts in exo_hand_bboxes.keys()
+        }
     elif skel_type == "body":
+        # Body pose3d results file path
         pose3d_file = os.path.join(
             ctx.cache_dir, skel_type, "pose3d", "body_pose3d.pkl"
         )
+        # Body reprojection error file path
+        reproj_error_file = os.path.join(
+            ctx.cache_dir, skel_type, "pose3d", "body_pose3d_reprojection_error.pkl"
+        )
+        assert os.path.exists(
+            reproj_error_file
+        ), "Please first run mode=body_pose3d to get body reprojection error .pkl file"
+        # Load body bbox
+        body_bbox_file = os.path.join(ctx.cache_dir, skel_type, "bbox", "bbox.pkl")
+        with open(body_bbox_file, "rb") as f:
+            all_bboxes = pickle.load(f)
     else:
         raise Exception(f"Unknown skeleton type: {skel_type}")
 
+    # Load pose3d results and reprojection error file
     with open(pose3d_file, "rb") as f:
         poses3d = pickle.load(f)
+    with open(reproj_error_file, "rb") as f:
+        reprojection_error = pickle.load(f)
+
+    # Normalize reprojection error (to account for scale effect)
+    reprojection_error = normalize_reprojection_error(
+        reprojection_error, all_bboxes, skel_type
+    )
 
     # Run through the data.json file and process each timestamp
     # for corresponding aria-rgb and gopros
@@ -2494,19 +2566,9 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
 
     for _idx, frame in tqdm(enumerate(frames), total=len(frames)):
         frame_names = []
-
-        # Process aria
-        if use_ego:
-            aria = cam_name_map["aria"]
-            aria_data = frame[aria]
-            frame_path = aria_data["frame_path"]
-            frame_path = os.path.join(ctx.frame_dir, frame_path)
-            save_name = ("_").join(frame_path.split("/")[-2:])
-            frame_name = save_name.split(".")[0]
-            frame_names.append(frame_name)
+        curr_reproj_error = reprojection_error[_idx]
 
         # Process exocams (gopros)
-
         exocam_list = []
         for cam in cam_name_map:
             if "aria" in cam:
@@ -2525,11 +2587,36 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
             frame_name = save_name.split(".")[0]
             frame_names.append(frame_name)
 
+        # Process aria
+        if use_ego:
+            aria = cam_name_map["aria"]
+            aria_data = frame[aria]
+            frame_path = aria_data["frame_path"]
+            frame_path = os.path.join(ctx.frame_dir, frame_path)
+            save_name = ("_").join(frame_path.split("/")[-2:])
+            frame_name = save_name.split(".")[0]
+            frame_names.append(frame_name)
+
         high_conf_frame_list = []
         for _kp_id in range(len(id_to_halo_map)):
-            # randomly sample 2 for each keypoint for now
-            # TODO: use reprojection errors/confidences instead
-            high_conf_frame_list.append(random.sample(frame_names, 2))
+            if use_reproj_error_sample:
+                # Extract reprojection error for currrent joint across all views
+                all_view_reproj_error = np.array(
+                    [
+                        curr_reproj_error[curr_view][_kp_id]
+                        for curr_view in curr_reproj_error.keys()
+                    ]
+                ).flatten()
+                # Select two views with minimum reprojection error
+                best_two_view_index = np.argsort(
+                    np.where(all_view_reproj_error == -1, np.inf, all_view_reproj_error)
+                )[:2]
+                high_conf_frame_list.append(
+                    [frame_names[view_idx] for view_idx in best_two_view_index]
+                )
+            else:
+                # randomly sample 2 for each keypoint for now
+                high_conf_frame_list.append(random.sample(frame_names, 2))
 
         # Process aria
         if use_ego:
