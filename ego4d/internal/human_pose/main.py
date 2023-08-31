@@ -7,6 +7,7 @@ import random
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -351,10 +352,10 @@ def mode_bbox(config: Config):
         )
         for exo_camera_name in ctx.exo_cam_names
     }
-    exo_camera_centers = np.array(
-        [exo_camera.center for exo_camera_name, exo_camera in exo_cameras.items()]
-    )
-    _, camera_plane_unit_normal = get_exo_camera_plane(exo_camera_centers)
+    # sometimes the exo cameras are not all on the ground,
+    # so using get_exo_camera_plane is problematic
+    # _, camera_plane_unit_normal = get_exo_camera_plane(exo_camera_centers)
+    camera_plane_unit_normal = np.array([0, 0, 1])
 
     os.makedirs(ctx.bbox_dir, exist_ok=True)
     os.makedirs(ctx.vis_bbox_dir, exist_ok=True)
@@ -2178,6 +2179,32 @@ def mode_preprocess_legacy(config: Config):
     json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
 
 
+def calculate_frame_selection(subclip_json_path, start_frame, end_frame):
+    frame_selection = [1 for k in range(start_frame, end_frame)]
+
+    if subclip_json_path is None:
+        return frame_selection
+    if not os.path.exists(subclip_json_path):
+        print(
+            f"[Warning] Cannot find sub-clip json: {subclip_json_path}, use all frames"
+        )
+        return frame_selection
+
+    print(f"[Info] Using {subclip_json_path} to subsample frames")
+    with open(subclip_json_path, "r") as f:
+        raw_subclips = json.load(f)
+
+    frame_selection = [0 for k in range(start_frame, end_frame)]
+
+    for i in range(len(raw_subclips)):
+        left = max(start_frame, raw_subclips[i][0])
+        right = min(end_frame, raw_subclips[i][1] + 1)
+        for k in range(left, right):
+            frame_selection[k - start_frame] = 1
+
+    return frame_selection
+
+
 def mode_preprocess(config: Config):
     if config.legacy:
         mode_preprocess_legacy(config)
@@ -2200,6 +2227,27 @@ def mode_preprocess(config: Config):
     i1, i2 = ctx.take["timesync_start_idx"], ctx.take["timesync_end_idx"] - 1
     synced_df = all_timesync_df.iloc[i1:i2]
 
+    # Use predefined subclip info if it exists,
+    # otherwise use start/end to define the frame selection
+
+    start_frame = config.inputs.from_frame_number
+    end_frame = config.inputs.to_frame_number
+
+    frame_window_size = 1
+    if end_frame is None or end_frame > i2 - frame_window_size:
+        end_frame = i2 - frame_window_size
+
+    if config.inputs.subclip_json_dir is not None:
+        subclip_json_path = os.path.join(
+            config.inputs.subclip_json_dir, f"{config.inputs.take_name}.json"
+        )
+    else:
+        subclip_json_path = None
+
+    frame_selection = calculate_frame_selection(
+        subclip_json_path, start_frame, end_frame
+    )
+
     frame_paths = {}
     for cam in ctx.all_cams:
         if "aria" in cam:
@@ -2219,26 +2267,29 @@ def mode_preprocess(config: Config):
                 path=path,
                 resize=None,
                 mean=None,
-                frame_window_size=1,
+                frame_window_size=frame_window_size,
                 stride=1,
                 gpu_idx=-1,
             )
-            start_frame = config.inputs.from_frame_number
-            end_frame = config.inputs.to_frame_number
-            n_frames = len(reader)
-            if end_frame is None:
-                end_frame = n_frames
-            frame_indices = list(range(start_frame, end_frame))
+
+            # n_frames = len(reader)
 
             key = (cam, stream_name)
             frame_paths[key] = {}
-            for idx in tqdm(frame_indices):
-                frame = reader[idx][0].cpu().numpy()
-                rel_out_path = os.path.join(rel_frame_dir, f"{idx:06d}.jpg")
-                out_path = os.path.join(cam_frame_dir, f"{idx:06d}.jpg")
-                frame_paths[key][idx] = rel_out_path
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                assert cv2.imwrite(out_path, frame), out_path
+
+            count = 0
+
+            for idx in range(start_frame, end_frame, config.inputs.sample_interval):
+                if frame_selection[idx - start_frame] == 1:
+                    frame = reader[idx][0].cpu().numpy()
+                    rel_out_path = os.path.join(rel_frame_dir, f"{idx:06d}.jpg")
+                    out_path = os.path.join(cam_frame_dir, f"{idx:06d}.jpg")
+                    frame_paths[key][idx] = rel_out_path
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    assert cv2.imwrite(out_path, frame), out_path
+                    count += 1
+                    if count % 100 == 0:
+                        print(f"[Info] Saved {count} frames for {cam}_{stream_name}")
 
     stream_name_to_id = {
         "et": "211-1",
@@ -2260,59 +2311,65 @@ def mode_preprocess(config: Config):
     aria_camera_models = get_aria_camera_models(aria_path)
 
     output = []
-    for idx in tqdm(frame_indices):
-        row = {}
-        row_df = synced_df.iloc[idx]
-        for stream_name in config.inputs.aria_streams:
-            # TODO: support multiple aria cameras?
-            key = (aria_cam_id, stream_name)
-            key_str = "_".join(key)
-            frame_path = frame_paths[key][idx]
+    for idx in range(start_frame, end_frame, config.inputs.sample_interval):
+        if frame_selection[idx - start_frame] == 1:
+            row = {}
+            row_df = synced_df.iloc[idx]
+            for stream_name in config.inputs.aria_streams:
+                # TODO: support multiple aria cameras?
+                key = (aria_cam_id, stream_name)
+                key_str = "_".join(key)
+                frame_path = frame_paths[key][idx]
 
-            stream_id = stream_name_to_id[stream_name]
-            frame_num = int(row_df[f"{aria_cam_id}_{stream_id}_frame_number"])
-            frame_t = row_df[f"{aria_cam_id}_{stream_id}_capture_timestamp_ns"] / 1e9
-            aria_t = row_df[f"{aria_cam_id}_{stream_id}_capture_timestamp_ns"] / 1e3
-            frame_t = f"{frame_t:.3f}"
-            aria_pose = aria_traj_df.iloc[
-                (aria_traj_df.tracking_timestamp_us - aria_t).abs().argsort().iloc[0]
-            ].to_dict()
-            row[key_str] = {
-                "frame_path": frame_path,
-                "frame_number": idx,
-                "capture_frame_number": frame_num,
-                "t": aria_t,
-                "camera_data": create_camera_data(
-                    device_row=aria_pose,
-                    name=stream_id,
-                    camera_model=aria_camera_models[stream_id],
-                    device_row_key="device",
-                ),
-                "_raw_camera": aria_pose,
-            }
+                stream_id = stream_name_to_id[stream_name]
+                frame_num = int(row_df[f"{aria_cam_id}_{stream_id}_frame_number"])
+                frame_t = (
+                    row_df[f"{aria_cam_id}_{stream_id}_capture_timestamp_ns"] / 1e9
+                )
+                aria_t = row_df[f"{aria_cam_id}_{stream_id}_capture_timestamp_ns"] / 1e3
+                frame_t = f"{frame_t:.3f}"
+                aria_pose = aria_traj_df.iloc[
+                    (aria_traj_df.tracking_timestamp_us - aria_t)
+                    .abs()
+                    .argsort()
+                    .iloc[0]
+                ].to_dict()
+                row[key_str] = {
+                    "frame_path": frame_path,
+                    "frame_number": idx,
+                    "capture_frame_number": frame_num,
+                    "t": aria_t,
+                    "camera_data": create_camera_data(
+                        device_row=aria_pose,
+                        name=stream_id,
+                        camera_model=aria_camera_models[stream_id],
+                        device_row_key="device",
+                    ),
+                    "_raw_camera": aria_pose,
+                }
 
-        assert config.inputs.exo_timesync_name_to_calib_name is None
-        for cam_id in ctx.exo_cam_names:
-            key = (cam_id, "0")
-            key_str = "_".join(key)
-            frame_path = frame_paths[key][idx]
-            frame_num = int(row_df[f"{cam_id}_frame_number"])
-            cam_data = exo_traj_df[exo_traj_df.cam_uid == cam_id].iloc[0].to_dict()
+            assert config.inputs.exo_timesync_name_to_calib_name is None
+            for cam_id in ctx.exo_cam_names:
+                key = (cam_id, "0")
+                key_str = "_".join(key)
+                frame_path = frame_paths[key][idx]
+                frame_num = int(row_df[f"{cam_id}_frame_number"])
+                cam_data = exo_traj_df[exo_traj_df.cam_uid == cam_id].iloc[0].to_dict()
 
-            row[key_str] = {
-                "frame_path": frame_path,
-                "frame_number": idx,
-                "capture_frame_number": frame_num,
-                "t": None,
-                "camera_data": create_camera_data(
-                    device_row=cam_data,
-                    name=cam_id,
-                    camera_model=None,
-                    device_row_key="cam",
-                ),
-                "_raw_camera": cam_data,
-            }
-        output.append(row)
+                row[key_str] = {
+                    "frame_path": frame_path,
+                    "frame_number": idx,
+                    "capture_frame_number": frame_num,
+                    "t": None,
+                    "camera_data": create_camera_data(
+                        device_row=cam_data,
+                        name=cam_id,
+                        camera_model=None,
+                        device_row_key="cam",
+                    ),
+                    "_raw_camera": cam_data,
+                }
+            output.append(row)
 
     dataset_json = {
         "cache_dir": ctx.cache_rel_dir,
@@ -2792,6 +2849,8 @@ def main(args):
     print(f"steps: {steps}")
 
     for step in steps:
+        print(f"[Info] Running step: {step}")
+        start_time = time.time()
         if step == "preprocess":
             mode_preprocess(config)
         elif step == "body_bbox":
@@ -2826,6 +2885,7 @@ def main(args):
             mode_multi_view_vis(config, step="refine_pose3d", skel_type="body")
         else:
             raise Exception(f"Unknown step: {step}")
+        print(f"[Info] Time for {step}: {time.time() - start_time} s")
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ body_keypoints_list = [
     {"label": "Left-knee", "id": "yz012345", "color": "#83f483"},
     {"label": "Right-knee", "id": "6bc7defg", "color": "#32d58c"},
     {"label": "Left-ankle", "id": "hijk8lmn", "color": "#3ba3ec"},
-    {"label": "Left-ankle", "id": "opqrs1tu", "color": "#f564d4"},
+    {"label": "Right-ankle", "id": "opqrs1tu", "color": "#f564d4"},
 ]
 
 hand_keypoints_list = [
@@ -264,6 +264,12 @@ def undistort_exocam(image_path, intrinsics, distortion_coeffs, dimension=(3840,
     image = cv2.imread(image_path)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     dim1 = image.shape[:2][::-1]  # dim1 is the dimension of input image to un-distort
+
+    # Change the calibration dim dynamically
+    # (e.g., bouldering cam01 and cam04 are verticall)
+    if DIM[0] != dim1[0]:
+        DIM = (DIM[1], DIM[0])
+
     assert (
         dim1[0] / dim1[1] == DIM[0] / DIM[1]
     ), "Image to undistort needs to have same aspect ratio as the ones used in calibration"
