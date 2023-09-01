@@ -7,6 +7,8 @@ mode: "preprocess"
 inputs:
   from_frame_number: 0
   to_frame_number: null
+  sample_interval: 1
+  subclip_json_dir: null
   take_name: "uniandes_dance_007_3"
   take_uid: null
   metadata_json_path: null

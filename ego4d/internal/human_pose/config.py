@@ -6,6 +6,8 @@ from typing import Dict, List, Optional
 class Input:
     from_frame_number: int
     to_frame_number: int
+    sample_interval: int
+    subclip_json_dir: Optional[str]
     take_name: Optional[str]
     take_uid: Optional[str]
     capture_root_dir: Optional[str]
