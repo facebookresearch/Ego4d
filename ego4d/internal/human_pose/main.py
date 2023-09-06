@@ -527,104 +527,6 @@ def mode_pose2d(config: Config):
 
 
 ##-------------------------------------------------------------------------------
-def mode_pose3d(config: Config):
-    ctx = get_context(config)
-
-    dset = SyncedEgoExoCaptureDset(
-        data_dir=config.cache_root_dir,
-        dataset_json_path=ctx.dataset_json_path,
-        read_frames=False,
-    )
-
-    # ---------------import triangulator-------------------
-    pose_model = PoseModel(
-        pose_config=ctx.dummy_pose_config, pose_checkpoint=ctx.dummy_pose_checkpoint
-    )  # lightweight for visualization only!
-
-    exo_cameras = {
-        exo_camera_name: create_camera(
-            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
-        )
-        for exo_camera_name in ctx.exo_cam_names
-    }
-
-    os.makedirs(ctx.pose3d_dir, exist_ok=True)
-    os.makedirs(ctx.vis_pose3d_dir, exist_ok=True)
-
-    start_time_stamp = ctx.pose3d_start_frame
-    end_time_stamp = ctx.pose3d_end_frame if ctx.pose3d_end_frame > 0 else len(dset)
-    time_stamps = range(start_time_stamp, end_time_stamp)
-
-    ## check if ctx.pose2d_dir
-    camera_pose2d_files = [
-        os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
-        for exo_camera_name in ctx.exo_cam_names
-    ]
-
-    ## check if all camera pose2d files exist
-    is_parallel = True
-    for camera_pose2d_file in camera_pose2d_files:
-        if not os.path.exists(camera_pose2d_file):
-            is_parallel = False
-            break
-
-    if is_parallel:
-        poses2d = {
-            time_stamp: {camera_name: None for camera_name in ctx.exo_cam_names}
-            for time_stamp in time_stamps
-        }
-        for exo_camera_name in ctx.exo_cam_names:
-            pose2d_file = os.path.join(ctx.pose2d_dir, f"pose2d_{exo_camera_name}.pkl")
-            with open(pose2d_file, "rb") as f:
-                poses2d_camera = pickle.load(f)
-
-            for time_stamp in time_stamps:
-                poses2d[time_stamp][exo_camera_name] = poses2d_camera[time_stamp][
-                    exo_camera_name
-                ]
-
-    else:
-        ## load pose2d.pkl
-        pose2d_file = os.path.join(ctx.pose2d_dir, "pose2d.pkl")
-        with open(pose2d_file, "rb") as f:
-            poses2d = pickle.load(f)
-
-    for time_stamp in tqdm(time_stamps):
-        info = dset[time_stamp]
-
-        multi_view_pose2d = {
-            exo_camera_name: poses2d[time_stamp][exo_camera_name]
-            for exo_camera_name in ctx.exo_cam_names
-        }
-
-        # triangulate
-        triangulator = Triangulator(
-            time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d
-        )
-        pose3d = triangulator.run(debug=True)  ## 17 x 4 (x, y, z, confidence)
-
-        # visualize pose3d
-        for exo_camera_name in ctx.exo_cam_names:
-            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
-            image = cv2.imread(image_path)
-            exo_camera = exo_cameras[exo_camera_name]
-
-            vis_pose3d_cam_dir = os.path.join(ctx.vis_pose3d_dir, exo_camera_name)
-            os.makedirs(vis_pose3d_cam_dir, exist_ok=True)
-
-            projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], exo_camera)
-            projected_pose3d = np.concatenate(
-                [projected_pose3d, pose3d[:, 3].reshape(-1, 1)], axis=1
-            )  ## 17 x 3
-
-            save_path = os.path.join(vis_pose3d_cam_dir, f"{time_stamp:05d}.jpg")
-            pose_model.draw_projected_poses3d([projected_pose3d], image, save_path)
-
-        # save pose3d as timestamp.npy
-        np.save(os.path.join(ctx.pose3d_dir, f"{time_stamp:05d}.npy"), pose3d)
-
-
-##-------------------------------------------------------------------------------
 def mode_refine_pose3d(config: Config):
     skel_type = "body"
 
@@ -1050,13 +952,20 @@ def mode_body_pose3d(config: Config):
             # Extract projected pose3d results onto current camera plane
             curr_camera = exo_cameras[camera_name]
             projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], curr_camera)
-            # Compute L1-norm between projected 2D kpts and hand_pose2d
-            original_pose2d = poses2d[time_stamp][camera_name][:17, :2]
-            reprojection_error = np.linalg.norm(
-                (original_pose2d - projected_pose3d), ord=1, axis=1
-            )
-            # Assign invalid index's reprojection error to be -1
-            reprojection_error[invalid_index] = -1
+
+            if poses2d[time_stamp][camera_name] is None:
+                # Assign reprojection error to be -1
+                # for all indices since they are all invalid
+                reprojection_error = -np.ones(17)
+            else:
+                # Compute L1-norm between projected 2D kpts and hand_pose2d
+                original_pose2d = poses2d[time_stamp][camera_name][:17, :2]
+                reprojection_error = np.linalg.norm(
+                    (original_pose2d - projected_pose3d), ord=1, axis=1
+                )
+                # Assign invalid index's reprojection error to be -1
+                reprojection_error[invalid_index] = -1
+
             # Append result
             reprojection_errors[time_stamp][camera_name] = reprojection_error.reshape(
                 -1, 1
@@ -1135,35 +1044,40 @@ def mode_wholebodyHand_pose3d(config: Config):
         ########### Heuristic Check: Hardcode hand wrist kpt conf to be 1 ################################
         multi_view_pose2d = {}
         for exo_camera_name in exo_cam_names:
-            curr_exo_hand_pose2d_kpts = poses2d[time_stamp][exo_camera_name][-42:]
-            if np.mean(curr_exo_hand_pose2d_kpts[:, -1]) > 0.3:
-                curr_exo_hand_pose2d_kpts[[0, 21], 2] = 1
-            multi_view_pose2d[exo_camera_name] = curr_exo_hand_pose2d_kpts
+            if poses2d[time_stamp][exo_camera_name] is None:
+                multi_view_pose2d[exo_camera_name] = None
+            else:
+                curr_exo_hand_pose2d_kpts = poses2d[time_stamp][exo_camera_name][-42:]
+                if np.mean(curr_exo_hand_pose2d_kpts[:, -1]) > 0.3:
+                    curr_exo_hand_pose2d_kpts[[0, 21], 2] = 1
+                multi_view_pose2d[exo_camera_name] = curr_exo_hand_pose2d_kpts
         ##################################################################################################
 
         ###### Heuristic Check: If two hands are too close, then drop the one with lower confidence ######
         for exo_camera_name in exo_cam_names:
-            right_hand_pos2d_kpts, left_hand_pos2d_kpts = (
-                multi_view_pose2d[exo_camera_name][:21, :],
-                multi_view_pose2d[exo_camera_name][21:, :],
-            )
-            pairwise_conf_dis = (
-                np.linalg.norm(
-                    left_hand_pos2d_kpts[:, :2] - right_hand_pos2d_kpts[:, :2], axis=1
+            if multi_view_pose2d[exo_camera_name] is not None:
+                right_hand_pos2d_kpts, left_hand_pos2d_kpts = (
+                    multi_view_pose2d[exo_camera_name][:21, :],
+                    multi_view_pose2d[exo_camera_name][21:, :],
                 )
-                * right_hand_pos2d_kpts[:, 2]
-                * left_hand_pos2d_kpts[:, 2]
-            )
-            # Drop lower kpts result if pairwise_conf_dis is too low
-            if np.mean(pairwise_conf_dis) < 5:
-                right_conf_mean = np.mean(right_hand_pos2d_kpts[:, 2])
-                left_conf_mean = np.mean(left_hand_pos2d_kpts[:, 2])
-                if right_conf_mean < left_conf_mean:
-                    right_hand_pos2d_kpts[:, :] = 0
-                else:
-                    left_hand_pos2d_kpts[:, :] = 0
-            multi_view_pose2d[exo_camera_name][:21] = right_hand_pos2d_kpts
-            multi_view_pose2d[exo_camera_name][21:] = left_hand_pos2d_kpts
+                pairwise_conf_dis = (
+                    np.linalg.norm(
+                        left_hand_pos2d_kpts[:, :2] - right_hand_pos2d_kpts[:, :2],
+                        axis=1,
+                    )
+                    * right_hand_pos2d_kpts[:, 2]
+                    * left_hand_pos2d_kpts[:, 2]
+                )
+                # Drop lower kpts result if pairwise_conf_dis is too low
+                if np.mean(pairwise_conf_dis) < 5:
+                    right_conf_mean = np.mean(right_hand_pos2d_kpts[:, 2])
+                    left_conf_mean = np.mean(left_hand_pos2d_kpts[:, 2])
+                    if right_conf_mean < left_conf_mean:
+                        right_hand_pos2d_kpts[:, :] = 0
+                    else:
+                        left_hand_pos2d_kpts[:, :] = 0
+                multi_view_pose2d[exo_camera_name][:21] = right_hand_pos2d_kpts
+                multi_view_pose2d[exo_camera_name][21:] = left_hand_pos2d_kpts
         ###################################################################################################
 
         # triangulate
@@ -2230,12 +2144,13 @@ def mode_preprocess(config: Config):
     # Use predefined subclip info if it exists,
     # otherwise use start/end to define the frame selection
 
+    # Note: start_frame and end_frame are relative to i1 (i.e., synced_df)
     start_frame = config.inputs.from_frame_number
     end_frame = config.inputs.to_frame_number
 
     frame_window_size = 1
-    if end_frame is None or end_frame > i2 - frame_window_size:
-        end_frame = i2 - frame_window_size
+    if end_frame is None or end_frame > len(synced_df) - frame_window_size:
+        end_frame = len(synced_df) - frame_window_size
 
     if config.inputs.subclip_json_dir is not None:
         subclip_json_path = os.path.join(
@@ -2730,7 +2645,7 @@ def run(config: Config):
     elif config.mode == "pose2d":
         mode_pose2d(config)
     elif config.mode == "pose3d":
-        mode_pose3d(config)
+        mode_body_pose3d(config)
     elif config.mode == "refine_pose3d":
         mode_refine_pose3d(config)
     elif config.mode == "vis_body_bbox":
