@@ -391,13 +391,15 @@ def normalize_reprojection_error(reproj_error, bboxes, skel_type):
             elif skel_type == "body":
                 # Calculate body bbox area
                 curr_body_bbox = bboxes[ts][cam]
-                body_bbox_area = (curr_body_bbox[2] - curr_body_bbox[0]) * (
-                    curr_body_bbox[3] - curr_body_bbox[1]
-                )
-                # Normalize body reprojection error with body bbox
-                curr_reproj_error /= (
-                    body_bbox_area if body_bbox_area != 0 else curr_reproj_error
-                )
+
+                if curr_body_bbox is not None:
+                    body_bbox_area = (curr_body_bbox[2] - curr_body_bbox[0]) * (
+                        curr_body_bbox[3] - curr_body_bbox[1]
+                    )
+                    # Normalize body reprojection error with body bbox
+                    curr_reproj_error /= (
+                        body_bbox_area if body_bbox_area != 0 else curr_reproj_error
+                    )
             else:
                 raise Exception(
                     f"Unknown skeleton type: {skel_type}. Valid skel_type: [body, hand]."
