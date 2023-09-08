@@ -19,6 +19,16 @@ class Input:
 
 
 @dataclass
+class Output:
+    # storage_level:
+    # 0 is minimum storage, meaning most stuff shall be cleaned up after the job is done
+    # at the cost of losing debugging information;
+    # the higher the level is, the more disk storage we are allow to use
+    # (e.g., for debugging purpose)
+    storage_level: int
+
+
+@dataclass
 class PreprocessFrameConfig:
     dataset_name: str
     vrs_bin_path: str
@@ -60,6 +70,7 @@ class Config:
     gpu_id: int  # use -1 for CPU
     mode: str
     inputs: Input
+    outputs: Output
     mode_preprocess: PreprocessFrameConfig
     mode_bbox: BBoxConfig
     mode_pose2d: PoseEstimationConfig
