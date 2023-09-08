@@ -675,10 +675,10 @@ def mode_body_bbox(config: Config):
         )
         for exo_camera_name in ctx.exo_cam_names
     }
-    exo_camera_centers = np.array(
-        [exo_camera.center for exo_camera_name, exo_camera in exo_cameras.items()]
-    )
-    _, camera_plane_unit_normal = get_exo_camera_plane(exo_camera_centers)
+    # sometimes the exo cameras are not all on the ground,
+    # so using get_exo_camera_plane is problematic
+    # _, camera_plane_unit_normal = get_exo_camera_plane(exo_camera_centers)
+    camera_plane_unit_normal = np.array([0, 0, 1])
 
     # Directory to store bbox result and visualization
     bbox_dir = os.path.join(ctx.dataset_dir, skel_type, "bbox")
@@ -696,9 +696,11 @@ def mode_body_bbox(config: Config):
             image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
             image = cv2.imread(image_path)
 
-            vis_bbox_cam_dir = os.path.join(vis_bbox_dir, exo_camera_name)
-            if not os.path.exists(vis_bbox_cam_dir):
-                os.makedirs(vis_bbox_cam_dir)
+            # Directory to store body bbox visualization
+            if visualization:
+                vis_bbox_cam_dir = os.path.join(vis_bbox_dir, exo_camera_name)
+                if not os.path.exists(vis_bbox_cam_dir):
+                    os.makedirs(vis_bbox_cam_dir)
 
             exo_camera = create_camera(
                 info[f"{exo_camera_name}_0"]["camera_data"], None
@@ -751,15 +753,14 @@ def mode_body_bbox(config: Config):
                     image, proposal_points_2d, radius=5, color=(0, 255, 0)
                 )
                 bbox_image = draw_bbox_xyxy(image, bbox_xyxy, color=(0, 255, 0))
-            #
             else:
                 bbox_image = image
 
             # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
-
-            cv2.imwrite(
-                os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), bbox_image
-            )
+            if visualization:
+                cv2.imwrite(
+                    os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), bbox_image
+                )
             bboxes[time_stamp][exo_camera_name] = bbox_xyxy
 
     # save the bboxes as a pickle file
@@ -1197,40 +1198,51 @@ def mode_exo_hand_pose2d(config: Config):
 
             # Extract left and right hand hpts from wholebody kpts estimation
             body_pose_kpts = body_poses2d[time_stamp][exo_camera_name]
-            # Right hand kpts
-            right_hand_kpts_index = list(range(112, 132))
-            right_hand_kpts = body_pose_kpts[right_hand_kpts_index, :]
-            # Left hand kpts
-            left_hand_kpts_index = list(range(91, 111))
-            left_hand_kpts = body_pose_kpts[left_hand_kpts_index, :]
 
-            ############## Hand bbox ##############
-            img_H, img_W = image.shape[:2]
-            right_hand_bbox = get_bbox_from_kpts(
-                right_hand_kpts, img_W, img_H, padding=50
-            )
-            left_hand_bbox = get_bbox_from_kpts(
-                left_hand_kpts, img_W, img_H, padding=50
-            )
-            ################# Heuristic Check: If wholeBody-Hand kpts confidence is too low, then assign zero bbox #################
-            right_kpts_avgConf, left_kpts_avgConf = np.mean(
-                right_hand_kpts[:, 2]
-            ), np.mean(left_hand_kpts[:, 2])
-            if right_kpts_avgConf < 0.5:
-                right_hand_bbox = np.zeros(4)
-            if left_kpts_avgConf < 0.5:
-                left_hand_bbox = np.zeros(4)
-            ########################################################################################################################
+            # If there is no wholebody-Hand results, then assign None as hand bbox
+            if body_pose_kpts is None:
+                right_hand_bbox, left_hand_bbox = None, None
+            else:
+                # Right hand kpts
+                right_hand_kpts_index = list(range(112, 132))
+                right_hand_kpts = body_pose_kpts[right_hand_kpts_index, :]
+                # Left hand kpts
+                left_hand_kpts_index = list(range(91, 111))
+                left_hand_kpts = body_pose_kpts[left_hand_kpts_index, :]
+
+                ############## Hand bbox ##############
+                img_H, img_W = image.shape[:2]
+                right_hand_bbox = get_bbox_from_kpts(
+                    right_hand_kpts, img_W, img_H, padding=50
+                )
+                left_hand_bbox = get_bbox_from_kpts(
+                    left_hand_kpts, img_W, img_H, padding=50
+                )
+                ################# Heuristic Check: If wholeBody-Hand kpts confidence is too low, then assign zero bbox #################
+                right_kpts_avgConf, left_kpts_avgConf = np.mean(
+                    right_hand_kpts[:, 2]
+                ), np.mean(left_hand_kpts[:, 2])
+                if right_kpts_avgConf < 0.5:
+                    right_hand_bbox = None
+                if left_kpts_avgConf < 0.5:
+                    left_hand_bbox = None
+                ########################################################################################################################
+
             # Append result
             bboxes[time_stamp][exo_camera_name] = [right_hand_bbox, left_hand_bbox]
+
             # Visualization
             if visualization:
                 vis_bbox_img = image.copy()
-                vis_bbox_img = draw_bbox_xyxy(
-                    vis_bbox_img, right_hand_bbox, color=(255, 0, 0)
+                vis_bbox_img = (
+                    draw_bbox_xyxy(vis_bbox_img, right_hand_bbox, color=(255, 0, 0))
+                    if right_hand_bbox is not None
+                    else vis_bbox_img
                 )
-                vis_bbox_img = draw_bbox_xyxy(
-                    vis_bbox_img, left_hand_bbox, color=(0, 0, 255)
+                vis_bbox_img = (
+                    draw_bbox_xyxy(vis_bbox_img, left_hand_bbox, color=(0, 0, 255))
+                    if left_hand_bbox is not None
+                    else vis_bbox_img
                 )
                 cv2.imwrite(
                     os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"),
@@ -1239,17 +1251,31 @@ def mode_exo_hand_pose2d(config: Config):
 
             ############## Hand pose 2d ##############
             # Append confience score to bbox
-            bbox_xyxy_right = np.append(right_hand_bbox, 1)
-            bbox_xyxy_left = np.append(left_hand_bbox, 1)
+            bbox_xyxy_right = (
+                np.append(right_hand_bbox, 1)
+                if right_hand_bbox is not None
+                else np.array([0, 0, 0, 0, 1])
+            )
+            bbox_xyxy_left = (
+                np.append(left_hand_bbox, 1)
+                if left_hand_bbox is not None
+                else np.array([0, 0, 0, 0, 1])
+            )
             two_hand_bboxes = [{"bbox": bbox_xyxy_right}, {"bbox": bbox_xyxy_left}]
             # Hand pose estimation
             pose_results = hand_pose_model.get_poses2d(
                 bboxes=two_hand_bboxes,
                 image_name=image_path,
             )
-
             # Save 2d hand pose estimation result ~ (2,21,3)
-            curr_pose2d_kpts = np.array([res["keypoints"] for res in pose_results])
+            curr_pose2d_kpts = [res["keypoints"] for res in pose_results]
+            # Assign None if hand bbox is None
+            if right_hand_bbox is None:
+                curr_pose2d_kpts[0] = None
+            if left_hand_bbox is None:
+                curr_pose2d_kpts[1] = None
+
+            # Append pose2d result
             poses2d[time_stamp][exo_camera_name] = curr_pose2d_kpts
 
             # Visualization
@@ -1398,7 +1424,9 @@ def mode_ego_hand_pose2d(config: Config):
             y_valid = np.logical_and(
                 projected_pose3d[:, 1] > 0, projected_pose3d[:, 1] < orig_H - 1
             )
-            valid_index = np.logical_and(x_valid, y_valid)
+            # Get invalid pose3d keypoints (with zero confidence)
+            zero_conf_kpts_index = pose3d[:, -1] == 0
+            valid_index = x_valid * y_valid * ~zero_conf_kpts_index
             # Rotate from original to extracted view
             extracted_kpts = aria_original_to_extracted(
                 projected_pose3d[:, :2], (orig_H - 1, orig_W)
@@ -1416,23 +1444,29 @@ def mode_ego_hand_pose2d(config: Config):
             right_hand_bbox = (
                 get_bbox_from_kpts(rot_right_hand_kpts, img_W, img_H, padding=50)
                 if rot_right_hand_kpts.shape[0] > 10
-                else np.zeros(4)
+                else None
             )
             left_hand_bbox = (
                 get_bbox_from_kpts(rot_left_hand_kpts, img_W, img_H, padding=50)
                 if rot_left_hand_kpts.shape[0] > 10
-                else np.zeros(4)
+                else None
             )
-            # Save result
+
+            # Append bbox result
             bboxes[time_stamp][ego_cam_name] = [right_hand_bbox, left_hand_bbox]
+
             # Hand bbox visualization
             if visualization:
                 vis_bbox_img = image.copy()
-                vis_bbox_img = draw_bbox_xyxy(
-                    vis_bbox_img, right_hand_bbox, color=(255, 0, 0)
+                vis_bbox_img = (
+                    draw_bbox_xyxy(vis_bbox_img, right_hand_bbox, color=(255, 0, 0))
+                    if right_hand_bbox is not None
+                    else vis_bbox_img
                 )
-                vis_bbox_img = draw_bbox_xyxy(
-                    vis_bbox_img, left_hand_bbox, color=(0, 0, 255)
+                vis_bbox_img = (
+                    draw_bbox_xyxy(vis_bbox_img, left_hand_bbox, color=(0, 0, 255))
+                    if left_hand_bbox is not None
+                    else vis_bbox_img
                 )
                 cv2.imwrite(
                     os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"),
@@ -1441,18 +1475,33 @@ def mode_ego_hand_pose2d(config: Config):
 
             ########### Hand pose2d estimation on ego camera (aria) ###########
             # Format hand bbox
-            two_hand_bboxes = [
-                {"bbox": np.append(curr_hand_bbox, 1)}
-                for curr_hand_bbox in [right_hand_bbox, left_hand_bbox]
-            ]
+            bbox_xyxy_right = (
+                np.append(right_hand_bbox, 1)
+                if right_hand_bbox is not None
+                else np.array([0, 0, 0, 0, 1])
+            )
+            bbox_xyxy_left = (
+                np.append(left_hand_bbox, 1)
+                if left_hand_bbox is not None
+                else np.array([0, 0, 0, 0, 1])
+            )
+            two_hand_bboxes = [{"bbox": bbox_xyxy_right}, {"bbox": bbox_xyxy_left}]
             # Hand pose estimation
             pose_results = hand_pose_model.get_poses2d(
                 bboxes=two_hand_bboxes,
                 image_name=image_path,
             )
             # Save result
-            curr_pose2d_kpts = np.array([res["keypoints"] for res in pose_results])
+            curr_pose2d_kpts = [res["keypoints"] for res in pose_results]
+            # Assign None if hand bbox is None
+            if right_hand_bbox is None:
+                curr_pose2d_kpts[0] = None
+            if left_hand_bbox is None:
+                curr_pose2d_kpts[1] = None
+
+            # Append pose2d result
             poses2d[time_stamp][ego_cam_name] = curr_pose2d_kpts
+
             # Visualization
             if visualization:
                 save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:06d}.jpg")
@@ -1544,13 +1593,28 @@ def mode_exo_hand_pose3d(config: Config):
         info = dset[time_stamp]
         reprojection_errors[time_stamp] = {}
 
-        # # Pose2d estimation from exo camera
+        # Pose2d estimation from exo camera
         ########### Heuristic Check: Hardcode hand wrist kpt conf to be 1 ################################
         multi_view_pose2d = {}
+        curr_pose2d_dict = {}
         for exo_camera_name in exo_cam_names:
-            curr_exo_hand_pose2d_kpts = (
-                exo_poses2d[time_stamp][exo_camera_name].copy().reshape(-1, 3)
+            # For each hand, assign zero as hand keypoints if it is None to perform triangulation
+            right_hand_pose2d, left_hand_pose2d = exo_poses2d[time_stamp][
+                exo_camera_name
+            ].copy()
+            right_hand_pose2d = (
+                np.zeros((21, 3)) if right_hand_pose2d is None else right_hand_pose2d
             )
+            left_hand_pose2d = (
+                np.zeros((21, 3)) if left_hand_pose2d is None else left_hand_pose2d
+            )
+            # Concatenate right and left hand keypoints
+            curr_exo_hand_pose2d_kpts = np.concatenate(
+                (right_hand_pose2d, left_hand_pose2d), axis=0
+            )  # (42,3)
+            curr_pose2d_dict[
+                exo_camera_name
+            ] = curr_exo_hand_pose2d_kpts.copy()  # (42,3)
             # Heuristics
             if np.mean(curr_exo_hand_pose2d_kpts[:21, -1]) > 0.3:
                 curr_exo_hand_pose2d_kpts[0, -1] = 1
@@ -1558,7 +1622,6 @@ def mode_exo_hand_pose3d(config: Config):
                 curr_exo_hand_pose2d_kpts[21, -1] = 1
             # Append kpts result
             multi_view_pose2d[exo_camera_name] = curr_exo_hand_pose2d_kpts
-
         ##################################################################################################
 
         ###### Heuristic Check: If two hands are too close, then drop the one with lower confidence ######
@@ -1630,7 +1693,7 @@ def mode_exo_hand_pose3d(config: Config):
             curr_camera = exo_cameras[camera_name]
             projected_pose3d = batch_xworld_to_yimage(pose3d[:, :3], curr_camera)
             # Compute L1-norm between projected 2D kpts and hand_pose2d
-            original_pose2d = exo_poses2d[time_stamp][camera_name].reshape(-1, 3)[:, :2]
+            original_pose2d = curr_pose2d_dict[camera_name][:, :2]
             reprojection_error = np.linalg.norm(
                 (original_pose2d - projected_pose3d), ord=1, axis=1
             )
@@ -1756,11 +1819,24 @@ def mode_egoexo_hand_pose3d(config: Config):
 
         # Load hand pose2d results for exo cameras
         multi_view_pose2d = {}
+        original_pose2d_dict = {}
         # 1. Add exo camera keypoints
         for exo_camera_name in exo_cam_names:
-            curr_exo_hand_pose2d_kpts = (
-                exo_poses2d[time_stamp][exo_camera_name].copy().reshape(-1, 3)
+            # For each hand, assign zero as hand keypoints if it is None to perform triangulation
+            right_hand_pose2d, left_hand_pose2d = exo_poses2d[time_stamp][
+                exo_camera_name
+            ].copy()
+            right_hand_pose2d = (
+                np.zeros((21, 3)) if right_hand_pose2d is None else right_hand_pose2d
             )
+            left_hand_pose2d = (
+                np.zeros((21, 3)) if left_hand_pose2d is None else left_hand_pose2d
+            )
+            # Concatenate right and left hand keypoints
+            curr_exo_hand_pose2d_kpts = np.concatenate(
+                (right_hand_pose2d, left_hand_pose2d), axis=0
+            )  # (42,3)
+            original_pose2d_dict[exo_camera_name] = curr_exo_hand_pose2d_kpts.copy()
             ### Heuristics: Hardcode hand wrist kpt conf to be 1 if average conf > 0.3 ###
             if np.mean(curr_exo_hand_pose2d_kpts[:21, -1]) > 0.3:
                 curr_exo_hand_pose2d_kpts[0, -1] = 1
@@ -1771,9 +1847,23 @@ def mode_egoexo_hand_pose3d(config: Config):
         # 2. Add ego camera keypoints (Rotate from extracted view
         # to original view since extrinsic/intrinsic is with original view)
         for ego_cam_name in ego_cam_names:
-            ego_hand_pose2d_kpts = aria_extracted_to_original(
-                aria_poses2d[time_stamp][ego_cam_name].reshape(-1, 3)
+            # For each hand, assign zero as hand keypoints if it is None to perform triangulation
+            right_hand_pose2d, left_hand_pose2d = aria_poses2d[time_stamp][
+                ego_cam_name
+            ].copy()
+            right_hand_pose2d = (
+                np.zeros((21, 3)) if right_hand_pose2d is None else right_hand_pose2d
             )
+            left_hand_pose2d = (
+                np.zeros((21, 3)) if left_hand_pose2d is None else left_hand_pose2d
+            )
+            # Concatenate right and left hand keypoints
+            ego_hand_pose2d_kpts = np.concatenate(
+                (right_hand_pose2d, left_hand_pose2d), axis=0
+            )  # (42,3)
+            original_pose2d_dict[ego_cam_name] = ego_hand_pose2d_kpts.copy()
+            # Rotate to aria frames
+            ego_hand_pose2d_kpts = aria_extracted_to_original(ego_hand_pose2d_kpts)
             ### Heuristics: Hardcode hand wrist kpt conf to be 1 if average conf > 0.3 ###
             if np.mean(ego_hand_pose2d_kpts[:21, -1]) > 0.3:
                 ego_hand_pose2d_kpts[0, -1] = 1
@@ -1871,8 +1961,7 @@ def mode_egoexo_hand_pose3d(config: Config):
             if "aria" in camera_name:
                 projected_pose3d = aria_original_to_extracted(projected_pose3d)
             # Compute L1-norm between projected 2D kpts and hand_pose2d
-            poses2d = aria_poses2d if "aria" in camera_name else exo_poses2d
-            original_pose2d = poses2d[time_stamp][camera_name].reshape(-1, 3)[:, :2]
+            original_pose2d = original_pose2d_dict[camera_name][:, :2]
             reprojection_error = np.linalg.norm(
                 (original_pose2d - projected_pose3d), ord=1, axis=1
             )
