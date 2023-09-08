@@ -19,6 +19,8 @@ inputs:
     - slam-left
     - slam-right
   exo_timesync_name_to_calib_name: null
+outputs:
+  storage_level: 30
 mode_preprocess:
   dataset_name: "dataset"
   vrs_bin_path: "vrs"

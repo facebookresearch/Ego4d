@@ -102,6 +102,7 @@ class Context:
     take: Optional[Dict[str, Any]] = None
     all_cams: Optional[List[str]] = None
     frame_rel_dir: str = None
+    storage_level: int = 30
 
 
 def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
@@ -327,206 +328,10 @@ def get_context(config: Config) -> Context:
         take=take,
         hand_pose_config=config.mode_pose2d.hand_pose_config,
         hand_pose_ckpt=config.mode_pose2d.hand_pose_ckpt,
+        storage_level=config.outputs.storage_level,
     )
 
 
-##-------------------------------------------------------------------------------
-def mode_bbox(config: Config):
-    ctx = get_context(config)
-
-    dset = SyncedEgoExoCaptureDset(
-        data_dir=config.cache_root_dir,
-        dataset_json_path=ctx.dataset_json_path,
-        read_frames=False,
-    )
-
-    detector_model = DetectorModel(
-        detector_config=ctx.detector_config,
-        detector_checkpoint=ctx.detector_checkpoint,
-    )
-
-    # construct ground plane, it is parallel to the plane with all gopro camera centers
-    exo_cameras = {
-        exo_camera_name: create_camera(
-            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
-        )
-        for exo_camera_name in ctx.exo_cam_names
-    }
-    # sometimes the exo cameras are not all on the ground,
-    # so using get_exo_camera_plane is problematic
-    # _, camera_plane_unit_normal = get_exo_camera_plane(exo_camera_centers)
-    camera_plane_unit_normal = np.array([0, 0, 1])
-
-    os.makedirs(ctx.bbox_dir, exist_ok=True)
-    os.makedirs(ctx.vis_bbox_dir, exist_ok=True)
-
-    bboxes = {}
-
-    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
-        info = dset[time_stamp]
-        bboxes[time_stamp] = {}
-
-        for exo_camera_name in ctx.exo_cam_names:
-            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
-            image = cv2.imread(image_path)
-
-            vis_bbox_cam_dir = os.path.join(ctx.vis_bbox_dir, exo_camera_name)
-            if not os.path.exists(vis_bbox_cam_dir):
-                os.makedirs(vis_bbox_cam_dir)
-
-            exo_camera = create_camera(
-                info[f"{exo_camera_name}_0"]["camera_data"], None
-            )
-            left_camera = create_camera(
-                info["aria01_slam-left"]["camera_data"], None
-            )  # TODO: use the camera model of the aria camera
-            right_camera = create_camera(
-                info["aria01_slam-right"]["camera_data"], None
-            )  # TODO: use the camera model of the aria camera
-            human_center_3d = (left_camera.center + right_camera.center) / 2
-
-            proposal_points_3d = get_region_proposal(
-                human_center_3d,
-                unit_normal=camera_plane_unit_normal,
-                human_height=ctx.human_height,
-            )
-            proposal_points_2d = batch_xworld_to_yimage(proposal_points_3d, exo_camera)
-            proposal_bbox = check_and_convert_bbox(
-                proposal_points_2d,
-                exo_camera.camera_model.width,
-                exo_camera.camera_model.height,
-                min_area_ratio=config.mode_bbox.min_area_ratio,
-            )
-
-            bbox_xyxy = None
-            offshelf_bboxes = None
-
-            if proposal_bbox is not None:
-                proposal_bbox = np.array(
-                    [
-                        proposal_bbox[0],
-                        proposal_bbox[1],
-                        proposal_bbox[2],
-                        proposal_bbox[3],
-                        1,
-                    ]
-                )  ## add confidnece
-                proposal_bboxes = [{"bbox": proposal_bbox}]
-                offshelf_bboxes = detector_model.get_bboxes(
-                    image_name=image_path, bboxes=proposal_bboxes
-                )
-
-            if offshelf_bboxes is not None:
-                assert len(offshelf_bboxes) == 1  ## single human per scene
-                bbox_xyxy = offshelf_bboxes[0]["bbox"][:4]
-
-                # uncomment to visualize the bounding box
-                # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
-                bbox_image = draw_bbox_xyxy(image, bbox_xyxy, color=(0, 255, 0))
-            #
-            else:
-                bbox_image = image
-
-            # bbox_image = draw_points_2d(image, proposal_points_2d, radius=5, color=(0, 255, 0))
-
-            cv2.imwrite(
-                os.path.join(vis_bbox_cam_dir, f"{time_stamp:05d}.jpg"), bbox_image
-            )
-            bboxes[time_stamp][exo_camera_name] = bbox_xyxy
-
-    # save the bboxes as a pickle file
-    with open(os.path.join(ctx.bbox_dir, "bbox.pkl"), "wb") as f:
-        pickle.dump(bboxes, f)
-
-
-##-------------------------------------------------------------------------------
-def mode_pose2d(config: Config):
-    ctx = get_context(config)
-
-    dset = SyncedEgoExoCaptureDset(
-        data_dir=config.cache_root_dir,
-        dataset_json_path=ctx.dataset_json_path,
-        read_frames=False,
-    )
-    all_cam_ids = set(dset.all_cam_ids())
-
-    # ---------------construct pose model-------------------
-    pose_model = PoseModel(
-        pose_config=ctx.pose_config, pose_checkpoint=ctx.pose_checkpoint
-    )
-
-    ##--------construct ground plane, it is parallel to the plane with all gopro camera centers----------------
-    exo_cameras = {
-        exo_camera_name: create_camera(
-            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
-        )
-        for exo_camera_name in ctx.exo_cam_names
-    }
-
-    if not os.path.exists(ctx.pose2d_dir):
-        os.makedirs(ctx.pose2d_dir)
-
-    ## if ctx.vis_pose_dir does not exist make it
-    if not os.path.exists(ctx.vis_pose2d_dir):
-        os.makedirs(ctx.vis_pose2d_dir)
-
-    poses2d = {}
-
-    # load bboxes from bbox_dir/bbox.pkl
-    bbox_file = os.path.join(ctx.bbox_dir, "bbox.pkl")
-
-    if not os.path.exists(bbox_file):
-        print(f"bbox path does not exist: {bbox_file}")
-        print("NOTE: run mode_bbox")
-        sys.exit(1)
-
-    with open(bbox_file, "rb") as f:
-        bboxes = pickle.load(f)
-
-    for time_stamp in tqdm(range(len(dset)), total=len(dset)):
-        info = dset[time_stamp]
-
-        poses2d[time_stamp] = {}
-
-        for exo_camera_name in ctx.exo_cam_names:
-            image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
-            image = cv2.imread(image_path)
-
-            vis_pose2d_cam_dir = os.path.join(ctx.vis_pose2d_dir, exo_camera_name)
-            if not os.path.exists(vis_pose2d_cam_dir):
-                os.makedirs(vis_pose2d_cam_dir)
-
-            bbox_xyxy = bboxes[time_stamp][exo_camera_name]  # x1, y1, x2, y2
-
-            if bbox_xyxy is not None:
-                # add confidence score to the bbox
-                bbox_xyxy = np.append(bbox_xyxy, 1.0)
-
-                pose_results = pose_model.get_poses2d(
-                    bboxes=[{"bbox": bbox_xyxy}],
-                    image_name=image_path,
-                )
-
-                assert len(pose_results) == 1
-
-                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
-                pose_model.draw_poses2d(pose_results, image, save_path)
-
-                pose_result = pose_results[0]
-                pose2d = pose_result["keypoints"]
-            else:
-                pose2d = None
-                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
-                cv2.imwrite(save_path, image)
-
-            poses2d[time_stamp][exo_camera_name] = pose2d
-
-    # save poses2d to pose2d_dir/pose2d.pkl
-    with open(os.path.join(ctx.pose2d_dir, "pose2d.pkl"), "wb") as f:
-        pickle.dump(poses2d, f)
-
-
-##-------------------------------------------------------------------------------
 def mode_refine_pose3d(config: Config):
     skel_type = "body"
 
@@ -669,12 +474,13 @@ def mode_body_bbox(config: Config):
     )
 
     # construct ground plane, it is parallel to the plane with all gopro camera centers
-    exo_cameras = {
-        exo_camera_name: create_camera(
-            dset[0][f"{exo_camera_name}_0"]["camera_data"], None
-        )
-        for exo_camera_name in ctx.exo_cam_names
-    }
+    # exo_cameras = {
+    #     exo_camera_name: create_camera(
+    #         dset[0][f"{exo_camera_name}_0"]["camera_data"], None
+    #     )
+    #     for exo_camera_name in ctx.exo_cam_names
+    # }
+
     # sometimes the exo cameras are not all on the ground,
     # so using get_exo_camera_plane is problematic
     # _, camera_plane_unit_normal = get_exo_camera_plane(exo_camera_centers)
@@ -1504,7 +1310,7 @@ def mode_ego_hand_pose2d(config: Config):
 
             # Visualization
             if visualization:
-                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:06d}.jpg")
+                save_path = os.path.join(vis_pose2d_cam_dir, f"{time_stamp:05d}.jpg")
                 vis_twoHand = cv2.imread(image_path)
                 hand_pose_model.draw_poses2d([pose_results[0]], vis_twoHand, save_path)
                 vis_twoHand = cv2.imread(save_path)
@@ -1594,11 +1400,14 @@ def mode_exo_hand_pose3d(config: Config):
         reprojection_errors[time_stamp] = {}
 
         # Pose2d estimation from exo camera
-        ########### Heuristic Check: Hardcode hand wrist kpt conf to be 1 ################################
+        ###################################
+        # Heuristic Check: Hardcode hand wrist kpt conf to be 1
+
         multi_view_pose2d = {}
         curr_pose2d_dict = {}
         for exo_camera_name in exo_cam_names:
-            # For each hand, assign zero as hand keypoints if it is None to perform triangulation
+            # For each hand, assign zero as hand keypoints
+            # if it is None to perform triangulation
             right_hand_pose2d, left_hand_pose2d = exo_poses2d[time_stamp][
                 exo_camera_name
             ].copy()
@@ -1622,9 +1431,13 @@ def mode_exo_hand_pose3d(config: Config):
                 curr_exo_hand_pose2d_kpts[21, -1] = 1
             # Append kpts result
             multi_view_pose2d[exo_camera_name] = curr_exo_hand_pose2d_kpts
-        ##################################################################################################
+        #
+        ###################################
 
-        ###### Heuristic Check: If two hands are too close, then drop the one with lower confidence ######
+        ###################################
+        # Heuristic Check:
+        # If two hands are too close, then drop the one with lower confidence
+
         for exo_camera_name in exo_cam_names:
             right_hand_pos2d_kpts, left_hand_pos2d_kpts = (
                 multi_view_pose2d[exo_camera_name][:21, :],
@@ -1647,7 +1460,8 @@ def mode_exo_hand_pose3d(config: Config):
                     left_hand_pos2d_kpts[:, :] = 0
             multi_view_pose2d[exo_camera_name][:21] = right_hand_pos2d_kpts
             multi_view_pose2d[exo_camera_name][21:] = left_hand_pos2d_kpts
-        ###################################################################################################
+        #
+        ###################################
 
         # triangulate
         triangulator = Triangulator(
@@ -1822,7 +1636,8 @@ def mode_egoexo_hand_pose3d(config: Config):
         original_pose2d_dict = {}
         # 1. Add exo camera keypoints
         for exo_camera_name in exo_cam_names:
-            # For each hand, assign zero as hand keypoints if it is None to perform triangulation
+            # For each hand, assign zero as hand keypoints
+            # if it is None to perform triangulation
             right_hand_pose2d, left_hand_pose2d = exo_poses2d[time_stamp][
                 exo_camera_name
             ].copy()
@@ -1847,7 +1662,8 @@ def mode_egoexo_hand_pose3d(config: Config):
         # 2. Add ego camera keypoints (Rotate from extracted view
         # to original view since extrinsic/intrinsic is with original view)
         for ego_cam_name in ego_cam_names:
-            # For each hand, assign zero as hand keypoints if it is None to perform triangulation
+            # For each hand, assign zero as hand keypoints
+            # if it is None to perform triangulation
             right_hand_pose2d, left_hand_pose2d = aria_poses2d[time_stamp][
                 ego_cam_name
             ].copy()
@@ -2389,10 +2205,41 @@ def mode_multi_view_vis(config: Config, step="pose3d", skel_type="body"):
     camera_names = ctx.exo_cam_names
     os.makedirs(ctx.vis_pose3d_dir, exist_ok=True)
 
-    if step in ["bbox", "pose2d", "pose3d", "refine_pose3d"]:
-        read_dir = os.path.join(ctx.dataset_dir, skel_type, f"vis_{step}")
-        write_dir = os.path.join(ctx.dataset_dir, skel_type, step)
-        write_video = os.path.join(ctx.vis_pose3d_dir, f"{step}.mp4")
+    if skel_type == "body":
+        if step in ["bbox", "pose2d", "pose3d", "refine_pose3d"]:
+            read_dir = os.path.join(ctx.dataset_dir, skel_type, f"vis_{step}")
+    elif skel_type == "hand":
+        # TODO: unify the paths with body
+        if step in ["wholebodyhand"]:
+            tri_threshold = 0.5
+            read_dir = os.path.join(
+                ctx.dataset_dir,
+                "body",
+                "vis_pose3d",
+                f"wholebodyHand_triThresh={tri_threshold}",
+            )
+        elif step in ["pose2d"]:
+            kpts_vis_threshold = 0.3
+            camera_names.append("aria01_rgb")
+            read_dir = os.path.join(
+                ctx.dataset_dir,
+                skel_type,
+                f"vis_{step}",
+                f"visThresh={kpts_vis_threshold}",
+            )
+        elif step in ["pose3d"]:
+            tri_threshold = 0.3
+            camera_names.append("aria01_rgb")
+            read_dir = os.path.join(
+                ctx.dataset_dir,
+                skel_type,
+                f"vis_{step}",
+                "ego_exo_camera",
+                f"triThresh={tri_threshold}",
+            )
+
+    write_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_multiview", step)
+    write_video = os.path.join(ctx.vis_pose3d_dir, f"{skel_type}_{step}.mp4")
 
     multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video)
 
@@ -2472,6 +2319,16 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
         fps, write_dir, write_video
     )
     os.system(command)
+
+    if os.path.exists(write_video):
+        if ctx.storage_level <= 50:
+            # remove the multiview frames after the video is generated
+            print(f"[Info] Removing {write_dir} since {write_video} is generated")
+            shutil.rmtree(write_dir)
+        if ctx.storage_level <= 30:
+            # remove the single-view frames after the video is generated
+            print(f"[Info] Removing {read_dir} since {write_video} is generated")
+            shutil.rmtree(read_dir)
 
 
 def mode_undistort_to_halo(config: Config, skel_type="body"):
@@ -2721,35 +2578,6 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
 
 
 """
-Original main function to run body pose estimation inference
-"""
-
-
-@hydra.main(config_path="configs", config_name=None, version_base=None)
-def run(config: Config):
-    if config.mode == "preprocess":
-        mode_preprocess(config)
-    elif config.mode == "bbox":
-        mode_bbox(config)
-    elif config.mode == "pose2d":
-        mode_pose2d(config)
-    elif config.mode == "pose3d":
-        mode_body_pose3d(config)
-    elif config.mode == "refine_pose3d":
-        mode_refine_pose3d(config)
-    elif config.mode == "vis_body_bbox":
-        mode_multi_view_vis(config, step="bbox", skel_type="body")
-    elif config.mode == "vis_body_pose2d":
-        mode_multi_view_vis(config, step="pose2d", skel_type="body")
-    elif config.mode == "vis_body_pose3d":
-        mode_multi_view_vis(config, step="pose3d", skel_type="body")
-    elif config.mode == "vis_body_refine_pose3d":
-        mode_multi_view_vis(config, step="refine_pose3d", skel_type="body")
-    else:
-        raise AssertionError(f"unknown mode: {config.mode}")
-
-
-"""
 Newly added main function to run body & hand pose estimation inference
 """
 
@@ -2885,6 +2713,12 @@ def main(args):
             mode_multi_view_vis(config, step="pose2d", skel_type="body")
         elif step == "vis_body_pose3d":
             mode_multi_view_vis(config, step="pose3d", skel_type="body")
+        elif step == "vis_hand_wholebodyhand_pose3d":
+            mode_multi_view_vis(config, step="wholebodyhand", skel_type="hand")
+        elif step == "vis_hand_pose2d":
+            mode_multi_view_vis(config, step="pose2d", skel_type="hand")
+        elif step == "vis_hand_pose3d":
+            mode_multi_view_vis(config, step="pose3d", skel_type="hand")
         elif step == "vis_body_refine_pose3d":
             mode_multi_view_vis(config, step="refine_pose3d", skel_type="body")
         else:
@@ -2893,12 +2727,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    # Whether using new pipeline's code to do inference
-    use_new_pipeline = True
-    if use_new_pipeline:
-        new_run()
-    else:
-        run()
+    new_run()
     # # Not using hydra:
     # args = parse_args()
     # main(args)
