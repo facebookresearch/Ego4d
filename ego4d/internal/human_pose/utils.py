@@ -370,24 +370,27 @@ def normalize_reprojection_error(reproj_error, bboxes, skel_type):
             # Normalize reprojection error
             if skel_type == "hand":
                 curr_right_bbox, curr_left_bbox = bboxes[ts][cam]
-                # Caculate left and right hand's bbox area
-                right_hand_bbox_area = (curr_right_bbox[2] - curr_right_bbox[0]) * (
-                    curr_right_bbox[3] - curr_right_bbox[1]
-                )
-                left_hand_bbox_area = (curr_left_bbox[2] - curr_left_bbox[0]) * (
-                    curr_left_bbox[3] - curr_left_bbox[1]
-                )
-                # Normalize reprojection error with corresponding hand bbox
-                curr_reproj_error[:21] /= (
-                    right_hand_bbox_area
-                    if right_hand_bbox_area != 0
-                    else curr_reproj_error[:21]
-                )
-                curr_reproj_error[21:] /= (
-                    left_hand_bbox_area
-                    if left_hand_bbox_area != 0
-                    else curr_reproj_error[:21]
-                )
+                # If bbox is None then don't normalize reprojection error
+                if curr_right_bbox is not None:
+                    # Caculate left and right hand's bbox area
+                    right_hand_bbox_area = (curr_right_bbox[2] - curr_right_bbox[0]) * (
+                        curr_right_bbox[3] - curr_right_bbox[1]
+                    )
+                    # Normalize reprojection error with corresponding hand bbox
+                    curr_reproj_error[:21] /= (
+                        right_hand_bbox_area
+                        if right_hand_bbox_area != 0
+                        else curr_reproj_error[:21]
+                    )
+                if curr_left_bbox is not None:
+                    left_hand_bbox_area = (curr_left_bbox[2] - curr_left_bbox[0]) * (
+                        curr_left_bbox[3] - curr_left_bbox[1]
+                    )
+                    curr_reproj_error[21:] /= (
+                        left_hand_bbox_area
+                        if left_hand_bbox_area != 0
+                        else curr_reproj_error[:21]
+                    )
             elif skel_type == "body":
                 # Calculate body bbox area
                 curr_body_bbox = bboxes[ts][cam]
