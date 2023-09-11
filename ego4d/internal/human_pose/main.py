@@ -1998,7 +1998,9 @@ def mode_preprocess_legacy(config: Config):
     json.dump(dataset_json, open(ctx.dataset_json_path, "w"))
 
 
-def calculate_frame_selection(subclip_json_path, start_frame, end_frame):
+def calculate_frame_selection(
+    subclip_json_path, start_frame, end_frame, min_subclip_length
+):
     frame_selection = [1 for k in range(start_frame, end_frame)]
 
     if subclip_json_path is None:
@@ -2017,7 +2019,10 @@ def calculate_frame_selection(subclip_json_path, start_frame, end_frame):
 
     for i in range(len(raw_subclips)):
         left = max(start_frame, raw_subclips[i][0])
-        right = min(end_frame, raw_subclips[i][1] + 1)
+        right = min(
+            end_frame,
+            max(raw_subclips[i][0] + min_subclip_length + 1, raw_subclips[i][1] + 1),
+        )
         for k in range(left, right):
             frame_selection[k - start_frame] = 1
 
@@ -2065,7 +2070,7 @@ def mode_preprocess(config: Config):
         subclip_json_path = None
 
     frame_selection = calculate_frame_selection(
-        subclip_json_path, start_frame, end_frame
+        subclip_json_path, start_frame, end_frame, config.inputs.min_subclip_length
     )
 
     frame_paths = {}
