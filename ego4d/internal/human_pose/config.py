@@ -8,6 +8,13 @@ class Input:
     to_frame_number: int
     sample_interval: int
     subclip_json_dir: Optional[str]
+    # min_subclip_length:
+    # example: suppose min_subclip_length=120 (unit: frames) and subclip=[30, 80],
+    # it will extend the subclip to [30, 150]. This could be useful for some actions
+    # that take more than 2 seconds (60 frames) so that we sample sufficient frames
+    # for the action.
+    # see function `calculate_frame_selection` for how it's used
+    min_subclip_length: int
     take_name: Optional[str]
     take_uid: Optional[str]
     capture_root_dir: Optional[str]
