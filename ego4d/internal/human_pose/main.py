@@ -252,12 +252,14 @@ def get_context(config: Config) -> Context:
         config.cache_root_dir,
         cache_rel_dir,
     )
-    exo_cam_names = [
-        x["cam_id"]
-        for x in take["capture"]["cameras"]
-        if not ast.literal_eval(x["is_ego"])
-        and not ast.literal_eval(x["has_walkaround"])
-    ]
+    # Initialize exo cameras from calibration file since sometimes some exo camera is missing
+    traj_dir = os.path.join(
+        data_dir, "captures", take["capture"]["root_dir"], "trajectory"
+    )
+    exo_traj_path = os.path.join(traj_dir, "gopro_calibs.csv")
+    exo_traj_df = pd.read_csv(exo_traj_path)
+    exo_cam_names = list(exo_traj_df["cam_uid"])
+
     all_cams = [
         x["cam_id"]
         for x in take["capture"]["cameras"]
