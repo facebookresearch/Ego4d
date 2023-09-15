@@ -1,5 +1,4 @@
 import argparse
-import ast
 import json
 import os
 import pickle
@@ -77,6 +76,7 @@ class Context:
     dataset_json_path: str
     dataset_rel_dir: str
     frame_dir: str
+    ego_cam_names: List[str]
     exo_cam_names: List[str]
     bbox_dir: str
     vis_bbox_dir: str
@@ -260,15 +260,23 @@ def get_context(config: Config) -> Context:
     exo_traj_df = pd.read_csv(exo_traj_path)
     exo_cam_names = list(exo_traj_df["cam_uid"])
 
-    all_cams = [
-        x["cam_id"]
-        for x in take["capture"]["cameras"]
-        if ast.literal_eval(x["is_ego"])
-        or (
-            not ast.literal_eval(x["is_ego"])
-            and not ast.literal_eval(x["has_walkaround"])
-        )
+    ego_cam_names = [
+        x["cam_id"] for x in take["capture"]["cameras"] if x["is_ego"].lower() == "true"
     ]
+    assert len(ego_cam_names) > 0, "No ego cameras found!"
+    if len(ego_cam_names) > 1:
+        print(
+            f"[Warning] Found {len(ego_cam_names)} cameras: {ego_cam_names} filtering ..."
+        )
+        ego_cam_names = [
+            cam for cam in ego_cam_names if cam in take["frame_aligned_videos"].keys()
+        ]
+        assert len(ego_cam_names) > 0, "No frame-aligned ego cameras found!"
+        assert (
+            len(ego_cam_names) == 1
+        ), f"Found too many ({len(ego_cam_names)}) ego cameras: {ego_cam_names}"
+
+    all_cams = ego_cam_names + exo_cam_names
     dataset_dir = cache_dir
     # dataset_dir = os.path.join(cache_dir, config.mode_preprocess.dataset_name)
     frame_rel_dir = os.path.join(cache_rel_dir, "frames")
@@ -306,6 +314,7 @@ def get_context(config: Config) -> Context:
         ),
         frame_dir=os.path.join(dataset_dir, "frames"),
         frame_rel_dir=frame_rel_dir,
+        ego_cam_names=ego_cam_names,
         exo_cam_names=exo_cam_names,
         all_cams=all_cams,
         bbox_dir=os.path.join(dataset_dir, "bbox"),
@@ -514,10 +523,10 @@ def mode_body_bbox(config: Config):
                 info[f"{exo_camera_name}_0"]["camera_data"], None
             )
             left_camera = create_camera(
-                info["aria01_slam-left"]["camera_data"], None
+                info[f"{ctx.ego_cam_names[0]}_slam-left"]["camera_data"], None
             )  # TODO: use the camera model of the aria camera
             right_camera = create_camera(
-                info["aria01_slam-right"]["camera_data"], None
+                info[f"{ctx.ego_cam_names[0]}_slam-right"]["camera_data"], None
             )  # TODO: use the camera model of the aria camera
             human_center_3d = (left_camera.center + right_camera.center) / 2
 
@@ -1114,7 +1123,7 @@ def mode_ego_hand_pose2d(config: Config):
     ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args
     ################# Modified as needed #####################
-    ego_cam_names = ["aria01_rgb"]
+    ego_cam_names = [f"{cam}_rgb" for cam in ctx.ego_cam_names]
     kpts_vis_threshold = 0.3  # This value determines the threshold to visualize hand pose2d estimated kpts
     tri_threshold = 0.5  # This value determines which wholebody-Hand pose3d kpts to use
     visualization = True
@@ -1171,15 +1180,15 @@ def mode_ego_hand_pose2d(config: Config):
     capture_dir = os.path.join(
         ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
     )
-    aria_path = os.path.join(capture_dir, "videos/aria01.vrs")
+    aria_path = os.path.join(capture_dir, f"videos/{ctx.ego_cam_names[0]}.vrs")
     assert os.path.exists(
         aria_path
     ), f"{aria_path} doesn't exit. Need aria video downloaded"
     aria_camera_models = get_aria_camera_models(aria_path)
     stream_name_to_id = {
-        "aria01_rgb": "214-1",
-        "aria01_slam-left": "1201-1",
-        "aria01_slam-right": "1201-2",
+        f"{ctx.ego_cam_names[0]}_rgb": "214-1",
+        f"{ctx.ego_cam_names[0]}_slam-left": "1201-1",
+        f"{ctx.ego_cam_names[0]}_slam-right": "1201-2",
     }
 
     # Iterate through every frame
@@ -1545,7 +1554,7 @@ def mode_egoexo_hand_pose3d(config: Config):
     exo_cam_names = (
         ctx.exo_cam_names
     )  # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
-    ego_cam_names = ["aria01_rgb"]
+    ego_cam_names = [f"{cam}_rgb" for cam in ctx.ego_cam_names]
     all_used_cam = exo_cam_names + ego_cam_names
     tri_threshold = 0.3
     visualization = True
@@ -1615,15 +1624,15 @@ def mode_egoexo_hand_pose3d(config: Config):
     capture_dir = os.path.join(
         ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
     )
-    aria_path = os.path.join(capture_dir, "videos/aria01.vrs")
+    aria_path = os.path.join(capture_dir, f"videos/{ctx.ego_cam_names[0]}.vrs")
     assert os.path.exists(
         aria_path
     ), f"{aria_path} doesn't exit. Need aria video downloaded"
     aria_camera_models = get_aria_camera_models(aria_path)
     stream_name_to_id = {
-        "aria01_rgb": "214-1",
-        "aria01_slam-left": "1201-1",
-        "aria01_slam-right": "1201-2",
+        f"{ctx.ego_cam_names[0]}_rgb": "214-1",
+        f"{ctx.ego_cam_names[0]}_slam-left": "1201-1",
+        f"{ctx.ego_cam_names[0]}_slam-right": "1201-2",
     }
 
     # Iterate through all images and inference
@@ -2077,7 +2086,7 @@ def mode_preprocess(config: Config):
 
     frame_paths = {}
     for cam in ctx.all_cams:
-        if "aria" in cam:
+        if cam in ctx.ego_cam_names:
             # TODO: for hands, do we want to use slam left/right?
             streams = config.inputs.aria_streams
         else:
@@ -2124,17 +2133,10 @@ def mode_preprocess(config: Config):
         "slam-left": "1201-1",
         "slam-right": "1201-2",
     }
+
     aria_dir = os.path.join(capture_dir, "videos")
-    count_vrs = 0
-    aria_cam_id = None
-    for name in os.listdir(aria_dir):
-        if name.endswith(".vrs"):
-            aria_cam_id = name.split(".vrs")[0]  # aria01, aria02, etc.
-            aria_path = os.path.join(aria_dir, name)
-            count_vrs += 1
-    assert count_vrs == 1, f"Expecting 1 but found {count_vrs} vrs files in {aria_dir}"
-    assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
-    assert os.path.exists(aria_path), "need aria video downloaded"
+    aria_path = os.path.join(aria_dir, f"{ctx.ego_cam_names[0]}.vrs")
+    assert os.path.exists(aria_path), f"Cannot find {aria_path}"
     aria_camera_models = get_aria_camera_models(aria_path)
 
     output = []
@@ -2144,16 +2146,22 @@ def mode_preprocess(config: Config):
             row_df = synced_df.iloc[idx]
             for stream_name in config.inputs.aria_streams:
                 # TODO: support multiple aria cameras?
-                key = (aria_cam_id, stream_name)
+                key = (ctx.ego_cam_names[0], stream_name)
                 key_str = "_".join(key)
                 frame_path = frame_paths[key][idx]
 
                 stream_id = stream_name_to_id[stream_name]
-                frame_num = int(row_df[f"{aria_cam_id}_{stream_id}_frame_number"])
-                frame_t = (
-                    row_df[f"{aria_cam_id}_{stream_id}_capture_timestamp_ns"] / 1e9
+                frame_num = int(
+                    row_df[f"{ctx.ego_cam_names[0]}_{stream_id}_frame_number"]
                 )
-                aria_t = row_df[f"{aria_cam_id}_{stream_id}_capture_timestamp_ns"] / 1e3
+                frame_t = (
+                    row_df[f"{ctx.ego_cam_names[0]}_{stream_id}_capture_timestamp_ns"]
+                    / 1e9
+                )
+                aria_t = (
+                    row_df[f"{ctx.ego_cam_names[0]}_{stream_id}_capture_timestamp_ns"]
+                    / 1e3
+                )
                 frame_t = f"{frame_t:.3f}"
                 aria_pose = aria_traj_df.iloc[
                     (aria_traj_df.tracking_timestamp_us - aria_t)
@@ -2227,7 +2235,7 @@ def mode_multi_view_vis(config: Config, step="pose3d", skel_type="body"):
             )
         elif step in ["pose2d"]:
             kpts_vis_threshold = 0.3
-            camera_names.append("aria01_rgb")
+            camera_names.append(f"{ctx.ego_cam_names[0]}_rgb")
             read_dir = os.path.join(
                 ctx.dataset_dir,
                 skel_type,
@@ -2236,7 +2244,7 @@ def mode_multi_view_vis(config: Config, step="pose3d", skel_type="body"):
             )
         elif step in ["pose3d"]:
             tri_threshold = 0.3
-            camera_names.append("aria01_rgb")
+            camera_names.append(f"{ctx.ego_cam_names[0]}_rgb")
             read_dir = os.path.join(
                 ctx.dataset_dir,
                 skel_type,
@@ -2365,19 +2373,8 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
             ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
         )
         aria_dir = os.path.join(capture_dir, "videos")
-        count_vrs = 0
-        # aria_cam_id = None
-        for name in os.listdir(aria_dir):
-            if name.endswith(".vrs"):
-                # aria_cam_id = name.split(".vrs")[0]  # aria01, aria02, etc.
-                aria_path = os.path.join(aria_dir, name)
-                count_vrs += 1
-        assert (
-            count_vrs == 1
-        ), f"Expecting 1 but found {count_vrs} vrs files in {aria_dir}"
-        assert not aria_path.startswith("https:") or not aria_path.startswith("s3:")
-        assert os.path.exists(aria_path), "need aria video downloaded"
-        assert os.path.exists(aria_path)
+        aria_path = os.path.join(aria_dir, f"{ctx.ego_cam_names[0]}.vrs")
+        assert os.path.exists(aria_path), f"Cannot find {aria_path}"
         print(f"Creating data provider from {aria_path}")
         provider = data_provider.create_vrs_data_provider(aria_path)
         assert provider is not None
@@ -2385,20 +2382,13 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
         ###############################
 
     ## The naming of aria and gopro might be different; modifiy values below if needed.
-    cam_name_map = {
-        "aria": "aria01_rgb",
-        "cam01": "cam01_0",
-        "cam02": "cam02_0",
-        "cam03": "cam03_0",
-        "cam04": "cam04_0",
-        "cam05": "cam05_0",
-        "gp01": "gp01_0",
-        "gp02": "gp02_0",
-        "gp03": "gp03_0",
-        "gp04": "gp04_0",
-        "gp05": "gp05_0",
-        "gp06": "gp06_0",
-    }
+    cam_name_map = {}
+
+    for cam in ctx.ego_cam_names:
+        cam_name_map[cam] = f"{cam}_rgb"
+
+    for cam in ctx.exo_cam_names:
+        cam_name_map[cam] = f"{cam}_0"
 
     output_images_dir = os.path.join(ctx.cache_dir, skel_type, "halo", "images")
     os.makedirs(output_images_dir, exist_ok=True)
@@ -2514,7 +2504,7 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
 
         # Process aria
         if use_ego:
-            aria = cam_name_map["aria"]
+            aria = cam_name_map[ctx.ego_cam_names[0]]
             aria_data = frame[aria]
             frame_path = aria_data["frame_path"]
             frame_path = os.path.join(ctx.frame_dir, frame_path)
