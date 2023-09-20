@@ -672,20 +672,30 @@ def validate_ego4d_files(  # noqa :C901
     )
 
     vps = {
-        (vc.university_video_id, vc.component_index): os.path.join(
+        (vc.university_video_id, vc.component_index, int(1)): os.path.join(
             manifest.videos[video_id].university_video_folder_path,
             vc.video_component_relative_path,
         )
         for video_id, vcs in manifest.video_components.items()
         for vc in vcs
     }
+    for video_id, xs in manifest.aux_components.items():
+        for x in xs:
+            key = (x.university_video_id, x.component_index, x.component_type_id)
+            if x.component_type_id in (5, 7):
+                value = os.path.join(
+                    manifest.videos[video_id].university_video_folder_path,
+                    x.video_component_relative_path,
+                )
+                vps[key] = value
+
     print("Obtaining MP4 metadata")
     video_infos, video_errs = get_video_metadata(vps, num_workers)
     errors.extend(video_errs)
 
     video_infos_by_video_id = defaultdict(list)
-    for (v_uid, comp_idx), vi in video_infos.items():
-        video_infos_by_video_id[v_uid].append((comp_idx, vi))
+    for (v_uid, comp_idx, comp_type), vi in video_infos.items():
+        video_infos_by_video_id[(v_uid, comp_type)].append((comp_idx, vi))
 
     for vs in video_infos_by_video_id.values():
         vs.sort(key=lambda x: x[0])
