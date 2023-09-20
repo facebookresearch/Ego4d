@@ -234,6 +234,22 @@ def main(args):
     for x in tqdm(all_out_dirs):
         os.makedirs(x, exist_ok=True)
 
+    if args.delete:
+        print("Scanning for files to delete ...")
+        files_that_exist = []
+        for (dirpath, _, filenames) in os.walk(out_dir):
+            files_that_exist.extend([os.path.join(dirpath, f) for f in filenames])
+
+        files_that_exist = set(files_that_exist)
+        files_to_delete = files_that_exist - set([
+            os.path.join(out_dir, x[0].relative_path)
+            for x in success_path_size_pairs]
+        )
+        print(f"Deleting: {len(files_to_delete)} files ({len(files_that_exist)} total files)")
+        for f in tqdm(files_to_delete):
+            os.remove(f)
+
+
     print("Downloading ...")
     assert all(size is not None for size in ps_to_dl.values())
     paths_to_fetch = [
@@ -320,6 +336,13 @@ Example usage: --parts annotations point_cloud
         "--yes",
         default=False,
         help="don't prompt to confirm",
+        action="store_true",
+    )
+    parser.add_argument(
+        "-d",
+        "--delete",
+        default=False,
+        help="delete unused files in the directory",
         action="store_true",
     )
     parser.add_argument(
