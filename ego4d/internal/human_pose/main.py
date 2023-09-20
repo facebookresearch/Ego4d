@@ -266,12 +266,21 @@ def get_context(config: Config) -> Context:
     assert len(ego_cam_names) > 0, "No ego cameras found!"
     if len(ego_cam_names) > 1:
         print(
-            f"[Warning] Found {len(ego_cam_names)} cameras: {ego_cam_names} filtering ..."
+            f"[Warning] {len(ego_cam_names)} ego cameras: {ego_cam_names} filtering ..."
         )
         ego_cam_names = [
             cam for cam in ego_cam_names if cam in take["frame_aligned_videos"].keys()
         ]
         assert len(ego_cam_names) > 0, "No frame-aligned ego cameras found!"
+        if len(ego_cam_names) > 1:
+            print(
+                f"[Warning] Still {len(ego_cam_names)} cameras: {ego_cam_names} filtering ..."
+            )
+            ego_cam_names_filtered = [
+                cam for cam in ego_cam_names if "aria" in cam.lower()
+            ]
+            if len(ego_cam_names_filtered) == 1:
+                ego_cam_names = ego_cam_names_filtered
         assert (
             len(ego_cam_names) == 1
         ), f"Found too many ({len(ego_cam_names)}) ego cameras: {ego_cam_names}"
@@ -950,6 +959,7 @@ def mode_exo_hand_pose2d(config: Config):
     )  # Select all default cameras: ctx.exo_cam_names or manual selection: ['cam01','cam02']
     kpts_vis_threshold = 0.3  # hand pose2d kpts confidence threshold for visualization
     visualization = True  # Whether show visualization
+    vis_hand_bbox = ctx.storage_level > 50
     ##################################
 
     # Load dataset info
@@ -981,6 +991,7 @@ def mode_exo_hand_pose2d(config: Config):
         )
         if not os.path.exists(vis_pose2d_dir):
             os.makedirs(vis_pose2d_dir)
+    if vis_hand_bbox:
         # Directory to store hand bbox
         vis_bbox_dir = os.path.join(ctx.dataset_dir, f"hand/vis_bbox")
         os.makedirs(vis_bbox_dir, exist_ok=True)
@@ -1008,6 +1019,8 @@ def mode_exo_hand_pose2d(config: Config):
                 vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, exo_camera_name)
                 if not os.path.exists(vis_pose2d_cam_dir):
                     os.makedirs(vis_pose2d_cam_dir)
+
+            if vis_hand_bbox:
                 # Directory to store hand bbox results
                 vis_bbox_cam_dir = os.path.join(vis_bbox_dir, exo_camera_name)
                 if not os.path.exists(vis_bbox_cam_dir):
@@ -1049,7 +1062,7 @@ def mode_exo_hand_pose2d(config: Config):
             bboxes[time_stamp][exo_camera_name] = [right_hand_bbox, left_hand_bbox]
 
             # Visualization
-            if visualization:
+            if vis_hand_bbox:
                 vis_bbox_img = image.copy()
                 vis_bbox_img = (
                     draw_bbox_xyxy(vis_bbox_img, right_hand_bbox, color=(255, 0, 0))
@@ -1127,6 +1140,7 @@ def mode_ego_hand_pose2d(config: Config):
     kpts_vis_threshold = 0.3  # This value determines the threshold to visualize hand pose2d estimated kpts
     tri_threshold = 0.5  # This value determines which wholebody-Hand pose3d kpts to use
     visualization = True
+    vis_hand_bbox = ctx.storage_level > 50
     ##########################################################
 
     # Load dataset info
@@ -1155,14 +1169,16 @@ def mode_ego_hand_pose2d(config: Config):
 
     # Directory to store bbox and pose2d estimation
     if visualization:
-        vis_bbox_dir = os.path.join(ctx.dataset_dir, "hand/vis_bbox")
-        os.makedirs(vis_bbox_dir, exist_ok=True)
         vis_pose2d_dir = os.path.join(
             ctx.dataset_dir,
             f"hand/vis_pose2d/visThresh={kpts_vis_threshold}",
         )
         if not os.path.exists(vis_pose2d_dir):
             os.makedirs(vis_pose2d_dir)
+
+    if vis_hand_bbox:
+        vis_bbox_dir = os.path.join(ctx.dataset_dir, "hand/vis_bbox")
+        os.makedirs(vis_bbox_dir, exist_ok=True)
 
     # Load wholebody-Hand pose3d estimation result
     pose3d_dir = os.path.join(
@@ -1217,6 +1233,8 @@ def mode_ego_hand_pose2d(config: Config):
                 vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, ego_cam_name)
                 if not os.path.exists(vis_pose2d_cam_dir):
                     os.makedirs(vis_pose2d_cam_dir)
+
+            if vis_hand_bbox:
                 # Directory to store hand bbox results
                 vis_bbox_cam_dir = os.path.join(vis_bbox_dir, ego_cam_name)
                 if not os.path.exists(vis_bbox_cam_dir):
@@ -1273,7 +1291,7 @@ def mode_ego_hand_pose2d(config: Config):
             bboxes[time_stamp][ego_cam_name] = [right_hand_bbox, left_hand_bbox]
 
             # Hand bbox visualization
-            if visualization:
+            if vis_hand_bbox:
                 vis_bbox_img = image.copy()
                 vis_bbox_img = (
                     draw_bbox_xyxy(vis_bbox_img, right_hand_bbox, color=(255, 0, 0))
@@ -2340,7 +2358,7 @@ def multi_view_vis(ctx, camera_names, read_dir, write_dir, write_video):
             # remove the multiview frames after the video is generated
             print(f"[Info] Removing {write_dir} since {write_video} is generated")
             shutil.rmtree(write_dir)
-        if ctx.storage_level <= 30:
+        if ctx.storage_level <= 40:
             # remove the single-view frames after the video is generated
             print(f"[Info] Removing {read_dir} since {write_video} is generated")
             shutil.rmtree(read_dir)
@@ -2485,10 +2503,7 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
 
         # Process exocams (gopros)
         exocam_list = []
-        for cam in cam_name_map:
-            if "aria" in cam:
-                # skip ego camera
-                continue
+        for cam in ctx.exo_cam_names:
             exocam = cam_name_map[cam]
             if exocam not in frame:
                 continue
