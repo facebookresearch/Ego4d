@@ -14,8 +14,8 @@ UNIV_TO_BUCKET = {
     "kaust": "ego4d-kaust",
     "minnesota": "ego4d-minnesota",
     "nus": "ego4d-speac",
-    "sfu": "ego4d-sfu",
-    "unc": "ego4d-unc",
+    "sfu": "ego4d-consortium-sharing",
+    "unc": "ego4d-consortium-sharing",
     "unict": "ego4d-unict-milan",
     "utokyo": "ego4d-utokyo",
     "uniandes": "ego4d-university-sa",
@@ -25,3 +25,5 @@ UNIV_TO_BUCKET = {
 }
 
 BUCKET_TO_UNIV = {v: k for k, v in UNIV_TO_BUCKET.items()}
+BUCKET_TO_UNIV["ego4d-sfu"] = "sfu"
+BUCKET_TO_UNIV["ego4d-unc"] = "unc"
