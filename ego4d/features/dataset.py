@@ -1,11 +1,13 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
+import functools
 from fractions import Fraction
-from typing import Any, List
+from typing import Any, List, Dict, Optional
 
 import av
 import numpy as np
 import torch
+from tqdm.auto import tqdm
 from ego4d.features.config import FeatureExtractConfig, get_transform, Video
 from pytorchvideo.data import UniformClipSampler
 from pytorchvideo.data.encoded_video import EncodedVideo
@@ -13,6 +15,9 @@ from pytorchvideo.data.utils import thwc_to_cthw
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
+
+from ego4d.research.readers import TorchAudioStreamReader, PyAvReader
+from ego4d.research.dataset import VideoDataset
 
 
 def get_frames(container, t1, t2, buffer, max_buffer_size):
@@ -208,24 +213,21 @@ def get_all_clips(video, video_length, sampler):
         if clip.is_last_clip:
             break
 
+def labels_fn(path: str, start_idx: int, end_idx: int, path_to_video: Dict[str, Any], config):
+    video = path_to_video[path]
+    return {
+        "video_name": video.uid,
+        "is_stereo": video.is_stereo,
+        "clip_index": start_idx // config.inference_config.stride,
+        "clip_start_sec": start_idx,
+        "clip_end_sec": end_idx,
+    }
+
 
 def create_dset(
     videos: List[Video], config: FeatureExtractConfig
-) -> IndexableVideoDataset:
+) -> IndexableVideoDataset | VideoDataset:
     assert isinstance(videos[0], Video)
-
-    clip_sampler = UniformClipSampler(
-        clip_duration=Fraction(
-            config.inference_config.frame_window, config.inference_config.fps
-        )
-        if isinstance(config.inference_config.frame_window, int)
-        else config.inference_config.frame_window,
-        stride=Fraction(config.inference_config.stride, config.inference_config.fps)
-        if isinstance(config.inference_config.stride, int)
-        else config.inference_config.stride,
-        backpad_last=True,
-    )
-
     transforms_to_use = [
         CropIfStereo(),
         get_transform(config),
@@ -235,23 +237,73 @@ def create_dset(
             CropIfStereo(),
             ApplyTransformToKey(key="video", transform=ShortSideScale(size=256)),
         ]
-    return IndexableVideoDataset(
-        config, videos, clip_sampler, Compose(transforms_to_use)
+    transform = Compose(transforms_to_use)
+    path_to_video = {
+        x.path: x
+        for x in videos
+    }
+    paths_to_n_frames = {
+        x.path: x.frame_count - 1
+        for x in videos
+    }
+
+    kwargs = {
+        "mean": None,
+        "std": None,
+        "crop": None,
+        # "resize": 312,  # TODO: generalize
+        "resize": None,  # TODO: generalize
+        "frame_window_size": config.inference_config.frame_window,
+        "stride": config.inference_config.stride,
+        "gpu_idx": 0 if config.inference_config.device == "cuda" else -1,
+        # "gpu_idx": -1,
+    }
+
+    for k, v in (config.inference_config.video_reader_kwargs_override or {}):
+        kwargs[k] = v
+
+    video_class = 
+    # video_class=TorchAudioStreamReader,
+
+    return VideoDataset(
+        paths=list(path_to_video.keys()),
+        video_class=video_class,
+        video_class_kwargs=kwargs,
+        transform_fn=transform,
+        labels_fn=functools.partial(labels_fn, path_to_video=path_to_video, config=config),
+        paths_to_n_frames=paths_to_n_frames,
     )
+
+
+class MyDataLoader:
+    pass
+
+
+def worker_init(wid):
+    print("wid=", wid)
+    worker_info = torch.utils.data.get_worker_info()
+    print("worker_info=", worker_info)
+    dataset = worker_info.dataset
+    # dataset.create_underlying_cont(worker_info.id)
+    dataset.create_underlying_cont(0)
 
 
 def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:
     if config.inference_config.batch_size == 0:
         raise AssertionError("not supported")
 
-    if config.inference_config.num_workers == 0:  # for debugging
+    if config.inference_config.num_workers == -1:  # for debugging
         return dset
 
+    ctx = "spawn" if config.inference_config.num_workers > 0 else None
+    print("ctx=", ctx)
     return DataLoader(
         dset,
         batch_size=config.inference_config.batch_size,
         num_workers=config.inference_config.num_workers,
         prefetch_factor=config.inference_config.prefetch_factor,
+        worker_init_fn=worker_init,
+        multiprocessing_context=ctx
     )
 
 

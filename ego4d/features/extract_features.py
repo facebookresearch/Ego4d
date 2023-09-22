@@ -67,8 +67,8 @@ def _num_fvs(
     result = N // stride_frames + 1
 
     # handle padded frame
-    if backpad_last and N % stride_frames != 0:
-        result += 1
+    # if backpad_last and N % stride_frames != 0:
+    #     result += 1
     return result
 
 
