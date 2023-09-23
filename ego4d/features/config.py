@@ -4,7 +4,7 @@ import importlib
 import json
 import os
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -77,7 +77,7 @@ class InferenceConfig:
     device: str = "cuda"
 
     video_reader_class: str = "PyAvReader"
-    video_reader_kwargs_override: dict = {}
+    video_reader_kwargs_override: dict = field(default_factory=lambda _: {})
 
     # 0 == don't use dataloader
     # >0 use dataloader with bs=batch_size
@@ -93,7 +93,7 @@ class InferenceConfig:
     stride: int = 16
     include_audio: bool = False
     include_video: bool = True
-    norm_config: NormalizationConfig = NormalizationConfig()
+    norm_config: NormalizationConfig = field(default_factory=NormalizationConfig)
 
 
 @dataclass
@@ -197,8 +197,8 @@ def _uid_to_is_stereo(config: InputOutputConfig) -> Dict[str, bool]:
 
 
 def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
+    uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
     if config.dataset_version == "ego4d":
-        uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
         uid_to_info = _uid_to_info(config)
         uids_to_is_stereo = _uid_to_is_stereo(config)
         videos = [
@@ -220,18 +220,25 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
         return videos
     else:
         takes = json.load(open(os.path.join(config.egoexo_data_dir, "takes.json")))
+        if uids and takes:
+            uid_takes = [t for t in takes if t["take_uid"] in uids]
+            if len(uid_takes) < len(takes):
+                print(f"Filtered {len(takes)} -> {len(uid_takes)} on uid config")
+                takes = uid_takes
         videos = []
         for take in takes:
             for cam_id, streams in take["frame_aligned_videos"].items():
                 if "cam" not in cam_id.lower() and "aria" not in cam_id.lower() and "gp" not in cam_id.lower():
                     continue
                 for stream_name, stream in streams.items():
+                    if "aria" in cam_id and stream_name != "rgb":
+                        continue
                     videos.append(
                         Video(
                             uid=f"{take['take_uid']}_{cam_id}_{stream_name}",
                             path=os.path.join(config.egoexo_data_dir, "takes", take["root_dir"], stream["relative_path"]),
-                            w=2000,  # TODO
-                            h=1000,  # TODO
+                            w=None,  # 2000,  # TODO
+                            h=None,  # 1000,  # TODO
                             frame_count=take["timesync_end_idx"] - take["timesync_start_idx"] - 1,
                             has_audio=False,
                             is_stereo=False,

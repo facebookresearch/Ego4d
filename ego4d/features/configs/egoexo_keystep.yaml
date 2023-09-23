@@ -1,0 +1,63 @@
+fps: 30
+force_yes: false
+io:
+  filter_completed: true
+  video_dir_path: /mnt/nas/datasets/egoexo/takes
+  ego4d_download_dir: None
+  dataset_version: "egoexo"
+  egoexo_data_dir: /mnt/nas/datasets/egoexo/
+  uid_list: [38bb5f61-707d-4cf3-b1d1-a8260b7dfadc, 1ec1409c-a3fd-46ab-8698-99f9317e9f13, 35823fca-da54-49a2-8d4c-365046031e2c, 76a7ea80-0a81-4b4f-983e-a7e36fa26685, e6f04a5d-0da7-42c9-8b27-4e240319047e, abf00ef3-e9f2-491a-9692-114c4885298c]
+  video_limit: -1
+  out_path: /mnt/nas/datasets/egoexo-features/slowfast
+  debug_path: /mnt/nas/datasets/egoexo-features/action_features_debug
+  debug_mode: false
+  exclude_no_audio: false
+inference_config:
+  device: cuda
+  batch_size: 1
+  num_workers: 0
+  prefetch_factor: null
+  video_class: PyAvReader
+  video_reader_kwargs_override: null
+  video_class_kwargs_override: null
+  fps: 30
+  frame_window: 32
+  stride: 16
+  include_audio: false
+  include_video: true
+  norm_config: null
+  #   normalize_audio: false
+  #   resample_audio_rate: 16000
+  #   resampling_method: "sinc_interpolation"
+schedule_config:
+  run_locally: true
+  log_folder: slurm_log/%j
+  timeout_min: 3200
+  constraint: volta
+  slurm_partition: pixar
+  slurm_array_parallelism: 128
+  gpus_per_node: 1
+  cpus_per_task: 10
+  overhead: 1.1
+  time_per_forward_pass: 2.4
+  schedule_time_per_node: 10.0
+model_config:
+  model_name: "omnivore_swinL_imagenet21k"
+  pretrained_dataset: "k400"
+  model_path: null
+  # hub_path: slowfast_r101
+  slowfast_alpha: 4
+  input_type: "video"
+  side_size: 256
+  # crop_size: 256
+  crop_size: 224
+  mean:
+  - 0.45
+  - 0.45
+  - 0.45
+  std:
+  - 0.225
+  - 0.225
+  - 0.225
+# model_module_str: ego4d.features.models.slowfast
+model_module_str: ego4d.features.models.omnivore

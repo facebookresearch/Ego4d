@@ -262,7 +262,7 @@ def create_dset(
     for k, v in (config.inference_config.video_reader_kwargs_override or {}):
         kwargs[k] = v
 
-    video_class = 
+    video_class=PyAvReader
     # video_class=TorchAudioStreamReader,
 
     return VideoDataset(
@@ -303,7 +303,7 @@ def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:
         num_workers=config.inference_config.num_workers,
         prefetch_factor=config.inference_config.prefetch_factor,
         worker_init_fn=worker_init,
-        multiprocessing_context=ctx
+        # multiprocessing_context=ctx
     )
 
 
