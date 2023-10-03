@@ -70,6 +70,7 @@ class InputOutputConfig:
     debug_mode: bool = False
     debug_path: Optional[str] = None
     exclude_no_audio: bool = False
+    eligible_cam_prefixes: Optional[List[str]] = None
 
 
 @dataclass
@@ -228,9 +229,11 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
         videos = []
         for take in takes:
             for cam_id, streams in take["frame_aligned_videos"].items():
-                if "cam" not in cam_id.lower() and "aria" not in cam_id.lower() and "gp" not in cam_id.lower():
+                eligible_prefixes = config.eligible_cam_prefixes or ["cam", "aria", "gp"] 
+                if not any(x in cam_id.lower() for x in eligible_prefixes):
                     continue
                 for stream_name, stream in streams.items():
+                    # Config?
                     if "aria" in cam_id and stream_name != "rgb":
                         continue
                     videos.append(
