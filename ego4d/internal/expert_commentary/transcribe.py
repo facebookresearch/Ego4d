@@ -12,7 +12,7 @@ import submitit
 import torch
 import whisper
 from ego4d.internal.expert_commentary.data import (
-    load_raw_commentaries,
+    load_all_raw_commentaries,
     RAW_EXTRACTED_COMM_ROOT,
 )
 
@@ -120,7 +120,12 @@ if __name__ == "__main__":
     assert os.path.exists(
         args.commentary_root
     ), f"{args.commentary_root} does not exist"
-    comms = load_raw_commentaries(args.commentary_root)
+    comms = load_all_raw_commentaries(args.commentary_root)
+    comms = [
+        x 
+        for x in comms
+        if not os.path.exists(os.path.join(x, "transcriptions.json"))
+    ]
     job_inputs = batch_it(comms, args.batch_size)
 
     confirm = False
@@ -153,7 +158,7 @@ if __name__ == "__main__":
     executor = submitit.AutoExecutor(folder=log_dir)
     executor.update_parameters(
         timeout_min=args.timeout_min,
-        slurm_array_parallelism=args.machine_pool_size,
+        slurm_array_parallelism=min(args.machine_pool_size, len(job_inputs)),
         slurm_constraint="volta",
         slurm_partition="eht",
         gpus_per_node=1,
