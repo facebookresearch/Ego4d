@@ -14,6 +14,9 @@ from ego4d.internal.expert_commentary.data import (
     load_uniq_commentaries,
 )
 
+RELEASE_DIR = "/checkpoint/miguelmartin/egoexo_data/dev"
+takes = json.load(open(os.path.join(RELEASE_DIR, "takes.json")))
+
 comms = load_uniq_commentaries(raw_extracted_dir = RAW_EXTRACTED_COMM_ROOT)
 
 skipped = 0
@@ -27,22 +30,70 @@ for comm_dir in tqdm(comms):
     transc = json.load(open(transc_path))
     data_path = os.path.join(comm_dir, "data.json")
     data = json.load(open(data_path))
+    recording_times = {
+        ann["recording_path"]: {
+            "duration_approx": ann["duration_approx"],
+            "video_time": ann["video_time"],
+        }
+        for ann in data["annotations"]
+    }
+
     all_data.append(data)
     all_transc.extend([
         {
             "take": data["video_name"],
             "commentary": os.path.basename(comm_dir),
             "recording": k,
+            "video_time": recording_times[k]["video_time"],
+            "duration_approx": recording_times[k]["duration_approx"],
             "text": v.get("text"),
             "error": v["error"],
             "error_desc": v["error_desc"]
         }
         for k, v in transc.items()
+        if k in recording_times
     ])
 
 errors = [x for x in all_transc if x["error"]]
 all_transc_succ = [x for x in all_transc if not x["error"]]
 len(all_data), len(all_transc), len(all_transc_succ), len(errors), skipped
+
+takes_by_name = {
+    t["root_dir"]: t 
+    for t in takes
+}
+
+transc_by_take = defaultdict(list)
+for x in all_transc:
+    assert x["take"] in takes_by_name
+    transc_by_take[x["take"]].append(x)
+
+tns_by_cat = defaultdict(list) 
+for t in takes:
+    if t["root_dir"] not in transc_by_take:
+        continue
+    tns_by_cat[int(t["task_id"])].append(t["root_dir"])
+
+tns = tns_by_cat[4001]
+len(tns)
+tn = tns[0]
+tns
+assert tn in transc_by_take
+
+
+export_data = []
+for tn in transc_by_take.keys():
+    export_data.append({
+        "take_name": tn,
+        "commentary": transc_by_take[tn][0]["commentary"],
+        "take_uid": takes_by_name[tn]["take_uid"],
+        "task_id": int(takes_by_name[tn]["task_id"]),
+        "task_name": takes_by_name[tn]["task_name"],
+        "commentary_data": [{k: v for k, v in x.items() if k not in ("take", "commentary")} for x in transc_by_take[tn]],
+    })
+len(export_data)
+json.dump(export_data, open("/tmp/comm.json", "w"), indent=4)
+!aws s3 cp /tmp/comm.json s3://ego4d-consortium-sharing/egoexo/expert_commentary/annotations/transcriptions_231018.json
 
 nlp = spacy.load("en_core_web_md")
 stats = {
