@@ -14,16 +14,15 @@ RAW_EXTRACTED_COMM_ROOT = (
 
 
 def extract_commentaries(
-    input_dir: str = RAW_COMMENTARY_ROOT, output_dir: str = RAW_EXTRACTED_COMM_ROOT
+    input_dir: str = RAW_COMMENTARY_ROOT,
+    output_dir: str = RAW_EXTRACTED_COMM_ROOT,
 ):
-    seen_dirs = dict()
+    seen_dirs = {}
     merge_dirs = 0
     for root, _, files in tqdm(os.walk(input_dir)):
         if "merge" in root.lower():
             merge_dirs += 1
-            print("merge root")
         for file in files:
-            print(file)
             with tempfile.TemporaryDirectory() as tempdir:
                 if file == "data.json":  # already unextracted
                     extract_path = root
@@ -45,15 +44,30 @@ def extract_commentaries(
                 assert copy_to_path and copy_to_path not in seen_dirs
                 seen_dirs[copy_to_path] = True
                 if os.path.exists(copy_to_path):
-                    continue
+                    shutil.rmtree(copy_to_path)
                 shutil.copytree(extract_path, copy_to_path)
 
 
-def load_raw_commentaries(raw_extracted_dir: str) -> List[str]:
-    result = []
-    for root, _, files in os.walk(raw_extracted_dir):
-        for file in files:
-            if file == "data.json":
-                result.append(root)
-                break
+def load_all_raw_commentaries(raw_extracted_dir: str) -> List[str]:
+    result = [os.path.join(raw_extracted_dir, x) for x in os.listdir(raw_extracted_dir)]
     return sorted(result)
+
+
+def load_uniq_commentaries(raw_extracted_dir: str) -> List[str]:
+    result = {}
+    for root in tqdm(os.listdir(raw_extracted_dir)):
+        data = json.load(open(os.path.join(raw_extracted_dir, root, "data.json")))
+        key = (data["user_id"], data["video_name"])
+        if key in result:
+            ds_curr = result[key]["data"]["ds"]
+            if ds_curr < data["ds"]:
+                result[key] = {
+                    "dir": os.path.join(raw_extracted_dir, root),
+                    "data": data,
+                }
+        else:
+            result[key] = {
+                "dir": os.path.join(raw_extracted_dir, root),
+                "data": data,
+            }
+    return [v["dir"] for v in result.values()]
