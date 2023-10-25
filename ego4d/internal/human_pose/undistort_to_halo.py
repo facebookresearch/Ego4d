@@ -208,15 +208,16 @@ def process_aria_data(
     save_name = ("_").join(frame_path.split("/")[-2:])
 
     # undistort and save images
-    image_array = np.asarray(Image.open(frame_path))
+    img = Image.open(frame_path)
+    #############################################################
+    # Caution: rotating back the image before doing undistortion!
+    img = img.rotate(90)
+    #############################################################
+    image_array = np.asarray(img)
     rectified_array, principal_points, focal_lengths = undistort_aria(
         image_array, provider, "camera-rgb", 150, 512
     )
     img = Image.fromarray(rectified_array, "RGB")
-    #############################################################
-    # Caution: ideally we shouldn't need to rotate the aria frame here
-    img = img.rotate(90)
-    #############################################################
     img.save(os.path.join(output_images_dir, save_name))
 
     # getting extrinsic matrix

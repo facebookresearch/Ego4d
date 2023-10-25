@@ -260,9 +260,7 @@ def get_context(config: Config) -> Context:
     exo_traj_df = pd.read_csv(exo_traj_path)
     exo_cam_names = list(exo_traj_df["cam_uid"])
 
-    ego_cam_names = [
-        x["cam_id"] for x in take["capture"]["cameras"] if x["is_ego"].lower() == "true"
-    ]
+    ego_cam_names = [x["cam_id"] for x in take["capture"]["cameras"] if x["is_ego"]]
     assert len(ego_cam_names) > 0, "No ego cameras found!"
     if len(ego_cam_names) > 1:
         print(
