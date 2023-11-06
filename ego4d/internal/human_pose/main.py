@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 import cv2
@@ -350,7 +351,7 @@ def get_context(config: Config) -> Context:
     )
 
 
-def mode_refine_pose3d(config: Config):
+def mode_body_refine_pose3d(config: Config):
     skel_type = "body"
 
     ctx = get_context(config)
@@ -441,6 +442,9 @@ def mode_refine_pose3d(config: Config):
     for time_stamp in tqdm(range(len(time_stamps)), total=len(time_stamps)):
         info = dset[time_stamp]
         pose3d = poses3d[time_stamp]
+
+        # save pose3d as timestamp.npy
+        np.save(os.path.join(refine_pose3d_dir, f"{time_stamp:05d}.npy"), pose3d)
 
         ## visualize pose3d
         for exo_camera_name in ctx.exo_cam_names:
@@ -2155,11 +2159,14 @@ def mode_preprocess(config: Config):
     assert os.path.exists(aria_path), f"Cannot find {aria_path}"
     aria_camera_models = get_aria_camera_models(aria_path)
 
+    assert config.inputs.exo_timesync_name_to_calib_name is None
+
     output = []
     for idx in range(start_frame, end_frame, config.inputs.sample_interval):
         if frame_selection[idx - start_frame] == 1:
             row = {}
             row_df = synced_df.iloc[idx]
+            skip_frame = False
             for stream_name in config.inputs.aria_streams:
                 # TODO: support multiple aria cameras?
                 key = (ctx.ego_cam_names[0], stream_name)
@@ -2167,9 +2174,16 @@ def mode_preprocess(config: Config):
                 frame_path = frame_paths[key][idx]
 
                 stream_id = stream_name_to_id[stream_name]
-                frame_num = int(
-                    row_df[f"{ctx.ego_cam_names[0]}_{stream_id}_frame_number"]
-                )
+                try:
+                    frame_num = int(
+                        row_df[f"{ctx.ego_cam_names[0]}_{stream_id}_frame_number"]
+                    )
+                except ValueError as e:
+                    # cannot convert float NaN to integer
+                    print(f"[Warning] Skip idx {idx} due to exception:\n{str(e)}")
+                    skip_frame = True
+                    break
+
                 frame_t = (
                     row_df[f"{ctx.ego_cam_names[0]}_{stream_id}_capture_timestamp_ns"]
                     / 1e9
@@ -2199,7 +2213,9 @@ def mode_preprocess(config: Config):
                     "_raw_camera": aria_pose,
                 }
 
-            assert config.inputs.exo_timesync_name_to_calib_name is None
+            if skip_frame:
+                continue
+
             for cam_id in ctx.exo_cam_names:
                 key = (cam_id, "0")
                 key_str = "_".join(key)
@@ -2442,10 +2458,15 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
             for curr_ts in exo_hand_bboxes.keys()
         }
     elif skel_type == "body":
-        # Body pose3d results file path
+        # Body pose3d results file path;
+        # if refine_pose3d succeeded, use it, otherwise fall back to pose3d
         pose3d_file = os.path.join(
-            ctx.cache_dir, skel_type, "pose3d", "body_pose3d.pkl"
+            ctx.cache_dir, skel_type, "refine_pose3d", "body_pose3d.pkl"
         )
+        if not os.path.exists(pose3d_file):
+            pose3d_file = os.path.join(
+                ctx.cache_dir, skel_type, "pose3d", "body_pose3d.pkl"
+            )
         # Body reprojection error file path
         reproj_error_file = os.path.join(
             ctx.cache_dir, skel_type, "pose3d", "body_pose3d_reprojection_error.pkl"
@@ -2587,6 +2608,30 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
         id += 1
 
 
+def mode_upload_to_s3(config: Config):
+    today = date.today().strftime("%Y%m%d")
+    take_name = config.inputs.take_name
+
+    for skel_type in ["body", "hand"]:
+        command = " ".join(
+            [
+                "aws s3 sync",
+                f"'{config.cache_root_dir}/cache/{take_name}/{skel_type}/halo'",
+                f"'s3://ego4d-fair/egopose/production/{today}/{take_name}/{skel_type}'",
+            ]
+        )
+        os.system(command)
+
+    command = " ".join(
+        [
+            "aws s3 sync",
+            f"'{config.cache_root_dir}/cache/{take_name}/vis_pose3d'",
+            f"'s3://ego4d-fair/egopose/production/{today}/{take_name}'",
+        ]
+    )
+    os.system(command)
+
+
 """
 Newly added main function to run body & hand pose estimation inference
 """
@@ -2690,6 +2735,8 @@ def main(args):
     steps = args.steps.split("+")
     print(f"steps: {steps}")
 
+    skip_body_refine_pose3d = False
+
     for step in steps:
         print(f"[Info] Running step: {step}")
         start_time = time.time()
@@ -2701,6 +2748,19 @@ def main(args):
             mode_body_pose2d(config)
         elif step == "body_pose3d":
             mode_body_pose3d(config)
+        elif step == "body_refine_pose3d":
+            try:
+                mode_body_refine_pose3d(config)
+            except Exception as e:
+                # failure is likely due to consistently missing keypoint
+                print(f"[Warning] Skipping body_refine_pose3d due to exception:\n{e}")
+                traceback = e.__traceback__
+                while traceback:
+                    print(
+                        f"{traceback.tb_frame.f_code.co_filename}: line {traceback.tb_lineno}"
+                    )
+                    traceback = traceback.tb_next
+                skip_body_refine_pose3d = True
         elif step == "body_undistort_to_halo":
             mode_undistort_to_halo(config, skel_type="body")
         elif step == "wholebodyHand_pose3d":
@@ -2715,8 +2775,6 @@ def main(args):
             mode_egoexo_hand_pose3d(config)
         elif step == "hand_undistort_to_halo":
             mode_undistort_to_halo(config, skel_type="hand")
-        elif step == "refine_pose3d":
-            mode_refine_pose3d(config)
         elif step == "vis_body_bbox":
             mode_multi_view_vis(config, step="bbox", skel_type="body")
         elif step == "vis_body_pose2d":
@@ -2729,8 +2787,11 @@ def main(args):
             mode_multi_view_vis(config, step="pose2d", skel_type="hand")
         elif step == "vis_hand_pose3d":
             mode_multi_view_vis(config, step="pose3d", skel_type="hand")
+        elif step == "upload_to_s3":
+            mode_upload_to_s3(config)
         elif step == "vis_body_refine_pose3d":
-            mode_multi_view_vis(config, step="refine_pose3d", skel_type="body")
+            if not skip_body_refine_pose3d:
+                mode_multi_view_vis(config, step="refine_pose3d", skel_type="body")
         else:
             raise Exception(f"Unknown step: {step}")
         print(f"[Info] Time for {step}: {time.time() - start_time} s")
