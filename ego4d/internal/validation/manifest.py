@@ -1,4 +1,5 @@
 # pyre-strict
+import ast
 import csv
 import json
 import os
@@ -289,10 +290,25 @@ def default_decode(value: str, datatype: type, name: str) -> Any:
             return int(x[0])
         else:
             return int(value)
-    elif datatype in (int, float, str, bool):
+    elif datatype == bool:
+        temp = value.strip().lower()
+        if len(temp) == 0:
+            return False
+
+        if temp[0] == "f":
+            temp = "F" + temp[1:]
+        elif temp[0] == "t":
+            temp = "T" + temp[1:]
+
+        return ast.literal_eval(temp)
+    elif datatype == str:
         if len(value) == 0:
             return None
-        return datatype(value)
+        return value
+    elif datatype in (int, float):
+        if len(value) == 0:
+            return None
+        return ast.literal_eval(value)
 
 
 def load_dataclass_dict_from_csv(
@@ -377,6 +393,7 @@ Additional fields in CSV:
                         meta["type"],
                         name,
                     )
+
                 except Exception as e:
                     print(
                         f"Could not decode column: '{name}' for input file: {input_csv_file_path} Will not decode. Line: {lineno}"
