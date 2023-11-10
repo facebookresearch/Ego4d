@@ -833,7 +833,9 @@ def _check_associated_takes_metadata(
                 )
             )
         seen_take_ids.add(take.take_id)
-        if take.scenario_id not in metadata.scenarios:
+        if (
+            take.scenario_id is None or take.scenario_id not in metadata.scenarios
+        ) and not take.is_dropped:
             ret.append(
                 Error(
                     ErrorLevel.ERROR,
@@ -1479,49 +1481,74 @@ def validate_egoexo_files(
     ret = []
 
     # Pre Survey Checks - Flagging if participant + scenario does not have matching pre_survey
-    dictionary_ = {}
+    parts_by_key = {}
     for (participant_id, scenario_id, _), p in manifest.participants.items():
 
         key = (participant_id, scenario_id)
-        if key not in dictionary_:
-            dictionary_[key] = []
-        dictionary_[key].append(p)
+        if key not in parts_by_key:
+            parts_by_key[key] = []
+        parts_by_key[key].append(p)
 
     for takes in manifest.takes.values():
         for take in takes:
-            key = (take.recording_participant_id, take.scenario_id)
+            if take.is_dropped:
+                continue
 
-            if key not in dictionary_:
-                if take.scenario_id is not None:
-                    higher_level_scenario_id = ((take.scenario_id) // 1000) * 1000
-                    new_key = (take.recording_participant_id, higher_level_scenario_id)
-                if new_key in dictionary_:  # output flag higher level task provided
+            key = (take.recording_participant_id, take.scenario_id)
+            if key not in parts_by_key and take.scenario_id is not None:
+                higher_level_scenario_id = ((take.scenario_id) // 1000) * 1000
+                new_key = (take.recording_participant_id, higher_level_scenario_id)
+
+                if new_key in parts_by_key:  # output flag higher level task provided
                     ret.append(
                         Error(
                             ErrorLevel.ERROR,
-                            participant_id,
-                            "higher_level_participant_scenario_no_pre_survey",
-                            f"Higher level scenario_id provided {higher_level_scenario_id}. Instead of {p.scenario_id} ",
+                            take.take_id,
+                            "take_no_pre_survey_higher_level_id_provided",
+                            f"take {take.take_id} (participant={take.recording_participant_id}, scenario {take.scenario_id}) does not have a corresponding pre_survey. Can match with higher level id = {higher_level_scenario_id} from take's scenario ID = {take.scenario_id}",
                         )
                     )
+                    key = new_key
                 else:
                     ret.append(
                         Error(
                             ErrorLevel.ERROR,
-                            participant_id,
-                            "participant_scenario_no_pre_survey",
-                            f"participant {p.participant_id} + scenario {p.scenario_id} does not have a corresponding pre_survey.",
+                            take.take_id,
+                            "take_no_pre_survey",
+                            f"take {take.take_id} (participant={take.recording_participant_id}, scenario {take.scenario_id}) does not have a corresponding pre_survey.",
+                        )
+                    )
+            else:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        take.take_id,
+                        "take_no_pre_survey",
+                        f"take {take.take_id} (participant={take.recording_participant_id}, scenario {take.scenario_id}) does not have a corresponding pre_survey.",
+                    )
+                )
+
+            if key in parts_by_key and len(parts_by_key[key]) > 1:
+                if not all(
+                    x.pre_survey_data == parts_by_key[key][0].pre_survey_data
+                    for x in parts_by_key[key]
+                ):
+                    ret.append(
+                        Error(
+                            ErrorLevel.ERROR,
+                            take.take_id,
+                            "take_multiple_pre_survey",
+                            f"take {take.take_id} (participant={take.recording_participant_id}, scenario {take.scenario_id}) has multiple matching pre-survey data (len={len(parts_by_key[key])}) where at least one pre-survey data match differs.",
                         )
                     )
 
     # Post Survey Checks - Flagging if participant + take does not have matchin post_survey
-
     def get_post_survey_paths(
         captures: List[CaptureMetadataEgoExo],
-    ) -> List[ReferencedFile]:
+    ) -> Dict[str, ReferencedFile]:
         dict_post_surveys = {}
         for capture in captures:
-            if not pathmgr.exists(capture.post_surveys_relative_path):
+            if not capture.post_surveys_relative_path.startswith("s3://"):
                 survey_path = os.path.join(
                     capture.university_video_folder_path,
                     capture.post_surveys_relative_path,
@@ -1531,27 +1558,14 @@ def validate_egoexo_files(
             dict_post_surveys[capture.university_capture_id] = survey_path
         return dict_post_surveys
 
-    def check_file_post_survey(file_path_dict):
-        for key, value in file_path_dict.items():
-            if not os.path.exists(value):
-                ret.append(
-                    Error(
-                        ErrorLevel.ERROR,
-                        value,
-                        "path_does_not_exist",
-                        f"file path {value} does not exist",
-                    )
-                )
-        return ret
+    post_survey_files = get_post_survey_paths(list(manifest.captures.values()))
 
-    post_survey_files = get_post_survey_paths(manifest.captures.values())
-    ##ret.extend(check_file_post_survey(post_survey_files))
     def open_csv(capture_id_file_path):
         capture_id, file_path = capture_id_file_path
         df = None
         if pathmgr.exists(file_path):
             df = pd.read_csv(pathmgr.open(file_path), dtype=object)
-        return capture_id_file_path[0], df
+        return capture_id, df
 
     post_by_capture_id = {}
     with ThreadPoolExecutor(num_workers) as pool:
@@ -1567,51 +1581,78 @@ def validate_egoexo_files(
                         ErrorLevel.ERROR,
                         capture_id,
                         "path_does_not_exist",
-                        f"file path {capture_id} does not exist",
+                        f"capture ({capture_id}) has  does not exist",
                     )
                 )
                 continue
-            post_by_capture_id[capture_id] = df
 
-    # Matching logic below is based of Miguel's notebook: N4348396
-    all_column_ks = set()
+            post_survey_data = df
+            tid_key = [
+                k
+                for k in post_survey_data.columns  # noqa
+                if ("Take ID" in k) or ("Take_ID" in k) or ("take_id" in k)
+            ]
+            post_data_path = post_survey_files[capture_id]
+            if len(tid_key) != 1:
+                # post_survey exists but malformed csv, no columns
+                if len(post_survey_data.columns) == 0:  # noqa
+                    ret.append(
+                        Error(
+                            ErrorLevel.ERROR,
+                            capture_id,
+                            "post_survey_csv_structure_no_columns",
+                            f"Postsurvey data for capture {capture_id} does not provide names for each column within the CSV, file: {post_data_path}",
+                        )
+                    )
+                else:
+                    ret.append(
+                        Error(
+                            ErrorLevel.ERROR,
+                            capture_id,
+                            "post_survey_csv_structure_no_take_id_column",
+                            f"Postsurvey data for capture {capture_id} does not provide a take_id column as 'take_id' in the post_survey data, file: {post_data_path}",
+                        )
+                    )
+
+                post_survey_data = None
+            else:
+                if (
+                    tid_key[0] != "take_id"
+                ):  # if tid_key exists, check if it is spelled correctly
+                    ret.append(
+                        Error(
+                            ErrorLevel.WARN,
+                            capture_id,
+                            "post_survey_csv_structure_take_id_column_mispelled",
+                            f"'take_id' column is noted as '{tid_key[0]}' NOT 'take_id', file: {post_data_path}, capture_id={capture_id}",
+                        )
+                    )
+            post_by_capture_id[capture_id] = df
 
     for takes in manifest.takes.values():
         for take in takes:
-            post_survey_data = post_by_capture_id[take.university_capture_id]
+            if take.is_dropped:
+                continue
 
-            if post_survey_data is not None:
-                all_column_ks.update(set(post_survey_data.columns))
+            post_survey_data = post_by_capture_id.get(take.university_capture_id)
+
+            if post_survey_data is None:
+                ret.append(
+                    Error(
+                        ErrorLevel.ERROR,
+                        take.take_id,
+                        "take_no_post_survey",
+                        f"take {take.take_id} does not have post survey data (capture={take.university_capture_id})",
+                    )
+                )
+            else:
                 tid_key = [
                     k
                     for k in post_survey_data.columns
                     if ("Take ID" in k) or ("Take_ID" in k) or ("take_id" in k)
                 ]
-                if len(tid_key) != 1:
-                    if (
-                        len(post_survey_data.columns) == 0
-                    ):  # post_survey exists but malformed csv, no columns
-                        ret.append(
-                            Error(
-                                ErrorLevel.ERROR,
-                                participant_id,
-                                "malformed_csv_post_survey",
-                                f"participant {p.participant_id} + take {take.take_id} has a malformed corresponding post_survey with no columns.",
-                            )
-                        )
-                    post_survey_data = None
-                else:
-                    if (
-                        tid_key[0] != "take_id"
-                    ):  # if tid_key exists, check if it is spelled correctly, if not output error message. Should be a warn?
-                        ret.append(
-                            Error(
-                                ErrorLevel.ERROR,
-                                participant_id,
-                                "take_id_mispelled_in_post_survey",
-                                f"participant {p.participant_id} + take {take.take_id} does not have a corresponding post_survey.",
-                            )
-                        )
+
+                if len(tid_key) > 0:
                     tid_key = tid_key[0]
                     post_survey_data = post_survey_data[
                         post_survey_data[tid_key] == take.take_id
@@ -1619,15 +1660,18 @@ def validate_egoexo_files(
                     post_survey_data = (
                         post_survey_data.iloc[0] if len(post_survey_data) > 0 else None
                     )
-            if post_survey_data is None:
-                ret.append(
-                    Error(
-                        ErrorLevel.ERROR,
-                        participant_id,
-                        "participant_scenario_no_post_survey",
-                        f"participant {p.participant_id} + take {take.take_id} does not have a corresponding post_survey.",
+                else:
+                    post_survey_data = None
+
+                if post_survey_data is None:
+                    ret.append(
+                        Error(
+                            ErrorLevel.ERROR,
+                            take.take_id,
+                            "take_no_post_survey_match",
+                            f"take {take.take_id} does not have post survey data (capture={take.university_capture_id})",
+                        )
                     )
-                )
 
     for capture_uid, capture in manifest.captures.items():
         ret.extend(_check_capture_metadata(manifest, metadata, capture, capture_uid))
