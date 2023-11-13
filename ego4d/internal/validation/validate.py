@@ -1518,7 +1518,7 @@ def validate_egoexo_files(
                             f"take {take.take_id} (participant={take.recording_participant_id}, scenario {take.scenario_id}) does not have a corresponding pre_survey.",
                         )
                     )
-            else:
+            elif key not in parts_by_key:
                 ret.append(
                     Error(
                         ErrorLevel.ERROR,
