@@ -55,26 +55,29 @@ class InputOutputConfig:
     - `_uid_to_frame_count`
     """
 
+    # output
+    out_path: str
+
     # input
+    # TODO: add file list
     filter_completed: bool = True
     video_dir_path: str = "/datasets01/ego4d_track2/v1/full_scale/"
     ego4d_download_dir: str = "/checkpoint/miguelmartin/ego4d/"
+    dataset_version: str = "ego4d"
+    egoexo_data_dir: str = "/checkpoint/miguelmartin/egoexo_data/dev/"
     uid_list: Optional[List[str]] = None
     video_limit: int = -1
     debug_mode: bool = False
-    debug_path: str = "/checkpoint/miguelmartin/ego4d_track2/v1/debug_frames"
-
-    # output
-    out_path: str = (
-        "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/v1_1/action_features"
-    )
-
+    debug_path: Optional[str] = None
     exclude_no_audio: bool = False
 
 
 @dataclass
 class InferenceConfig:
     device: str = "cuda"
+
+    video_reader_class: str = "PyAvReader"
+    video_reader_kwargs_override: dict = {}
 
     # 0 == don't use dataloader
     # >0 use dataloader with bs=batch_size
@@ -194,26 +197,47 @@ def _uid_to_is_stereo(config: InputOutputConfig) -> Dict[str, bool]:
 
 
 def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
-    uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
-    uid_to_info = _uid_to_info(config)
-    uids_to_is_stereo = _uid_to_is_stereo(config)
-    videos = [
-        Video(
-            uid=uid,
-            path=_path_for(config, uid),
-            frame_count=uid_to_info[uid]["num_frames"],
-            w=uid_to_info[uid]["w"],
-            h=uid_to_info[uid]["h"],
-            has_audio=uid_to_info[uid]["has_audio"],
-            is_stereo=uids_to_is_stereo[uid],
-        )
-        for uid in uids
-        if uid in uid_to_info
-    ]
-    if config.exclude_no_audio:
-        return [v for v in videos if v.has_audio]
+    if config.dataset_version == "ego4d":
+        uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
+        uid_to_info = _uid_to_info(config)
+        uids_to_is_stereo = _uid_to_is_stereo(config)
+        videos = [
+            Video(
+                uid=uid,
+                path=_path_for(config, uid),
+                frame_count=uid_to_info[uid]["num_frames"],
+                w=uid_to_info[uid]["w"],
+                h=uid_to_info[uid]["h"],
+                has_audio=uid_to_info[uid]["has_audio"],
+                is_stereo=uids_to_is_stereo[uid],
+            )
+            for uid in uids
+            if uid in uid_to_info
+        ]
+        if config.exclude_no_audio:
+            return [v for v in videos if v.has_audio]
 
-    return videos
+        return videos
+    else:
+        takes = json.load(open(os.path.join(config.egoexo_data_dir, "takes.json")))
+        videos = []
+        for take in takes:
+            for cam_id, streams in take["frame_aligned_videos"].items():
+                if "cam" not in cam_id.lower() and "aria" not in cam_id.lower() and "gp" not in cam_id.lower():
+                    continue
+                for stream_name, stream in streams.items():
+                    videos.append(
+                        Video(
+                            uid=f"{take['take_uid']}_{cam_id}_{stream_name}",
+                            path=os.path.join(config.egoexo_data_dir, "takes", take["root_dir"], stream["relative_path"]),
+                            w=2000,  # TODO
+                            h=1000,  # TODO
+                            frame_count=take["timesync_end_idx"] - take["timesync_start_idx"] - 1,
+                            has_audio=False,
+                            is_stereo=False,
+                        )
+                    )
+        return videos
 
 
 def get_videos(config: FeatureExtractConfig) -> Tuple[List[Video], List[Video]]:
