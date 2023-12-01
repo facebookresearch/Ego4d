@@ -7,7 +7,7 @@ import pandas as pd
 
 import spacy
 
-from ego4d.internal.expert_commentary.data import (
+from ego4d.egoexo.expert_commentary.data import (
     load_uniq_commentaries,
     RAW_EXTRACTED_COMM_ROOT,
 )

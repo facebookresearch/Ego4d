@@ -1,7 +1,3 @@
-"""
-Example usage:
-
-"""
 import argparse
 import os
 import sys
@@ -278,13 +274,14 @@ def main(args):
     print(flush=True)
 
 
-if __name__ == "__main__":
+
+def create_arg_parse(script_name: str, base_dir: str, release_name: str):
     parser = argparse.ArgumentParser(
-        usage="""
+        usage=f"""
     EgoExo downloader CLI
 
     Simple usage:
-        python ego4d/internal/download/cli.py -o <out_dir>
+        python {script_name} -o <out_dir>
 
     Advanced usage examples:
         - Download point clouds and annotations 
@@ -324,12 +321,15 @@ Example usage: --parts annotations point_cloud
     )
     parser.add_argument(
         "--num_workers",
-        type=str,
+        type=int,
         default=15,
         help="number of workers to perform download ops",
     )
     parser.add_argument(
-        "--release_name", type=str, default="dev", help="name of the release"
+        "--release_name",
+        type=str,
+        default=release_name,
+        help="name of the release"
     )
     parser.add_argument(
         "-y",
@@ -360,8 +360,17 @@ Example usage: --parts annotations point_cloud
     parser.add_argument(
         "--base_dir",
         type=str,
-        default="s3://ego4d-consortium-sharing/egoexo/releases/",
+        default=base_dir,
         help="base directory for download (ADVANCED usage, do not change unless you know what you're doing)",
+    )
+    return parser
+
+
+if __name__ == "__main__":
+    parser = create_arg_parse(
+        script_name="ego4d/egoexo/download/cli.py",
+        release_name="dev",
+        base_dir="s3://ego4d-consortium-sharing/egoexo/releases/",
     )
     args = parser.parse_args()
     main(args)
