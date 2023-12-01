@@ -2,22 +2,22 @@
 
 import functools
 from fractions import Fraction
-from typing import Any, List, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import av
 import numpy as np
 import torch
-from tqdm.auto import tqdm
 from ego4d.features.config import FeatureExtractConfig, get_transform, Video
+from ego4d.research.dataset import VideoDataset
+
+from ego4d.research.readers import PyAvReader, TorchAudioStreamReader
 from pytorchvideo.data import UniformClipSampler
 from pytorchvideo.data.encoded_video import EncodedVideo
 from pytorchvideo.data.utils import thwc_to_cthw
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
-
-from ego4d.research.readers import TorchAudioStreamReader, PyAvReader
-from ego4d.research.dataset import VideoDataset
+from tqdm.auto import tqdm
 
 
 def get_frames(container, t1, t2, buffer, max_buffer_size):
@@ -213,7 +213,10 @@ def get_all_clips(video, video_length, sampler):
         if clip.is_last_clip:
             break
 
-def labels_fn(path: str, start_idx: int, end_idx: int, path_to_video: Dict[str, Any], config):
+
+def labels_fn(
+    path: str, start_idx: int, end_idx: int, path_to_video: Dict[str, Any], config
+):
     video = path_to_video[path]
     return {
         "video_name": video.uid,
@@ -240,7 +243,9 @@ def create_dset(
     transform = Compose(transforms_to_use)
 
     clip_sampler = UniformClipSampler(
-        clip_duration=Fraction(config.inference_config.frame_window, config.inference_config.fps)
+        clip_duration=Fraction(
+            config.inference_config.frame_window, config.inference_config.fps
+        )
         if isinstance(config.inference_config.frame_window, int)
         else config.inference_config.frame_window,
         stride=Fraction(config.inference_config.stride, config.inference_config.fps)
@@ -250,54 +255,6 @@ def create_dset(
     )
 
     return IndexableVideoDataset(config, videos, clip_sampler, transform)
-    # path_to_video = {
-    #     x.path: x
-    #     for x in videos
-    # }
-    # paths_to_n_frames = {
-    #     x.path: x.frame_count - 1
-    #     for x in videos
-    # }
-
-    # kwargs = {
-    #     "mean": None,
-    #     "std": None,
-    #     "crop": None,
-    #     # "resize": 312,  # TODO: generalize
-    #     "resize": None,  # TODO: generalize
-    #     "frame_window_size": config.inference_config.frame_window,
-    #     "stride": config.inference_config.stride,
-    #     "gpu_idx": 0 if config.inference_config.device == "cuda" else -1,
-    #     # "gpu_idx": -1,
-    # }
-
-    # for k, v in (config.inference_config.video_reader_kwargs_override or {}):
-    #     kwargs[k] = v
-
-    # video_class=PyAvReader
-    # # video_class=TorchAudioStreamReader,
-
-    # return VideoDataset(
-    #     paths=list(path_to_video.keys()),
-    #     video_class=video_class,
-    #     video_class_kwargs=kwargs,
-    #     transform_fn=transform,
-    #     labels_fn=functools.partial(labels_fn, path_to_video=path_to_video, config=config),
-    #     paths_to_n_frames=paths_to_n_frames,
-    # )
-
-
-class MyDataLoader:
-    pass
-
-
-def worker_init(wid):
-    print("wid=", wid)
-    worker_info = torch.utils.data.get_worker_info()
-    print("worker_info=", worker_info)
-    dataset = worker_info.dataset
-    # dataset.create_underlying_cont(worker_info.id)
-    # dataset.create_underlying_cont(0)
 
 
 def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:
@@ -307,15 +264,11 @@ def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:
     if config.inference_config.num_workers == -1:  # for debugging
         return dset
 
-    ctx = "spawn" if config.inference_config.num_workers > 0 else None
-    print("ctx=", ctx)
     return DataLoader(
         dset,
         batch_size=config.inference_config.batch_size,
         num_workers=config.inference_config.num_workers,
         prefetch_factor=config.inference_config.prefetch_factor,
-        worker_init_fn=worker_init,
-        # multiprocessing_context=ctx
     )
 
 

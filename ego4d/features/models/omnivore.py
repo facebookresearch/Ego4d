@@ -49,6 +49,7 @@ def load_model(
     model = model.to(inference_config.device)
     return model
 
+
 def norm_pixels(x):
     return x / 255.0
 

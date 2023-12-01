@@ -14,31 +14,17 @@ from ego4d.features.slurm import create_executor
 def profile_extraction(config: FeatureExtractConfig):
     videos, all_videos = get_videos(config)
     if videos:
-        print(f"Video 0/{len(videos)} ({videos[0].frame_count} | {videos[0].path}): {videos[0]}")
-    # new_videos = [
-    #     v
-    #     for v in videos
-    #     if v.frame_count > 100 and v.frame_count <= 100000
-    #     and "-" not in v.path.lower()
-    # ]
-    # if len(new_videos) < len(videos):
-    #     print(f"Filtered {len(videos)} to {len(new_videos)} videos")
-    #     videos = new_videos
+        print(
+            f"Video 0/{len(videos)} ({videos[0].frame_count} | {videos[0].path}): {videos[0]}"
+        )
     assert len(videos) > 0, "No videos to process!"
-    # videos = videos[0:1]
-    # videos = videos[3:4]
-    # videos = videos[10:11])
+    videos = videos[0:5]
 
     print(f"Got {len(videos)} videos")
 
-    batch_sizes = [1] # , 1, 1, 1, 1]
-    # num_workers = [9, 10, 10, 10, 10]
-    # num_workers = [9]
-    # num_workers = [1]
-    # num_workers = [0]
+    batch_sizes = [1]
     num_workers = [8]
-    # prefetch_factor = [None, 2, 3, 4, 5]
-    prefetch_factor = [2]  #, 3, 4, 5]
+    prefetch_factor = [2]  # , 3, 4, 5]
     model = load_model(config)
 
     num_examples = -1
@@ -84,7 +70,7 @@ def profile_extraction(config: FeatureExtractConfig):
             )
         else:
             print(
-                f"{pf},{batch_size},{nw},{mean_sum},{forward_pass.mean()/batch_size},{to_load.mean()/batch_size},{transfer_time.mean()/batch_size}"  # noqa
+                f"{pf},{batch_size},{nw},{total_time},{mean_sum},{forward_pass.mean()/batch_size},{to_load.mean()/batch_size},{transfer_time.mean()/batch_size}"  # noqa
             )
 
 

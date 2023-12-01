@@ -131,6 +131,7 @@ class FeatureExtractConfig:
     model_config: BaseModelConfig
     model_module_str: str = "ego4d.features.models.slowfast"
     force_yes: bool = False
+    check_fv_count: bool = True
 
 
 def get_model_module(config: FeatureExtractConfig):
@@ -138,6 +139,8 @@ def get_model_module(config: FeatureExtractConfig):
 
 
 def _uids_for_dir(path: str) -> List[str]:
+    if not os.path.exists(path):
+        return []
     ret = [
         p
         for p in os.listdir(path)
@@ -198,8 +201,8 @@ def _uid_to_is_stereo(config: InputOutputConfig) -> Dict[str, bool]:
 
 
 def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
-    uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
     if config.dataset_version == "ego4d":
+        uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
         uid_to_info = _uid_to_info(config)
         uids_to_is_stereo = _uid_to_is_stereo(config)
         videos = [
@@ -221,28 +224,57 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
         return videos
     else:
         takes = json.load(open(os.path.join(config.egoexo_data_dir, "takes.json")))
+        all_uids = [t["take_uid"] for t in takes]
+        uids = config.uid_list
+        if uids is None:
+            uids = all_uids
         if uids and takes:
             uid_takes = [t for t in takes if t["take_uid"] in uids]
             if len(uid_takes) < len(takes):
                 print(f"Filtered {len(takes)} -> {len(uid_takes)} on uid config")
                 takes = uid_takes
+        completed_uids = set(_uids_for_dir(config.out_path))
         videos = []
         for take in takes:
             for cam_id, streams in take["frame_aligned_videos"].items():
-                eligible_prefixes = config.eligible_cam_prefixes or ["cam", "aria", "gp"] 
+                eligible_prefixes = config.eligible_cam_prefixes or [
+                    "cam",
+                    "aria",
+                    "gp",
+                ]
                 if not any(x in cam_id.lower() for x in eligible_prefixes):
                     continue
                 for stream_name, stream in streams.items():
                     # Config?
                     if "aria" in cam_id and stream_name != "rgb":
                         continue
+                    is_aria = "aria" in stream["cam_id"]
+                    # NOTE: known constants for not downsampled videos
+                    w = 1408 if is_aria else 3840
+                    h = 1408 if is_aria else 2160
+                    uid = f"{take['take_uid']}_{cam_id}_{stream_name}"
+                    if (
+                        not unfiltered
+                        and config.filter_completed
+                        and uid in completed_uids
+                    ):
+                        continue
+
                     videos.append(
                         Video(
-                            uid=f"{take['take_uid']}_{cam_id}_{stream_name}",
-                            path=os.path.join(config.egoexo_data_dir, "takes", take["root_dir"], stream["relative_path"]),
-                            w=None,  # 2000,  # TODO
-                            h=None,  # 1000,  # TODO
-                            frame_count=take["timesync_end_idx"] - take["timesync_start_idx"] - 1,
+                            uid=uid,
+                            path=os.path.join(
+                                config.egoexo_data_dir,
+                                "takes",
+                                take["root_dir"],
+                                stream["relative_path"],
+                            ),
+                            # NOTE: w/h used to estimate time to complete
+                            w=w,
+                            h=h,
+                            frame_count=take["timesync_end_idx"]
+                            - take["timesync_start_idx"]
+                            - 1,
                             has_audio=False,
                             is_stereo=False,
                         )

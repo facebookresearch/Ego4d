@@ -1,14 +1,13 @@
 import bisect
-import os
 import math
-from typing import Any, Callable, List, Optional, Tuple, Dict
-
-from tqdm.auto import tqdm
+import os
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import h5py
 import torch
-from ego4d.research.readers import PyAvReader, TorchAudioStreamReader, StridedReader
+from ego4d.research.readers import PyAvReader, StridedReader, TorchAudioStreamReader
 
+from tqdm.auto import tqdm
 
 
 class LabelledFeatureDset(torch.utils.data.Dataset):
@@ -44,6 +43,7 @@ class LabelledFeatureDset(torch.utils.data.Dataset):
         feat = self.aggr_function(self.features[uid], label)
         return feat, label
 
+
 def save_ego4d_features_to_hdf5(video_uids: List[str], feature_dir: str, out_path: str):
     """
     Use this function to preprocess Ego4D features into a HDF5 file with h5py
@@ -66,8 +66,8 @@ class VideoDataset(torch.utils.data.Dataset):
         max_num_frames_per_video: Optional[int] = None,
         paths_to_n_frames: Optional[Dict[str, int]] = None,
         with_pbar: bool = False,
-        transform_fn = None,
-        labels_fn = None,
+        transform_fn=None,
+        labels_fn=None,
     ):
         paths = sorted(paths)
         self.video_class = video_class
@@ -90,27 +90,34 @@ class VideoDataset(torch.utils.data.Dataset):
             if with_pbar:
                 cont_iter = tqdm(cont_iter)
 
-            self.fs_cumsum = [ 
+            self.fs_cumsum = [
                 min(len(ct), max_num_frames_per_video)
-                if max_num_frames_per_video else len(ct)
+                if max_num_frames_per_video
+                else len(ct)
                 for _, ct in cont_iter
             ]
-            self.fs_cumsum = [0] + torch.cumsum(torch.tensor(self.fs_cumsum), dim=0).tolist()
+            self.fs_cumsum = [0] + torch.cumsum(
+                torch.tensor(self.fs_cumsum), dim=0
+            ).tolist()
         else:
-            self.fs_cumsum = [ 
+            self.fs_cumsum = [
                 int(
                     math.ceil(
-                        (paths_to_n_frames[path] - video_class_kwargs["frame_window_size"]) /
-                        video_class_kwargs.get("stride", video_class_kwargs["frame_window_size"])
+                        (
+                            paths_to_n_frames[path]
+                            - video_class_kwargs["frame_window_size"]
+                        )
+                        / video_class_kwargs.get(
+                            "stride", video_class_kwargs["frame_window_size"]
+                        )
                     )
                 )
                 for path in paths
             ]
-            self.fs_cumsum = [0] + torch.cumsum(torch.tensor(self.fs_cumsum), dim=0).tolist()
-            self.conts = {
-                idx: (p, None)
-                for idx, p in enumerate(paths)
-            }
+            self.fs_cumsum = [0] + torch.cumsum(
+                torch.tensor(self.fs_cumsum), dim=0
+            ).tolist()
+            self.conts = {idx: (p, None) for idx, p in enumerate(paths)}
 
     def create_underlying_cont(self, gpu_id):
         # TODO clear_cuda_context_cache()
@@ -118,7 +125,6 @@ class VideoDataset(torch.utils.data.Dataset):
         for (_, c) in self.conts.values():
             if c is not None:
                 c.create_underlying_cont(self.gpu_id)
-
 
     def __getitem__(self, i):
         cont_idx = bisect.bisect_left(self.fs_cumsum, i + 1) - 1

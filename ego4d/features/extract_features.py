@@ -155,6 +155,7 @@ def _extract_features(
         if i % 50 == 0:
             gc.collect()
 
+        assert batch_size is not None
         if max_examples > 0 and (i + 1) * batch_size >= max_examples:
             if not silent:
                 print("Breaking...")
@@ -259,7 +260,7 @@ def extract_features(
 
         clip = uid_to_video_clips[k]
         expected_fvs = num_fvs(clip, config.inference_config)
-        if expected_fvs != fv_amount:
+        if config.check_fv_count and expected_fvs != fv_amount:
             if assert_feature_size:
                 raise AssertionError(
                     f"{k} should have {expected_fvs} fvs, but has {fv_amount}"
@@ -323,7 +324,9 @@ def perform_feature_extraction(
             time_stats.transfer_device.extend(
                 feature_extract_result.time_stats.transfer_device
             )
-            time_stats.forward_pass.extend(feature_extract_result.time_stats.forward_pass)
+            time_stats.forward_pass.extend(
+                feature_extract_result.time_stats.forward_pass
+            )
         except av.error.EOFError as ex:
             logging.exception(f"Failed to extract features for {vid}: {ex}")
 
@@ -332,9 +335,12 @@ def perform_feature_extraction(
     time_stats.overall = o2 - o1
     return time_stats
 
+
 @hydra.main(config_path="configs", config_name=None)
 def run_extraction(config: FeatureExtractConfig):
-    assert config.schedule_config.run_locally, "Local only permitted - use slurm otherwise!"
+    assert (
+        config.schedule_config.run_locally
+    ), "Local only permitted - use slurm otherwise!"
 
     print("###################### Feature Extraction Config ####################")
     print(OmegaConf.to_yaml(config))

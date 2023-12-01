@@ -10,6 +10,7 @@ io:
   debug_path: /checkpoint/miguelmartin/ego4d_track2_features/full_scale/audio_mel_spectrogram_debug
   debug_mode: false
   exclude_no_audio: true
+  dataset_version: ego4d
 inference_config:
   device: cpu
   batch_size: 1
