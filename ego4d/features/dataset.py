@@ -238,41 +238,53 @@ def create_dset(
             ApplyTransformToKey(key="video", transform=ShortSideScale(size=256)),
         ]
     transform = Compose(transforms_to_use)
-    path_to_video = {
-        x.path: x
-        for x in videos
-    }
-    paths_to_n_frames = {
-        x.path: x.frame_count - 1
-        for x in videos
-    }
 
-    kwargs = {
-        "mean": None,
-        "std": None,
-        "crop": None,
-        # "resize": 312,  # TODO: generalize
-        "resize": None,  # TODO: generalize
-        "frame_window_size": config.inference_config.frame_window,
-        "stride": config.inference_config.stride,
-        "gpu_idx": 0 if config.inference_config.device == "cuda" else -1,
-        # "gpu_idx": -1,
-    }
-
-    for k, v in (config.inference_config.video_reader_kwargs_override or {}):
-        kwargs[k] = v
-
-    video_class=PyAvReader
-    # video_class=TorchAudioStreamReader,
-
-    return VideoDataset(
-        paths=list(path_to_video.keys()),
-        video_class=video_class,
-        video_class_kwargs=kwargs,
-        transform_fn=transform,
-        labels_fn=functools.partial(labels_fn, path_to_video=path_to_video, config=config),
-        paths_to_n_frames=paths_to_n_frames,
+    clip_sampler = UniformClipSampler(
+        clip_duration=Fraction(config.inference_config.frame_window, config.inference_config.fps)
+        if isinstance(config.inference_config.frame_window, int)
+        else config.inference_config.frame_window,
+        stride=Fraction(config.inference_config.stride, config.inference_config.fps)
+        if isinstance(config.inference_config.stride, int)
+        else config.inference_config.stride,
+        backpad_last=True,
     )
+
+    return IndexableVideoDataset(config, videos, clip_sampler, transform)
+    # path_to_video = {
+    #     x.path: x
+    #     for x in videos
+    # }
+    # paths_to_n_frames = {
+    #     x.path: x.frame_count - 1
+    #     for x in videos
+    # }
+
+    # kwargs = {
+    #     "mean": None,
+    #     "std": None,
+    #     "crop": None,
+    #     # "resize": 312,  # TODO: generalize
+    #     "resize": None,  # TODO: generalize
+    #     "frame_window_size": config.inference_config.frame_window,
+    #     "stride": config.inference_config.stride,
+    #     "gpu_idx": 0 if config.inference_config.device == "cuda" else -1,
+    #     # "gpu_idx": -1,
+    # }
+
+    # for k, v in (config.inference_config.video_reader_kwargs_override or {}):
+    #     kwargs[k] = v
+
+    # video_class=PyAvReader
+    # # video_class=TorchAudioStreamReader,
+
+    # return VideoDataset(
+    #     paths=list(path_to_video.keys()),
+    #     video_class=video_class,
+    #     video_class_kwargs=kwargs,
+    #     transform_fn=transform,
+    #     labels_fn=functools.partial(labels_fn, path_to_video=path_to_video, config=config),
+    #     paths_to_n_frames=paths_to_n_frames,
+    # )
 
 
 class MyDataLoader:
@@ -285,7 +297,7 @@ def worker_init(wid):
     print("worker_info=", worker_info)
     dataset = worker_info.dataset
     # dataset.create_underlying_cont(worker_info.id)
-    dataset.create_underlying_cont(0)
+    # dataset.create_underlying_cont(0)
 
 
 def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:
