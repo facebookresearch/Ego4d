@@ -1,18 +1,23 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
+import functools
 from fractions import Fraction
-from typing import Any, List
+from typing import Any, Dict, List, Optional
 
 import av
 import numpy as np
 import torch
 from ego4d.features.config import FeatureExtractConfig, get_transform, Video
+from ego4d.research.dataset import VideoDataset
+
+from ego4d.research.readers import PyAvReader, TorchAudioStreamReader
 from pytorchvideo.data import UniformClipSampler
 from pytorchvideo.data.encoded_video import EncodedVideo
 from pytorchvideo.data.utils import thwc_to_cthw
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
+from tqdm.auto import tqdm
 
 
 def get_frames(container, t1, t2, buffer, max_buffer_size):
@@ -209,10 +214,33 @@ def get_all_clips(video, video_length, sampler):
             break
 
 
+def labels_fn(
+    path: str, start_idx: int, end_idx: int, path_to_video: Dict[str, Any], config
+):
+    video = path_to_video[path]
+    return {
+        "video_name": video.uid,
+        "is_stereo": video.is_stereo,
+        "clip_index": start_idx // config.inference_config.stride,
+        "clip_start_sec": start_idx,
+        "clip_end_sec": end_idx,
+    }
+
+
 def create_dset(
     videos: List[Video], config: FeatureExtractConfig
-) -> IndexableVideoDataset:
+) -> IndexableVideoDataset | VideoDataset:
     assert isinstance(videos[0], Video)
+    transforms_to_use = [
+        CropIfStereo(),
+        get_transform(config),
+    ]
+    if config.io.debug_mode:
+        transforms_to_use = [
+            CropIfStereo(),
+            ApplyTransformToKey(key="video", transform=ShortSideScale(size=256)),
+        ]
+    transform = Compose(transforms_to_use)
 
     clip_sampler = UniformClipSampler(
         clip_duration=Fraction(
@@ -226,25 +254,14 @@ def create_dset(
         backpad_last=True,
     )
 
-    transforms_to_use = [
-        CropIfStereo(),
-        get_transform(config),
-    ]
-    if config.io.debug_mode:
-        transforms_to_use = [
-            CropIfStereo(),
-            ApplyTransformToKey(key="video", transform=ShortSideScale(size=256)),
-        ]
-    return IndexableVideoDataset(
-        config, videos, clip_sampler, Compose(transforms_to_use)
-    )
+    return IndexableVideoDataset(config, videos, clip_sampler, transform)
 
 
 def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:
     if config.inference_config.batch_size == 0:
         raise AssertionError("not supported")
 
-    if config.inference_config.num_workers == 0:  # for debugging
+    if config.inference_config.num_workers == -1:  # for debugging
         return dset
 
     return DataLoader(

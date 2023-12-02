@@ -50,10 +50,14 @@ def load_model(
     return model
 
 
+def norm_pixels(x):
+    return x / 255.0
+
+
 def get_transform(inference_config: InferenceConfig, config: ModelConfig):
     if config.input_type == "video":
         transforms = [
-            Lambda(lambda x: x / 255.0),
+            Lambda(norm_pixels),
             NormalizeVideo(config.mean, config.std),
             ShortSideScale(size=config.side_size),
             CenterCropVideo(config.crop_size),

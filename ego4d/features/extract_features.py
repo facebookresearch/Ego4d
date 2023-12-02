@@ -1,6 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 import gc
+import logging
 import math
 import os
 import time
@@ -10,15 +11,19 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple, Union
 
+import av
+import hydra
 import torch
 import torchvision
 from ego4d.features.config import (
     FeatureExtractConfig,
+    get_videos,
     InferenceConfig,
     load_model,
     Video,
 )
 from ego4d.features.dataset import create_data_loader_or_dset
+from omegaconf import OmegaConf
 from torch.nn import Module
 from tqdm.auto import tqdm
 
@@ -150,6 +155,7 @@ def _extract_features(
         if i % 50 == 0:
             gc.collect()
 
+        assert batch_size is not None
         if max_examples > 0 and (i + 1) * batch_size >= max_examples:
             if not silent:
                 print("Breaking...")
@@ -170,7 +176,7 @@ def extract_features(
         model = load_model(config)
 
     if log_info and not silent:
-        print(f"config={config}")
+        # print(f"config={config}")
         print(f"Number of videos = {len(videos)}")
 
     fvs = defaultdict(list)
@@ -254,12 +260,10 @@ def extract_features(
 
         clip = uid_to_video_clips[k]
         expected_fvs = num_fvs(clip, config.inference_config)
-        if expected_fvs != fv_amount:
+        if config.check_fv_count and expected_fvs != fv_amount:
             if assert_feature_size:
                 raise AssertionError(
-                    f"""
-{k} should have {expected_fvs} fvs, but has {fv_amount}
-"""
+                    f"{k} should have {expected_fvs} fvs, but has {fv_amount}"
                 )
 
         total_num += fv_amount
@@ -299,27 +303,63 @@ def perform_feature_extraction(
     for vid in tqdm(videos, desc="videos"):
         gc.collect()
 
-        # TODO: convert this to be a generator
-        feature_extract_result = extract_features(
-            [vid],
-            config,
-            assert_feature_size=not is_audio_model,
-        )
-        result = feature_extract_result.result
+        print(f"Extract: {vid}")
 
-        t1 = time.time()
-        for k, v in result.items():
-            torch.save(v, f"{config.io.out_path}/{k}.pt")
-        t2 = time.time()
+        try:
+            # TODO: convert this to be a generator
+            feature_extract_result = extract_features(
+                [vid],
+                config,
+                assert_feature_size=not is_audio_model,
+            )
+            result = feature_extract_result.result
 
-        time_stats.to_save += t2 - t1
-        time_stats.to_load.extend(feature_extract_result.time_stats.to_load)
-        time_stats.transfer_device.extend(
-            feature_extract_result.time_stats.transfer_device
-        )
-        time_stats.forward_pass.extend(feature_extract_result.time_stats.forward_pass)
+            t1 = time.time()
+            for k, v in result.items():
+                torch.save(v, f"{config.io.out_path}/{k}.pt")
+            t2 = time.time()
+
+            time_stats.to_save += t2 - t1
+            time_stats.to_load.extend(feature_extract_result.time_stats.to_load)
+            time_stats.transfer_device.extend(
+                feature_extract_result.time_stats.transfer_device
+            )
+            time_stats.forward_pass.extend(
+                feature_extract_result.time_stats.forward_pass
+            )
+        except av.error.EOFError as ex:
+            logging.exception(f"Failed to extract features for {vid}: {ex}")
 
     o2 = time.time()
 
     time_stats.overall = o2 - o1
     return time_stats
+
+
+@hydra.main(config_path="configs", config_name=None)
+def run_extraction(config: FeatureExtractConfig):
+    assert (
+        config.schedule_config.run_locally
+    ), "Local only permitted - use slurm otherwise!"
+
+    print("###################### Feature Extraction Config ####################")
+    print(OmegaConf.to_yaml(config))
+    print("############################################################")
+
+    # Get uids + {uids -> duration}
+    videos, all_videos = get_videos(config)
+    print(f"run_extraction: {len(videos)} videos")
+
+    os.makedirs(config.io.out_path, exist_ok=True)
+    with open(f"{config.io.out_path}/config.yaml", "w") as out_f:
+        out_f.write(OmegaConf.to_yaml(config))
+
+    # print_stats_for_videos(config, all_videos=all_videos, videos=videos)
+
+    result = perform_feature_extraction(videos, config)
+
+    print(f"Extraction Complete: {result}")
+
+
+if __name__ == "__main__":
+    run_extraction()  # pyre-ignore

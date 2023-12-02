@@ -4,7 +4,7 @@ import importlib
 import json
 import os
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -55,26 +55,30 @@ class InputOutputConfig:
     - `_uid_to_frame_count`
     """
 
+    # output
+    out_path: str
+
     # input
+    # TODO: add file list
     filter_completed: bool = True
     video_dir_path: str = "/datasets01/ego4d_track2/v1/full_scale/"
     ego4d_download_dir: str = "/checkpoint/miguelmartin/ego4d/"
+    dataset_version: str = "ego4d"
+    egoexo_data_dir: str = "/checkpoint/miguelmartin/egoexo_data/dev/"
     uid_list: Optional[List[str]] = None
     video_limit: int = -1
     debug_mode: bool = False
-    debug_path: str = "/checkpoint/miguelmartin/ego4d_track2/v1/debug_frames"
-
-    # output
-    out_path: str = (
-        "/checkpoint/miguelmartin/ego4d_track2_features/full_scale/v1_1/action_features"
-    )
-
+    debug_path: Optional[str] = None
     exclude_no_audio: bool = False
+    eligible_cam_prefixes: Optional[List[str]] = None
 
 
 @dataclass
 class InferenceConfig:
     device: str = "cuda"
+
+    video_reader_class: str = "PyAvReader"
+    video_reader_kwargs_override: dict = field(default_factory=lambda _: {})
 
     # 0 == don't use dataloader
     # >0 use dataloader with bs=batch_size
@@ -90,7 +94,7 @@ class InferenceConfig:
     stride: int = 16
     include_audio: bool = False
     include_video: bool = True
-    norm_config: NormalizationConfig = NormalizationConfig()
+    norm_config: NormalizationConfig = field(default_factory=NormalizationConfig)
 
 
 @dataclass
@@ -127,6 +131,7 @@ class FeatureExtractConfig:
     model_config: BaseModelConfig
     model_module_str: str = "ego4d.features.models.slowfast"
     force_yes: bool = False
+    check_fv_count: bool = True
 
 
 def get_model_module(config: FeatureExtractConfig):
@@ -134,6 +139,8 @@ def get_model_module(config: FeatureExtractConfig):
 
 
 def _uids_for_dir(path: str) -> List[str]:
+    if not os.path.exists(path):
+        return []
     ret = [
         p
         for p in os.listdir(path)
@@ -194,26 +201,85 @@ def _uid_to_is_stereo(config: InputOutputConfig) -> Dict[str, bool]:
 
 
 def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
-    uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
-    uid_to_info = _uid_to_info(config)
-    uids_to_is_stereo = _uid_to_is_stereo(config)
-    videos = [
-        Video(
-            uid=uid,
-            path=_path_for(config, uid),
-            frame_count=uid_to_info[uid]["num_frames"],
-            w=uid_to_info[uid]["w"],
-            h=uid_to_info[uid]["h"],
-            has_audio=uid_to_info[uid]["has_audio"],
-            is_stereo=uids_to_is_stereo[uid],
-        )
-        for uid in uids
-        if uid in uid_to_info
-    ]
-    if config.exclude_no_audio:
-        return [v for v in videos if v.has_audio]
+    if config.dataset_version == "ego4d":
+        uids = _uids(config) if not unfiltered else _unfiltered_uids(config)
+        uid_to_info = _uid_to_info(config)
+        uids_to_is_stereo = _uid_to_is_stereo(config)
+        videos = [
+            Video(
+                uid=uid,
+                path=_path_for(config, uid),
+                frame_count=uid_to_info[uid]["num_frames"],
+                w=uid_to_info[uid]["w"],
+                h=uid_to_info[uid]["h"],
+                has_audio=uid_to_info[uid]["has_audio"],
+                is_stereo=uids_to_is_stereo[uid],
+            )
+            for uid in uids
+            if uid in uid_to_info
+        ]
+        if config.exclude_no_audio:
+            return [v for v in videos if v.has_audio]
 
-    return videos
+        return videos
+    else:
+        takes = json.load(open(os.path.join(config.egoexo_data_dir, "takes.json")))
+        all_uids = [t["take_uid"] for t in takes]
+        uids = config.uid_list
+        if uids is None:
+            uids = all_uids
+        if uids and takes:
+            uid_takes = [t for t in takes if t["take_uid"] in uids]
+            if len(uid_takes) < len(takes):
+                print(f"Filtered {len(takes)} -> {len(uid_takes)} on uid config")
+                takes = uid_takes
+        completed_uids = set(_uids_for_dir(config.out_path))
+        videos = []
+        for take in takes:
+            for cam_id, streams in take["frame_aligned_videos"].items():
+                eligible_prefixes = config.eligible_cam_prefixes or [
+                    "cam",
+                    "aria",
+                    "gp",
+                ]
+                if not any(x in cam_id.lower() for x in eligible_prefixes):
+                    continue
+                for stream_name, stream in streams.items():
+                    # Config?
+                    if "aria" in cam_id and stream_name != "rgb":
+                        continue
+                    is_aria = "aria" in stream["cam_id"]
+                    # NOTE: known constants for not downsampled videos
+                    w = 1408 if is_aria else 3840
+                    h = 1408 if is_aria else 2160
+                    uid = f"{take['take_uid']}_{cam_id}_{stream_name}"
+                    if (
+                        not unfiltered
+                        and config.filter_completed
+                        and uid in completed_uids
+                    ):
+                        continue
+
+                    videos.append(
+                        Video(
+                            uid=uid,
+                            path=os.path.join(
+                                config.egoexo_data_dir,
+                                "takes",
+                                take["root_dir"],
+                                stream["relative_path"],
+                            ),
+                            # NOTE: w/h used to estimate time to complete
+                            w=w,
+                            h=h,
+                            frame_count=take["timesync_end_idx"]
+                            - take["timesync_start_idx"]
+                            - 1,
+                            has_audio=False,
+                            is_stereo=False,
+                        )
+                    )
+        return videos
 
 
 def get_videos(config: FeatureExtractConfig) -> Tuple[List[Video], List[Video]]:
