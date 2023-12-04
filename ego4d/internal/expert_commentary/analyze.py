@@ -14,6 +14,10 @@ from ego4d.internal.expert_commentary.data import (
 from tqdm.auto import tqdm
 
 comms = load_uniq_commentaries(raw_extracted_dir=RAW_EXTRACTED_COMM_ROOT)
+takes = json.load(
+    open("/large_experiments/egoexo/dataset/takes_dropped.json")
+) + json.load(open("/large_experiments/egoexo/dataset/takes.json"))
+takes_by_name = {t["root_dir"]: t for t in takes}
 
 skipped = 0
 all_transc = []
@@ -94,6 +98,17 @@ for x in all_transc_succ:
 
 comms_per_ann_arr = np.array([len(xs) for xs in comms_per_ann.values()])
 
+comm_per_min = []
+for comm, xs in comms_per_ann.items():
+    tn = xs[0]["take"]
+    take = takes_by_name[tn]
+    take_min = take["duration_sec"] / 60
+    num_comms = len(xs)
+    comm_per_min.append(num_comms / take_min)
+
+comms_per_min = np.array(comm_per_min)
+# comm_durs = np.array(comm_durs)
+
 print(
     f"""
 # Annotations = {num_anns}
@@ -106,6 +121,7 @@ Avg Sentences per Commentary = {stats_df.num_sents.mean():.3f} (std dev = {stats
 Avg Words per Sentence = {stats_df.words_per_sentence.mean():.3f} (std dev = {stats_df.words_per_sentence.std():.3f})
 # Unique Nouns = {len(noun_counts_sorted)}
 # Unique Verbs = {len(verb_counts_sorted)}
+Average Commentaries per Minute = {comms_per_min.mean():.3f}
 """
 )
 
