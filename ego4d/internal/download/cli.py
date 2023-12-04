@@ -308,11 +308,25 @@ if __name__ == "__main__":
         nargs="+",
         default=["metadata", "captures", "takes", "trajectory", "annotations"],
         help="""
-What parts of the dataset to download, one of {metadata, takes, trajectory, point_cloud, annotations, capture_raw_vrs, capture_raw_stitched_videos}.
+What parts of the dataset to download, one of:
+- metadata
+- takes
+- takes_dropped
+- captures
+- trajectory
+- eye_gaze
+- point_cloud
+- capture_raw_stitched_videos
+- capture_raw_vrs
+- annotations
+- ego_pose_pseudo_gt
+- downscaled_takes
+- narrate_and_act_transc
+- features/omnivore_video
 
 By default the following parts will be downloaded: {metadata, captures, takes, trajectory, annotations}.
 
-Example usage: --parts annotations point_cloud
+Example usage: --parts annotations point_cloud eye_gaze
 """,
     )
     parser.add_argument(
@@ -324,7 +338,7 @@ Example usage: --parts annotations point_cloud
     )
     parser.add_argument(
         "--num_workers",
-        type=str,
+        type=int,
         default=15,
         help="number of workers to perform download ops",
     )

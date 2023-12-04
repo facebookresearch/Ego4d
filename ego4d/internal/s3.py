@@ -150,8 +150,7 @@ class S3Downloader:
         self.profile = profile
         self.callback = callback
 
-    @exp_backoff()
-    def ls(self, path) -> List[Tuple[str, str]]:
+    def ls(self, path, recursive=False, max_keys=-1) -> List[Tuple[str, str]]:
         assert path.startswith("s3://")
         temp = path.split("s3://")[1].split("/")
         bucket_name = temp[0]
@@ -162,19 +161,32 @@ class S3Downloader:
                 profile=self.profile,
             )  # pyre-ignore
 
+        delim = "/" if not recursive else ""
         client = self.clients[bucket_name]
-        ls_result = client.list_objects_v2(
-            Bucket=bucket_name,
-            Prefix=object_name,
-            MaxKeys=10000,
-            Delimiter="/",
-        )
-        if ls_result["KeyCount"] == 0:
-            return []
-        return [
-            (os.path.basename(f["Key"]), f"s3://{bucket_name}/{f['Key']}")
-            for f in ls_result["Contents"]
-        ]
+        if max_keys < 0:
+            paginator = client.get_paginator("list_objects_v2")
+            pages = paginator.paginate(
+                Bucket=bucket_name, Prefix=object_name, Delimiter=delim
+            )
+            return [
+                (os.path.basename(f["Key"]), f"s3://{bucket_name}/{f['Key']}")
+                for page in pages
+                for f in page.get("Contents", [])
+            ]
+        else:
+            assert max_keys <= 1000
+            ls_result = client.list_objects_v2(
+                Bucket=bucket_name,
+                Prefix=object_name,
+                MaxKeys=max_keys,
+                Delimiter="/",
+            )
+            if ls_result["KeyCount"] == 0:
+                return []
+            return [
+                (os.path.basename(f["Key"]), f"s3://{bucket_name}/{f['Key']}")
+                for f in ls_result["Contents"]
+            ]
 
     def copy(self, path: str, out_path: str):
         self.obj(path).download_file(out_path, Callback=self.callback)

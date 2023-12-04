@@ -9,6 +9,7 @@ This should only be used internally by the Eng Team of the EgoExo dataset.
 
 import json
 import os
+from collections import defaultdict
 
 from ego4d.internal.download.manifest import (
     manifest_dumps,
@@ -29,6 +30,7 @@ release_dir = "s3://ego4d-consortium-sharing/egoexo/releases/dev"
 
 egoexo = {
     "takes": os.path.join(release_dir, "takes.json"),
+    "takes_dropped": os.path.join(release_dir, "takes_dropped.json"),
     "captures": os.path.join(release_dir, "captures.json"),
     "physical_setting": os.path.join(release_dir, "physical_setting.json"),
     "participants": os.path.join(release_dir, "participants.json"),
@@ -39,6 +41,7 @@ egoexo = {
 manifests = {
     "metadata": [],
     "takes": [],
+    "takes_dropped": [],
     "captures": [],
     "trajectory": [],
     "eye_gaze": [],
@@ -47,6 +50,9 @@ manifests = {
     "capture_raw_vrs": [],
     "annotations": [],
     "ego_pose_pseudo_gt": [],
+    "features/omnivore_video": [],
+    "downscaled_takes": [],
+    "narrate_and_act_transc": [],
 }
 
 
@@ -66,41 +72,49 @@ for k, out_path in tqdm(egoexo.items()):
 for k, v in egoexo.items():
     egoexo[k] = json.load(pathmgr.open(v))
 
-for t in egoexo["takes"]:
-    root_dir = os.path.join("takes", t["root_dir"])
-    paths = []
-    for streams in t["frame_aligned_videos"].values():
-        for vid in streams.values():
-            # TODO: check
-            if vid["_s3_path"] is None:
-                continue
-            uid = vid["clip_uid"]
-            paths.append(
-                PathSpecification(
-                    source_path=vid["_s3_path"],
-                    relative_path=os.path.join(root_dir, vid["relative_path"]),
+
+take_name_to_uid = {
+    t["root_dir"]: t["take_uid"] for t in (egoexo["takes"] + egoexo["takes_dropped"])
+}
+
+for manifest_key in ["takes", "takes_dropped"]:
+    for t in egoexo[manifest_key]:
+        root_dir = os.path.join("takes", t["root_dir"])
+        paths = []
+        for streams in t["frame_aligned_videos"].values():
+            for vid in streams.values():
+                # TODO: check
+                if vid["_s3_path"] is None:
+                    continue
+                uid = vid["clip_uid"]
+                paths.append(
+                    PathSpecification(
+                        source_path=vid["_s3_path"],
+                        relative_path=os.path.join(root_dir, vid["relative_path"]),
+                    )
                 )
+
+        manifests[manifest_key].append(
+            ManifestEntry(
+                uid=t["take_uid"],
+                paths=paths,
             )
-
-    manifests["takes"].append(
-        ManifestEntry(
-            uid=t["take_uid"],
-            paths=paths,
         )
-    )
 
-for c in egoexo["captures"]:
+
+for c in tqdm(egoexo["captures"]):
     s3_bucket = c["_s3_root_dir"].split("/")[2]
     root_dir = os.path.join("captures", c["root_dir"])
     traj_fp = c["_trajectory_s3_dir"]
     post_fp = c["_postsurvery_s3_path"]
-    # eye_gaze_fp = c.get("_gaze_s3_dir", None)
     eye_gaze_fp = c["_gaze_s3_dir"]
     timesync_fp = c["_timesync_s3_path"]
     ts_dir = os.path.join(c["_s3_root_dir"], "timesync")
-    traj_files = downloader.ls(traj_fp + "/") if traj_fp else []
-    eye_gaze_files = downloader.ls(eye_gaze_fp + "/") if eye_gaze_fp else []
-    ts_files = downloader.ls(ts_dir + "/")
+    traj_files = downloader.ls(traj_fp + "/", max_keys=1000) if traj_fp else []
+    eye_gaze_files = (
+        downloader.ls(eye_gaze_fp + "/", max_keys=1000) if eye_gaze_fp else []
+    )
+    ts_files = downloader.ls(ts_dir + "/", max_keys=1000)
 
     traj_paths = []
     point_cloud_paths = []
@@ -209,12 +223,6 @@ for c in egoexo["captures"]:
         )
     )
 
-for x in manifests["captures"]:
-    for path in x.paths:
-        if path.source_path is None:
-            print(x.uid, path)
-
-
 annotations = downloader.ls(os.path.join(release_dir, "annotations/"))
 for bn, s3_path in annotations:
     if len(bn) == 0:
@@ -284,6 +292,94 @@ for body_type in ["body", "hand"]:
                         ],
                     )
                 )
+
+downscaled_takes = downloader.ls(
+    os.path.join(release_dir, "downscaled_takes/"), recursive=True
+)
+by_take = defaultdict(list)
+for bn, path in downscaled_takes:
+    take_name = path.split("downscaled_takes/")[1].split("/")[0]
+    if take_name not in take_name_to_uid:
+        continue
+    take_uid = take_name_to_uid[take_name]
+    by_take[take_uid].append(
+        PathSpecification(
+            source_path=path,
+            relative_path=f"takes/{take_name}/frame_aligned_videos/downscaled/{bn}",
+        )
+    )
+
+for take_uid, paths in by_take.items():
+    manifests["downscaled_takes"].append(
+        ManifestEntry(
+            uid=take_uid,
+            paths=paths,
+        )
+    )
+
+for feature_name in ["omnivore_video"]:
+    feature_files = downloader.ls(
+        os.path.join(release_dir, "features/", feature_name + "/")
+    )
+    by_take = defaultdict(list)
+    for file_name, path in feature_files:
+        if file_name.endswith("yaml"):
+            manifests[f"features/{feature_name}"].append(
+                ManifestEntry(
+                    uid="config",
+                    paths=[
+                        PathSpecification(
+                            source_path=path,
+                            relative_path=f"features/{feature_name}/{file_name}",
+                        )
+                    ],
+                )
+            )
+            continue
+
+        if file_name == "" or file_name == "manifest.json":
+            continue
+        take_uid, cam_id, stream_id = file_name.split("_")
+        by_take[take_uid].append(
+            PathSpecification(
+                source_path=path,
+                relative_path=f"features/{feature_name}/{file_name}",
+            )
+        )
+
+    for take_uid, paths in by_take.items():
+        manifests[f"features/{feature_name}"].append(
+            ManifestEntry(
+                uid=take_uid,
+                paths=paths,
+            )
+        )
+
+na_transc = downloader.ls(
+    os.path.join(release_dir, "annotations/narrate_and_act_transc/"), recursive=True
+)
+by_take = defaultdict(list)
+for file_name, path in na_transc:
+    if file_name == ".DS_Store":
+        continue
+    tn = os.path.splitext(file_name)[0]
+    if tn not in take_name_to_uid:
+        continue
+    take_uid = take_name_to_uid[tn]
+    by_take[take_uid].append(
+        PathSpecification(
+            source_path=path,
+            relative_path=f"annotations/narrate_and_act_transc/{tn}/{file_name}",
+        )
+    )
+
+for take_uid, paths in by_take.items():
+    manifests["narrate_and_act_transc"].append(
+        ManifestEntry(
+            uid=take_uid,
+            paths=paths,
+        )
+    )
 
 
 for k, v in manifests.items():
