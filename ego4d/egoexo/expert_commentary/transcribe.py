@@ -11,7 +11,7 @@ from typing import List
 import submitit
 import torch
 import whisper
-from ego4d.internal.expert_commentary.data import (
+from ego4d.egoexo.expert_commentary.data import (
     load_all_raw_commentaries,
     RAW_EXTRACTED_COMM_ROOT,
 )

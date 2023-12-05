@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="ego4d",
-    version="1.4.2",
+    version="1.4.3",
     author="FAIR",
     author_email="info@ego4d-data.org",
     description="Ego4D Dataset CLI",
@@ -23,7 +23,9 @@ setup(
     entry_points={
         "console_scripts": [
             "ego4d=ego4d.cli.cli:main",
-            "ego4d_internal = ego4d.internal.cli:main",
+            "egoexo=ego4d.egoexo.download.cli:main",
+            "egoexo_internal=ego4d.internal.download.cli:internal_main",
+            "ego4d_validation = ego4d.internal.validation.cli:main",
         ],
     },
 )

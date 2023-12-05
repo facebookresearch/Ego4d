@@ -1,7 +1,3 @@
-"""
-Example usage:
-
-"""
 import argparse
 import os
 import sys
@@ -278,13 +274,13 @@ def main(args):
     print(flush=True)
 
 
-if __name__ == "__main__":
+def create_arg_parse(script_name: str, base_dir: str, release_name: str):
     parser = argparse.ArgumentParser(
-        usage="""
+        usage=f"""
     EgoExo downloader CLI
 
     Simple usage:
-        python ego4d/internal/download/cli.py -o <out_dir>
+        {script_name} -o <out_dir>
 
     Advanced usage examples:
         - Download point clouds and annotations 
@@ -343,9 +339,6 @@ Example usage: --parts annotations point_cloud eye_gaze
         help="number of workers to perform download ops",
     )
     parser.add_argument(
-        "--release_name", type=str, default="dev", help="name of the release"
-    )
-    parser.add_argument(
         "-y",
         "--yes",
         default=False,
@@ -366,6 +359,9 @@ Example usage: --parts annotations point_cloud eye_gaze
         action="store_true",
     )
     parser.add_argument(
+        "--release", type=str, default=release_name, help="name/version of the release"
+    )
+    parser.add_argument(
         "--s3_profile",
         type=str,
         default="default",
@@ -374,8 +370,21 @@ Example usage: --parts annotations point_cloud eye_gaze
     parser.add_argument(
         "--base_dir",
         type=str,
-        default="s3://ego4d-consortium-sharing/egoexo/releases/",
+        default=base_dir,
         help="base directory for download (ADVANCED usage, do not change unless you know what you're doing)",
+    )
+    return parser
+
+
+def internal_main():
+    parser = create_arg_parse(
+        script_name="egoexo_internal",
+        release_name="dev",
+        base_dir="s3://ego4d-consortium-sharing/egoexo/releases/",
     )
     args = parser.parse_args()
     main(args)
+
+
+if __name__ == "__main__":
+    internal_main()
