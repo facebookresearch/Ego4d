@@ -135,7 +135,8 @@ def create_output_directory(validated_cfg: ValidatedConfig) -> Path:
     Creates a top level download directory if it does not already exist, and returns
     the Path to the download directory.
     """
-    download_path = validated_cfg.output_directory / f"{validated_cfg.version}"
+    # only use the major for the output dir, i.e. v2_1 => v2
+    download_path = validated_cfg.output_directory / f"{validated_cfg.out_version_dir}"
     download_path.mkdir(parents=True, exist_ok=True)
     return download_path
 
@@ -146,7 +147,7 @@ def create_download_directory(validated_cfg: ValidatedConfig, dataset: str) -> P
     the Path to the download directory.
     """
     download_path = (
-        validated_cfg.output_directory / f"{validated_cfg.version}/{dataset}"
+        validated_cfg.output_directory / f"{validated_cfg.out_version_dir}/{dataset}"
     )
     download_path.mkdir(parents=True, exist_ok=True)
     return download_path
@@ -277,10 +278,12 @@ def download_all(
 
     def initializer():
         config = Config(
-            connect_timeout=20, retries={"mode": "standard", "max_attempts": 5}
+            connect_timeout=120,
+            retries={"mode": "standard", "max_attempts": 5},
         )
         thread_data.s3 = boto3.session.Session(profile_name=aws_profile_name).resource(
-            "s3", config=config
+            "s3",
+            config=config,
         )
 
     def download_video(download: FileToDownload):
@@ -330,7 +333,7 @@ def download_all(
                         last_save = now
 
         except Exception as ex:
-            logging.exception("S3 Download Exception: {ex}")
+            logging.exception(f"S3 Download Exception: {ex}")
             download.file_path = None
             download.s3_content_size_bytes = 0
 

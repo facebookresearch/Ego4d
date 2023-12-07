@@ -14,7 +14,7 @@ from botocore.exceptions import ProfileNotFound
 from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
-VERSION_DEFAULT = "v2"
+VERSION_DEFAULT = "v2_1"
 DATASET_PRIMARY = "full_scale"
 DATASETS_VIDEO = ["full_scale", "clips", "components/videos", "video_540ss"]
 DATASETS_FILE = [
@@ -74,6 +74,11 @@ class ValidatedConfig(NamedTuple):
     annotations: Union[bool, Set[str]]
     list_datasets: bool
     manifest_override_path: str
+
+    @property
+    def out_version_dir(self) -> str:
+        base_version = self.version.split("_")[0]
+        return base_version
 
 
 class Config(NamedTuple):
@@ -222,7 +227,7 @@ def config_from_args(args=None) -> Config:
     )
     flag_parser.add_argument(
         "--version",
-        help="A version identifier - i.e. 'v1' or 'v2'",
+        help="A version identifier - i.e. 'v1', 'v2', 'v2_1'",
         default=VERSION_DEFAULT,
     )
     flag_parser.add_argument(
