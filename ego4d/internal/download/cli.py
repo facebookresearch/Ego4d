@@ -3,12 +3,18 @@ import os
 import sys
 import threading
 import traceback
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, List, Optional, Tuple, TypeVar
 
 from ego4d.cli.progressbar import DownloadProgressBar
+from ego4d.cli.universities import UNIV_TO_BUCKET
 
-from ego4d.internal.download.manifest import manifest_loads, PathSpecification
+from ego4d.internal.download.manifest import (
+    manifest_loads,
+    ManifestEntry,
+    PathSpecification,
+)
 from ego4d.internal.s3 import S3Downloader
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
@@ -16,6 +22,47 @@ from tqdm.auto import tqdm
 
 T = TypeVar("T")
 U = TypeVar("U")
+
+
+def _path_ok(p: PathSpecification, args) -> bool:
+    ok = True
+    if (
+        args.uids is not None
+        and p.uids is not None
+        and len(set(p.uids) & args.uids) == 0
+    ):
+        ok = False
+    if (
+        args.views is not None
+        and p.views is not None
+        and len(set(p.views) & args.views) == 0
+    ):
+        ok = False
+    if (
+        args.universities is not None
+        and p.universities is not None
+        and len(set(p.universities) & args.universities) == 0
+    ):
+        ok = False
+    return ok
+
+
+def _manifest_ok(m: ManifestEntry, args) -> bool:
+    ok = True
+    if (
+        args.splits is not None
+        and m.splits is not None
+        and len(set(m.splits) & args.splits) == 0
+    ):
+        ok = False
+
+    if (
+        args.benchmarks is not None
+        and m.benchmarks is not None
+        and len(set(m.benchmarks) & args.benchmarks) == 0
+    ):
+        ok = False
+    return ok
 
 
 def map_all(
@@ -65,13 +112,19 @@ def map_all(
 
 def main(args):
     base_dir = args.base_dir
-    release_name = args.release_name
+    release_name = args.release
     parts = set(args.parts)
     out_dir = args.out_dir
     num_workers = args.num_workers
     s3_profile = args.s3_profile
     yes = args.yes
-    uids = set(args.uids) if args.uids is not None else None
+    args.uids = set(args.uids) if args.uids is not None else None
+    args.benchmarks = set(args.benchmarks) if args.benchmarks is not None else None
+    args.splits = set(args.splits) if args.splits is not None else None
+    args.views = set(args.views) if args.views is not None else None
+    args.universities = (
+        set(args.universities) if args.universities is not None else None
+    )
 
     # TODO: remove iopath dependency
     pathmgr = PathManager()
@@ -125,21 +178,25 @@ def main(args):
     if not release_dir.endswith("/"):
         release_dir += "/"
 
-    manifests = []
+    num_paths = 0
+    all_paths = []
     for part in parts:
         manifest_path = os.path.join(release_dir, part, "manifest.json")
         assert pathmgr.exists(
             manifest_path
         ), f"{part} does not have a manifest path (looking at {manifest_path})"
-        manifests.append(manifest_loads(pathmgr.open(manifest_path).read()))
-
-    all_paths = []
-    for m in manifests:
-        for x in m:
-            if uids is not None and x.uid not in uids:
+        ms = manifest_loads(pathmgr.open(manifest_path).read())
+        for m in ms:
+            num_paths += len(m.paths)
+            if not _manifest_ok(m, args):
                 continue
-            all_paths.extend(x.paths)
 
+            all_paths.extend([p for p in m.paths if _path_ok(p, args)])
+
+    if num_paths != len(all_paths):
+        print(f"Filtered {num_paths} -> {len(all_paths)} files")
+
+    # TODO: pre-cache this such that it is faster
     print("Determining what to download ...")
     path_size_pairs, s3_stat_failures = map_all(
         all_paths,
@@ -158,6 +215,13 @@ def main(args):
     if all_s3_stat_failures > 0:
         print(
             f"WARN: failed to get stats for {all_s3_stat_failures} files, will skip. [zero_size={len(s3_zero_sizes)}, exceptions={all_s3_stat_failures}]"
+        )
+        print(
+            "*** BUCKET FAILURES ***: ",
+            {
+                path.source_path.split("s3://")[1].split("/")[0]
+                for path, _ in s3_stat_failures
+            },
         )
     total_size_bytes = sum(x for _, x in path_size_pairs if x is not None)
     total_size_gib = total_size_bytes / 1024**3
@@ -284,9 +348,9 @@ def create_arg_parse(script_name: str, base_dir: str, release_name: str):
 
     Advanced usage examples:
         - Download point clouds and annotations 
-            python ego4d/internal/download/cli.py -o <out_dir> --parts annotations point_cloud -y
+            {script_name} -o <out_dir> --parts annotations point_cloud -y
         - Download VRS files for a capture
-            python ego4d/internal/download/cli.py -o <out_dir> --parts capture_raw_vrs --uids <uid1>
+            {script_name} -o <out_dir> --parts capture_raw_vrs --uids <uid1>
 
 """
     )
@@ -295,7 +359,7 @@ def create_arg_parse(script_name: str, base_dir: str, release_name: str):
         "--out_dir",
         type=str,
         default=None,
-        help="Where to download the data",
+        help="Which folder to download the data to",
         required=True,
     )
     parser.add_argument(
@@ -304,21 +368,7 @@ def create_arg_parse(script_name: str, base_dir: str, release_name: str):
         nargs="+",
         default=["metadata", "captures", "takes", "trajectory", "annotations"],
         help="""
-What parts of the dataset to download, one of:
-- metadata
-- takes
-- takes_dropped
-- captures
-- trajectory
-- eye_gaze
-- point_cloud
-- capture_raw_stitched_videos
-- capture_raw_vrs
-- annotations
-- ego_pose_pseudo_gt
-- downscaled_takes
-- narrate_and_act_transc
-- features/omnivore_video
+What parts of the dataset to download, one of: {metadata, annotations, takes, captures, trajectory, eye_gaze, point_cloud, capture_raw_stitched_videos, capture_raw_vrs, ego_pose_pseudo_gt}
 
 By default the following parts will be downloaded: {metadata, captures, takes, trajectory, annotations}.
 
@@ -331,6 +381,45 @@ Example usage: --parts annotations point_cloud eye_gaze
         nargs="+",
         default=None,
         help="what uids to filter for takes or captures",
+    )
+    parser.add_argument(
+        "--benchmarks",
+        type=str,
+        nargs="+",
+        default=None,
+        help="""
+Data relating to particular benchmarks will be only included. Valid benchmark
+values are: keystep, proficiency, proficiency_demonstration, proficiency_demonstrator, relations, translation, correspondence, atomic_action_descriptions, egopose
+""",
+    )
+    parser.add_argument(
+        "--splits",
+        type=str,
+        nargs="+",
+        default=None,
+        help="""
+Data relating to the train/val/test dataset splits. Valid values are {train, val, test}.
+""",
+    )
+    parser.add_argument(
+        "--views",
+        type=str,
+        nargs="+",
+        default=None,
+        help="""
+Data relating to a particular view. Valid values are {ego, exo}.
+""",
+    )
+    parser.add_argument(
+        "-u",
+        "--universities",
+        type=str,
+        nargs="+",
+        default=None,
+        help=f"""
+Data relating to a particular university. Valid values are:
+{", ".join(UNIV_TO_BUCKET.keys())}
+""",
     )
     parser.add_argument(
         "--num_workers",
