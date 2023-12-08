@@ -18,15 +18,6 @@ from tqdm.auto import tqdm
 
 ROOT_DIR = "/checkpoint/miguelmartin/egoexo_data/dev/"
 DS_TAKES_DIR = "/checkpoint/miguelmartin/egoexo/downscaled_takes/"
-DEMONSTRATOR_TRAIN_DIR = (
-    "/checkpoint/miguelmartin/demonstrator_cvpr_dataset/demonstrator_cvpr_train.json"
-)
-DEMONSTRATOR_VAL_DIR = (
-    "/checkpoint/miguelmartin/demonstrator_cvpr_dataset/demonstrator_cvpr_val.json"
-)
-DEMONSTRATOR_TEST_DIR = (
-    "/checkpoint/miguelmartin/demonstrator_cvpr_dataset/demonstrator_cvpr_test.json"
-)
 
 
 def call_ffmpeg(paths):
@@ -69,36 +60,34 @@ def process_all(paths):
 
 
 def main():
-    with open(DEMONSTRATOR_TRAIN_DIR, "r") as f:
-        train_data = json.load(f)
-    with open(DEMONSTRATOR_VAL_DIR, "r") as f:
-        val_data = json.load(f)
-    with open(DEMONSTRATOR_TEST_DIR, "r") as f:
-        test_data = json.load(f)
-
-    required_takes = []
-    takes_to_process = train_data + val_data + test_data
-    for datum in takes_to_process:
-        take_dir = os.path.dirname(datum["video_paths"]["ego"])
-        assert take_dir.startswith("takes/")
-        take_dir = take_dir[len("takes/") :]
-        take_dir = os.path.join(DS_TAKES_DIR, take_dir)
-        required_takes.append(datum)
-
-    num_machines = 50
+    num_machines: int = 50
     root_dir: str = ROOT_DIR
     ds_take_dir: str = DS_TAKES_DIR
+    root_dir = "/checkpoint/miguelmartin/egoexo_data/dev/"
+
+    takes_to_process = json.load(open(os.path.join(root_dir, "takes.json")))
 
     map_values = []
-    for take_datum in required_takes:
-        for _, path in take_datum["video_paths"].items():
-            assert path.startswith("takes/")
-            src_path = os.path.join(root_dir, path)
-            tgt_path = os.path.join(ds_take_dir, path.replace("takes/", ""))
-            assert os.path.exists(src_path)
-            map_values.append((src_path, tgt_path))
+    completed = 0
+    num_vids = 0
+    for take in takes_to_process:
+        for _, streams in take["frame_aligned_videos"].items():
+            for _, stream in streams.items():
+                rel_path = stream["relative_path"]
+                if rel_path is None:
+                    continue
+                src_path = os.path.join(root_dir, "takes", take["root_dir"], rel_path)
+                dst_path = os.path.join(ds_take_dir, take["root_dir"], rel_path)
+                assert os.path.exists(src_path)
+                num_vids += 1
+                if os.path.exists(dst_path):
+                    completed += 1
+                    continue
+                map_values.append((src_path, dst_path))
 
-    print(f"# videos to process: {len(map_values)}")
+    print(
+        f"# videos to process: {len(map_values)} / {num_vids} [{completed} / {1 - (len(map_values) / num_vids):.2%} completed]"
+    )
     job_inputs = batch_it(
         map_values, batch_size=math.ceil(len(map_values) / num_machines)
     )
