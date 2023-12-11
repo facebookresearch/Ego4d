@@ -6,7 +6,7 @@ Command line tool to download Ego4D datasets.
 
 Examples:
       python -m ego4d.cli.cli \
-        --version="v2" \
+        --version="v2_1" \
         --datasets full_scale annotations \
         --output_directory="~/ego4d_data"
 """
@@ -193,7 +193,7 @@ def main_cfg(cfg: Config) -> None:
         if expected_gb:
             print(f"Downloading {len(active_downloads)} files..")
         else:
-            print(f"Downloading {expected_gb:.1f} GB..")
+            print(f"Downloading {expected_gb:.4f} GB..")
     else:
         confirm = None
         while confirm is None:
@@ -206,7 +206,7 @@ def main_cfg(cfg: Config) -> None:
             else:
                 response = input(
                     f"Expected size of downloaded files is "
-                    f"{expected_gb:.1f} GB. "
+                    f"{expected_gb:.4f} GB. "
                     f"Do you want to start the download? ([y]/n) "
                 )
             if response.lower() in ["yes", "y", ""]:
