@@ -1,32 +1,55 @@
-> [!NOTE]
-> **DATESET UPDATE:** Ego4D **V2.1** has been released due to the addition of the [Goal-Step](https://openreview.net/pdf?id=3BxYAaovKr) annotations and accompanying "grouped videos". Please refer to the [documentation](https://ego4d-data.org/docs/updates/) for more information.
+> [!IMPORTANT]
+> **EGO-EXO4D DATASET ANNOUNCEMENT:** *Ego-Exo4D* is now *available to the public*.
+> Please refer to the [website](https://ego-exo4d-data.org/),
+> [documentation](https://docs.ego-exo4d-data.org/), 
+> [paper](https://arxiv.org/abs/2311.18259), [blog
+> post](https://ai.meta.com/blog/ego-exo4d-video-learning-perception/) and
+> [video introduction](https://www.youtube.com/watch?v=GdooXEBAnI8).
 >
-> You can proceed to download via `--benchmark goalstep` using `--datasets full_scale annotations`, [see CLI docs](https://ego4d-data.org/docs/CLI/) or [Getting Started](https://ego4d-data.org/docs/start-here/) if you are new to the dataset. As of writing, the PyPi package is not up to date, you will have to download/clone the repository & run the python script: `python3 -m ego4d.cli.cli --datasets full_scale annotations --benchmarks goalstep -o <out-dir>`
+> **EGO4D UPDATE:** *V2.1* has been released due to the addition of the
+> [Goal-Step](https://openreview.net/pdf?id=3BxYAaovKr) annotations and
+> accompanying "grouped videos". Please refer to the
+> [documentation](https://ego4d-data.org/docs/updates/#ego4d-goal-step--grouped-videos) for more information.
 
+# Ego4D & Ego-Exo4D
 
-# Ego4D
+**Ego-Exo4D** is a large-scale multi-modal multi-view video dataset (including 3D) and benchmark challenge. The dataset consists of time-synchronized videos of participants recorded with at least one first-person (egocentric Aria glasses) and third-person (exocentric GoPro cameras) perspective cameras. 
+- Please refer to the [website](https://ego-exo4d-data.org/),
+  [documentation](https://docs.ego-exo4d-data.org/),
+  [paper](https://arxiv.org/abs/2311.18259), [blog
+  post](https://ai.meta.com/blog/ego-exo4d-video-learning-perception/) and
+  [video introduction](https://www.youtube.com/watch?v=GdooXEBAnI8).
 
-EGO4D is the world's largest egocentric (first person) video ML dataset and benchmark suite, with 3,600 hrs (and counting) of densely narrated video and a wide range of annotations across five new benchmark tasks.  It covers hundreds of scenarios (household, outdoor, workplace, leisure, etc.) of daily life activity captured in-the-wild by 926 unique camera wearers from 74 worldwide locations and 9 different countries.  Portions of the video are accompanied by audio, 3D meshes of the environment, eye gaze, stereo, and/or synchronized videos from multiple egocentric cameras at the same event.  The approach to data collection was designed to uphold rigorous privacy and ethics standards with consenting participants and robust de-identification procedures where relevant.
+**Ego4D** is the world's largest egocentric (first person) video ML dataset and benchmark suite, including over 3700 hours of annotated first-person video data. 
+- Please refer to the [website](https://ego4d-data.org/),
+  [documentation](https://ego4d-data.org/docs/) or
+  [paper](https://arxiv.org/abs/2110.07058) for more information.
 
 ## Getting Started
-- To **access** the data, please refer to the Documentation's [Getting Started](https://ego4d-data.org/docs/start-here/) page.
-- To **download** the data, refer to the [CLI README](ego4d/cli/README.md)
-- **Explore** the dataset here (you'll need a license): [Ego4D Visualizer](https://visualize.ego4d-data.org/)
+- To **access** the data, please refer to the Documentation:
+    - For Ego-Exo4D: refer to the [Getting Started](https://docs.ego-exo4d-data.org/getting-started/) page.
+    - For Ego4D: refer to the [Start Here](https://ego4d-data.org/docs/start-here/) page.
+- To **download** the data, refer to:
+    - For Ego-Exo4D: [Ego-Exo4D's Downloader CLI README](ego4d/egoexo/download/README.md)
+    - For Ego4D: [Ego4D's CLI README](ego4d/cli/README.md)
+- **Explore** Ego4D or Ego-Exo4D here (you'll need a license): [Ego4D Visualizer](https://visualize.ego4d-data.org/)
 - Read the [Summary](#summary) below for details about this repository.
 
 ## Summary
 
 The Ego4d repository (`ego4d` python module) includes: 
-- [Downloader CLI](ego4d/cli/README.md) for the Ego4D dataset
+- [Ego-Exo4D Downloader CLI](ego4d/egoexo/download/README.md) for the Ego-Ego4D dataset (available as the command `egoexo`)
+- [Ego4D Downloader CLI](ego4d/cli/README.md) for the Ego4D dataset (available as the command `ego4d`)
 - A simple API abstracting common video reading libraries
 ([TorchAudio](https://github.com/facebookresearch/Ego4d/blob/main/ego4d/research/readers.py#L69),
 [PyAV](https://github.com/facebookresearch/Ego4d/blob/main/ego4d/research/readers.py#L136)),
 - An API for [feature
 extraction](https://github.com/facebookresearch/Ego4d/blob/main/ego4d/features/README.md#as-an-api), which includes [lightweight wrappers for common models](https://github.com/facebookresearch/Ego4d/tree/main/ego4d/features/models), such as: [Omnivore](https://github.com/facebookresearch/Ego4d/blob/main/ego4d/features/models/omnivore.py) and [SlowFast](https://github.com/facebookresearch/Ego4d/blob/main/ego4d/features/models/slowfast.py)
-- [Notebooks](https://github.com/facebookresearch/Ego4d/tree/main/notebooks) serving as examples/tutorials to analyze & use the dataset
-    - Colab notebooks serving as additional examples for the benchmarks (VQ, NLQ and STA) can be found on: https://ego4d-data.org/docs/challenge/
+- Notebooks (for [Ego4D](https://github.com/facebookresearch/Ego4d/tree/main/notebooks) and [Ego-Exo4D]()) serving as examples/tutorials to analyze & use the dataset
+    - Colab notebooks for Ego4D serve as additional examples for the benchmarks (VQ, NLQ and STA) can be found on: https://ego4d-data.org/docs/challenge/
 - Research code to train models on the dataset, e.g. [clep](https://github.com/facebookresearch/Ego4d/tree/main/ego4d/research/clep)
-    - **NOTE:** baseline code for the benchmarks exists on separate GitHub repositories, see the [EGO4D organization](https://github.com/EGO4D/) and [docs](https://ego4d-data.org/docs/benchmarks/overview/)
+    - **NOTE:** baseline code for Ego-Exo4D is coming soon!
+    - **NOTE:** baseline code for the Ego4D benchmarks exists on separate GitHub repositories, see the [EGO4D organization](https://github.com/EGO4D/) and [docs](https://ego4d-data.org/docs/benchmarks/overview/)
 
 
 Please see [**Structure of the Repository**](#structure-of-the-repository) below for details.
@@ -36,16 +59,18 @@ Please see [**Structure of the Repository**](#structure-of-the-repository) below
 Please follow the below instructions to setup the downloader CLI for Ego4d and
 to install the `ego4d` python module. 
 
-
 ### Option 1: From the PyPi package
 
-> [!WARNING]
-> This is currently an out of date package, we are working on updating this.
-> For now, please follow [Option 2](#option-2-clonedownload-the-code).
+
+>![TIP]
+>Please ensure you have a conda or pyenv environment created & activated. If you're unsure
+>on how to do so, you can follow [Option 2: Step 1](step-1-create-or-use-an-environment).
 
 ```
-pip install ego4d
+pip install ego4d --upgrade
 ```
+
+**NOTE:** Please ensure you are on at least Python 3.10
 
 ### Option 2: Clone/Download the Code
 

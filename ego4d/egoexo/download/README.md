@@ -1,7 +1,7 @@
 # EgoExo Dowloader
 
 >
-> [!NOTE]
+> [!IMPORTANT]
 > Please ensure you have installed the Ego4D python package. Follow the
 > [instructions at the root
 > README](https://github.com/facebookresearch/Ego4d/tree/main?tab=readme-ov-file#setup)
@@ -23,6 +23,11 @@ egoexo --help
 Will show you a summary of the available options. You will need to supply an
 output directory for where you wish to download the data to. You can do so by
 supplying an argument to `-o`, for example:
+
+>[!WARNING] 
+>**If confirmed:** this will attempt to **download 14TiB** which is the
+>*recommended set*. Please see the section on **[Filtering](#filtering) to
+>reduce the download** size to obtain only what you care to download.
 
 ```bash
 egoexo -o <out-dir>
