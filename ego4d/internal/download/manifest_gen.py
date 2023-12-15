@@ -333,9 +333,9 @@ if "annotations" in manifests:
         print(bn)
         benchmarks = []
         benchmark_name = "_".join(bn.split("_")[0:-1])
-        benchmarks = [benchmark_name]
-        if "profiency" in benchmark_name[0]:
-            benchmarks.append("profiency")
+        benchmarks = [benchmark_name] if len(benchmark_name) > 0 else None
+        if "proficiency" in benchmark_name:
+            benchmarks.append("proficiency")
 
         manifests["annotations"].append(
             ManifestEntry(
