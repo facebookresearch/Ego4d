@@ -62,7 +62,7 @@ to install the `ego4d` python module.
 ### Option 1: From the PyPi package
 
 
->![TIP]
+>[!TIP]
 >Please ensure you have a conda or pyenv environment created & activated. If you're unsure
 >on how to do so, you can follow [Option 2: Step 1](step-1-create-or-use-an-environment).
 
