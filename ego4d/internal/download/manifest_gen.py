@@ -87,7 +87,7 @@ for k, v in egoexo.items():
 
 take_by_take_uid = {x["take_uid"]: x for x in egoexo["takes"] + egoexo["takes_dropped"]}
 take_name_to_uid = {
-    t["root_dir"]: t["take_uid"] for t in (egoexo["takes"] + egoexo["takes_dropped"])
+    t["take_name"]: t["take_uid"] for t in (egoexo["takes"] + egoexo["takes_dropped"])
 }
 
 capture_cam_id_to_is_ego = {
@@ -116,7 +116,7 @@ for manifest_key in ["takes", "takes_dropped"]:
         continue
 
     for t in egoexo[manifest_key]:
-        root_dir = os.path.join("takes", t["root_dir"])
+        root_dir = t["root_dir"]
         paths = []
         for streams in t["frame_aligned_videos"].values():
             for vid in streams.values():
@@ -151,7 +151,7 @@ for manifest_key in ["takes", "takes_dropped"]:
 
 for c in tqdm(egoexo["captures"]):
     s3_bucket = c["_s3_root_dir"].split("/")[2]
-    root_dir = os.path.join("captures", c["root_dir"])
+    root_dir = c["root_dir"]
     traj_fp = c["_trajectory_s3_dir"]
     post_fp = c["_postsurvery_s3_path"]
     eye_gaze_fp = c["_gaze_s3_dir"]
