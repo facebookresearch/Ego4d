@@ -17,7 +17,7 @@ from tqdm.auto import tqdm
 
 
 ROOT_DIR = "/checkpoint/miguelmartin/egoexo_data/dev/"
-DS_TAKES_DIR = "/checkpoint/miguelmartin/egoexo/downscaled_takes/"
+DS_TAKES_DIR = "/checkpoint/miguelmartin/egoexo/downscaled_takes_public/"
 
 
 def call_ffmpeg(paths):
@@ -63,7 +63,7 @@ def main():
     num_machines: int = 50
     root_dir: str = ROOT_DIR
     ds_take_dir: str = DS_TAKES_DIR
-    root_dir = "/checkpoint/miguelmartin/egoexo_data/dev/"
+    root_dir = "/large_experiments/egoexo/v1/"
 
     takes_to_process = json.load(open(os.path.join(root_dir, "takes.json")))
 
