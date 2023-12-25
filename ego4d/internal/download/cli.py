@@ -27,12 +27,6 @@ U = TypeVar("U")
 def _path_ok(p: PathSpecification, args) -> bool:
     ok = True
     if (
-        args.uids is not None
-        and p.uids is not None
-        and len(set(p.uids) & args.uids) == 0
-    ):
-        ok = False
-    if (
         args.views is not None
         and p.views is not None
         and len(set(p.views) & args.views) == 0
@@ -55,12 +49,13 @@ def _manifest_ok(m: ManifestEntry, args) -> bool:
         and len(set(m.splits) & args.splits) == 0
     ):
         ok = False
-
     if (
         args.benchmarks is not None
         and m.benchmarks is not None
         and len(set(m.benchmarks) & args.benchmarks) == 0
     ):
+        ok = False
+    if args.uids is not None and m.uid is not None and len({m.uid} & args.uids) == 0:
         ok = False
     return ok
 
@@ -125,6 +120,12 @@ def main(args):
     args.universities = (
         set(args.universities) if args.universities is not None else None
     )
+
+    assert (
+        release_name is not None
+    ), """You must provide a release name via `--release`.
+If you meant to download the public release, please use the script `ego4d/egoexo/download/cli.py` instead.
+"""
 
     # TODO: remove iopath dependency
     pathmgr = PathManager()
@@ -246,7 +247,7 @@ def main(args):
         size / 1024**3 for _, size in existing_paths if size is not None
     )
     existing_len = len(existing_paths)
-    progress_percent = existing_gib / total_size_gib
+    progress_percent = existing_gib / total_size_gib if total_size_gib > 0 else 1.0
 
     print(
         f"Downloaded: {progress_percent:.3%} = {existing_gib:.3f}GiB / {total_size_gib:.3f}GiB ({existing_len} / {len(path_size_pairs)} files) downloaded"
@@ -338,7 +339,7 @@ def main(args):
     print(flush=True)
 
 
-def create_arg_parse(script_name: str, base_dir: str, release_name: str):
+def create_arg_parse(script_name: str, base_dir: str, release_name: Optional[str]):
     parser = argparse.ArgumentParser(
         usage=f"""
     EgoExo downloader CLI
@@ -448,7 +449,10 @@ Data relating to a particular university. Valid values are:
         action="store_true",
     )
     parser.add_argument(
-        "--release", type=str, default=release_name, help="name/version of the release"
+        "--release",
+        type=str,
+        default=release_name,
+        help="name/version of the release",
     )
     parser.add_argument(
         "--s3_profile",
@@ -468,7 +472,7 @@ Data relating to a particular university. Valid values are:
 def internal_main():
     parser = create_arg_parse(
         script_name="egoexo_internal",
-        release_name="dev",
+        release_name=None,
         base_dir="s3://ego4d-consortium-sharing/egoexo/releases/",
     )
     args = parser.parse_args()
