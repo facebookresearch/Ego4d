@@ -21,7 +21,7 @@ def _get_location(bucket_name: str) -> str:
 def get_config(
     num_workers: int = 10,
     connect_timeout: int = 180,
-    max_attempts: int = 3,
+    max_attempts: int = 10,
     region_name: Optional[str] = None,
 ):
     config = bclient.Config(
@@ -41,7 +41,7 @@ def get_client(
     bucket_name: str,
     num_workers: int = 10,
     connect_timeout: int = 180,
-    max_attempts: int = 3,
+    max_attempts: int = 10,
     profile: Optional[str] = None,
 ) -> S3Client:
     session = get_session(
@@ -62,7 +62,7 @@ def get_resource(
     profile: str,
     num_workers: int = 10,
     connect_timeout: int = 180,
-    max_attempts: int = 3,
+    max_attempts: int = 10,
 ) -> Any:
     session = get_session(profile=profile)
     return session.resource(
