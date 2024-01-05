@@ -61,6 +61,8 @@ class Triangulator:
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
     def run(self, debug=False):
         points_3d = {}
+        inliers_3d = {}
+        errors_3d = {}
 
         # proj_matricies is the extrinsics
         # points are the rays in 3D
@@ -100,7 +102,7 @@ class Triangulator:
                             camera_name
                         )  # camera chosen for triangulation for this point
 
-                # ---------------------------------------------------------------------------------------------
+                # ---------------------------------------------------------------------------------------------                 
                 if len(points) >= self.min_views:
                     # triangulate for a single point
                     (
@@ -133,12 +135,15 @@ class Triangulator:
                     error += reprojection_error_vector.mean()
 
                     points_3d[human_name][keypoint_idx, :3] = point_3d
-                    points_3d[human_name][keypoint_idx, 3] = 1  # mark as valid
+                    points_3d[human_name][keypoint_idx, 3] = 1  # mark as valid          
+
+                    inliers_3d[keypoint_idx] = [choosen_cameras[index] for index in inlier_views]
+                    errors_3d[keypoint_idx] = reprojection_error_vector                    
 
             if debug:
                 print("{}, error:{}".format(human_name, error))
 
-        return points_3d["aria01"]
+        return points_3d["aria01"], inliers_3d, errors_3d 
 
     # Original implementation
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72

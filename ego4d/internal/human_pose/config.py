@@ -71,7 +71,7 @@ class TriangulationConfig:
 @dataclass
 class Config:
     legacy: bool
-    data_dir: str
+    data_dir: str    
     cache_root_dir: str
     root_repo_dir: str
     gpu_id: int  # use -1 for CPU
