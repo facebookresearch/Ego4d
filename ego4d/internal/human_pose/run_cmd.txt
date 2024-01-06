@@ -1,9 +1,9 @@
-batch_job_name=project_retriangulation
+batch_job_name=project_retriangulation_v2
 frame_start=0
 frame_end=1000000000
 min_area_ratio=0.003
 storage_level=30
-cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation/
+cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_v2/
 data_dir=/large_experiments/egoexo/v1
 partition=learnaccel
 run_type=submitit
@@ -37,6 +37,7 @@ repo_root_dir=/private/home/${USER}/code/Ego4d
 /checkpoint/miguelmartin/egoexo_data/public_release/
 
 cd /private/home/suyogjain/egoexo/Ego4d/ego4d/internal/human_pose
+cd /private/home/suyogjain/egoexo/jan24/Ego4d/ego4d/internal/human_pose
 bash
 conda activate human_pose_sj
  aws s3 ls s3://ego4d-consortium-sharing/egoexo/releases/dev/annotations/ego_pose_latest/body/annotation/
@@ -45,4 +46,6 @@ Rerun these because of gopro issues
 
 take_name=upenn_0727_Partner_Dance_4_2_2+uniandes_bouldering_018_5+uniandes_bouldering_034_102+uniandes_bouldering_034_103+upenn_0713_Dance_5_3+upenn_0713_Dance_5_4+upenn_0713_Dance_5_6+upenn_0719_Piano_1_2+upenn_0719_Piano_1_3+upenn_0719_Piano_1_4+upenn_0720_Dance_4_2+upenn_0721_Piano_2_2+upenn_0721_Piano_2_3+upenn_0722_Guitar_1_3+upenn_0722_Violin_1_2+upenn_0722_Violin_1_3+cmu_soccer11_1+cmu_soccer11_3+georgiatech_bike_12_10+georgiatech_bike_12_12+georgiatech_bike_12_2+georgiatech_bike_12_4+georgiatech_bike_12_6+georgiatech_bike_12_8+georgiatech_covid_15_8+iiith_cooking_19_1+indiana_bike_01_1+indiana_bike_01_2+indiana_music_10_3+indiana_music_12_3+nus_cpr_06_2+nus_cpr_14_1+sfu_cooking_007_1+sfu_cooking_007_7
 take_name=georgiatech_covid_15_8+iiith_cooking_19_1+sfu_cooking_007_1+sfu_cooking_007_7
+
+Test hand pose implementation with this: take_name=indiana_bike_06_9
 
