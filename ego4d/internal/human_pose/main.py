@@ -49,6 +49,12 @@ from tqdm.auto import tqdm
 pathmgr = PathManager()
 pathmgr.register_handler(S3PathHandler(profile="default"))
 
+cvpr_data_dir="/large_experiments/egoexo/cvpr"
+project_root_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_test/"
+
+annotation_base_dir = os.path.join(project_root_dir, "ego_pose_latest")
+annotation_output_base_dir = os.path.join(project_root_dir, "ego_pose_post_triangulation")
+
 @dataclass
 class Context:
     data_dir: str    
@@ -142,8 +148,7 @@ def get_context(config: Config) -> Context:
         ), f"Found too many ({len(ego_cam_names)}) ego cameras: {ego_cam_names}"
 
     all_cams = ego_cam_names + exo_cam_names
-    dataset_dir = cache_dir
-    # dataset_dir = os.path.join(cache_dir, config.mode_preprocess.dataset_name)
+    dataset_dir = cache_dir    
     frame_rel_dir = os.path.join(cache_rel_dir, "frames")
 
     return Context(
@@ -241,8 +246,7 @@ def mode_preprocess(config: Config):
             ),
             "_raw_camera": cam_data,
         }
- 
-    cvpr_data_dir="/large_experiments/egoexo/cvpr"
+  
     capture_dir = os.path.join(
         cvpr_data_dir, "captures", ctx.take["capture"]["root_dir"]
     )
@@ -351,7 +355,6 @@ def extract_camera_data(config: Config):
         "slam-right": "1201-2",
     }
 
-    cvpr_data_dir="/large_experiments/egoexo/cvpr"
     capture_dir = os.path.join(
         cvpr_data_dir, "captures", ctx.take["capture"]["root_dir"]
     )
@@ -574,6 +577,8 @@ def convert_to_array_hand(pose2d, keypoints_list, all_cam_list):
                 confidence = 1
                 if ann['placement']=='auto':
                     confidence = 0
+                else:
+                    print(cam_name, kp_name, ann['x'], ann['y'])
                 pose_array.append([ann['x'], ann['y'], confidence])
             else:
                 pose_array.append([0, 0, 0])
@@ -651,8 +656,7 @@ def mode_body_pose3d(config: Config, annot_type='annotation'):
         )
         for exo_camera_name in ctx.exo_cam_names
     }    
-
-    annotation_base_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation/ego_pose_latest/"
+    
     annotation_dir = os.path.join(annotation_base_dir, skel_type, annot_type)    
     annotation_json_path=os.path.join(annotation_dir, ctx.take["take_uid"]+".json")    
     print(f"Loading annotation from {annotation_json_path}")
@@ -700,7 +704,7 @@ def mode_body_pose3d(config: Config, annot_type='annotation'):
                                             
         print('-'*80)
 
-    annotation_output_base_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation/ego_pose_post_triangulation_v2/"
+    
     annotation_output_dir = os.path.join(annotation_output_base_dir, skel_type, annot_type)    
     os.makedirs(annotation_output_dir, exist_ok=True)
 
@@ -739,7 +743,6 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
         for exo_camera_name in ctx.exo_cam_names
     }    
 
-    cvpr_data_dir="/large_experiments/egoexo/cvpr"
     capture_dir = os.path.join(
         cvpr_data_dir, "captures", ctx.take["capture"]["root_dir"]
     )
@@ -754,8 +757,7 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
         f"{ctx.ego_cam_names[0]}_slam-left": "1201-1",
         f"{ctx.ego_cam_names[0]}_slam-right": "1201-2",
     }
-
-    annotation_base_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation/ego_pose_latest/"
+    
     annotation_dir = os.path.join(annotation_base_dir, skel_type, annot_type)    
     annotation_json_path=os.path.join(annotation_dir, ctx.take["take_uid"]+".json")    
     print(f"Loading annotation from {annotation_json_path}")
@@ -789,7 +791,7 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
 
                 
                 # triangulate
-                print(frame_number, all_used_cam, aria_exo_cameras.keys(), multi_view_pose2d.keys())
+                print(frame_number, all_used_cam, aria_exo_cameras.keys(), multi_view_pose2d.keys())                
                 triangulator = Triangulator(
                     frame_number,
                     all_used_cam,
@@ -797,9 +799,11 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
                     multi_view_pose2d,
                     keypoint_thres=tri_threshold,
                     num_keypoints=42,
-                    inlier_reproj_error_check=True,
+                    inlier_reproj_error_check=False,
+                    #inlier_reproj_error_check=True,
                 )
-                pose3d_new, inlier_views, reprojection_error_vector = triangulator.run(debug=False)  ## N x 4 (x, y, z, confidence)                                
+                pose3d_new, inlier_views, reprojection_error_vector = triangulator.run(debug=True, keypoints_list=hand_keypoints_list)  ## N x 4 (x, y, z, confidence)                                
+                #pose3d_new = triangulator.run_linear()
                 if "annotation3D" not in frame_data:
                     pose3d = {}
                 else:           
@@ -829,19 +833,18 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
         if count==3:
             break
 
-    #annotation_output_base_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation/ego_pose_post_triangulation/"
-    #annotation_output_dir = os.path.join(annotation_output_base_dir, skel_type, annot_type)    
-    #os.makedirs(annotation_output_dir, exist_ok=True)
+    
+    annotation_output_dir = os.path.join(annotation_output_base_dir, skel_type, annot_type)    
+    os.makedirs(annotation_output_dir, exist_ok=True)
 
-    #annotation_output_json_path=os.path.join(annotation_output_dir, ctx.take["take_uid"]+".json")    
-    #print(f"Saving retriangulated annotations to {annotation_output_json_path}")
-    #json.dump(annotation, open(annotation_output_json_path, "w"))            
+    annotation_output_json_path=os.path.join(annotation_output_dir, ctx.take["take_uid"]+".json")    
+    print(f"Saving retriangulated annotations to {annotation_output_json_path}")
+    json.dump(annotation, open(annotation_output_json_path, "w"))            
 
-    #annotation_output_json_path=os.path.join(annotation_output_dir, ctx.take["take_uid"]+"_projected.json")    
-    #print(f"Saving retriangulated annotations to {annotation_output_json_path}")
-    #json.dump(projected_2d_annotation, open(annotation_output_json_path, "w"))            
-
-
+    annotation_output_json_path=os.path.join(annotation_output_dir, ctx.take["take_uid"]+"_projected.json")    
+    print(f"Saving retriangulated annotations to {annotation_output_json_path}")
+    json.dump(projected_2d_annotation, open(annotation_output_json_path, "w"))  
+    
 def add_arguments(parser):
     parser.add_argument("--config-name", default="georgiatech_covid_02_2")
     parser.add_argument(

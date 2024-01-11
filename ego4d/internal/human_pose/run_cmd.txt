@@ -1,18 +1,23 @@
-batch_job_name=project_retriangulation_v2
+batch_job_name=project_retriangulation_test
 frame_start=0
 frame_end=1000000000
 min_area_ratio=0.003
 storage_level=30
-cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_v2/
+cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_test/
 data_dir=/large_experiments/egoexo/v1
 partition=learnaccel
-run_type=submitit
-steps=update_hand_annotations
-take_name=cmu_bike01_1+cmu_bike01_2+cmu_bike01_3+cmu_bike01_4+cmu_bike01_5
 
-take_name=sfu_cooking_007_7
+run_type=submitit
 run_type=local
-steps=extract_camera_info+preprocess+update_body_annotations+update_body_automatic+update_hand_annotations
+
+take_name=indiana_bike_06_9
+take_name=cmu_bike01_1+cmu_bike01_2+cmu_bike01_3+cmu_bike01_4+cmu_bike01_5
+take_name=sfu_cooking_007_7
+
+
+steps=extract_camera_info+preprocess
+steps=update_body_annotations+update_body_automatic
+steps=update_hand_annotations
 
 take_name=uniandes_basketball_003_28
 python launch_main.py \

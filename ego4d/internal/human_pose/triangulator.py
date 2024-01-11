@@ -59,10 +59,13 @@ class Triangulator:
                 self.pose2d[human_name][camera_name] = keypoints
 
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
-    def run(self, debug=False):
+    def run(self, debug=False, keypoints_list=None):
         points_3d = {}
         inliers_3d = {}
         errors_3d = {}
+        if keypoints_list is None:
+            keypoints_list = COCO_KP_ORDER
+
 
         # proj_matricies is the extrinsics
         # points are the rays in 3D
@@ -125,7 +128,7 @@ class Triangulator:
                                 [
                                     f"ts:{self.time_stamp}",
                                     f"kp_idx:{keypoint_idx}",
-                                    f"kp_name:{COCO_KP_ORDER[keypoint_idx]}",
+                                    f"kp_name:{keypoints_list[keypoint_idx]}",
                                     f"kps_error:{reprojection_error_vector.mean():.5f}",
                                     f"inliers:{len(inlier_views)}",
                                     f"{[choosen_cameras[index] for index in inlier_views]}",
@@ -145,6 +148,54 @@ class Triangulator:
 
         return points_3d["aria01"], inliers_3d, errors_3d 
 
+    def run_linear(self):
+        points_3d = {}        
+   
+        # proj_matricies is the extrinsics
+        # points are the rays in 3D
+        for human_name in sorted(self.pose2d.keys()):
+            points_3d[human_name] = np.zeros((self.num_keypoints, 3))
+
+            for keypoint_idx in range(self.num_keypoints):
+                proj_matricies = []
+                points = []
+                choosen_cameras = []
+
+                for view_idx, camera_name in enumerate(self.pose2d[human_name].keys()):
+
+                    point_2d = self.pose2d[human_name][camera_name][
+                        keypoint_idx, :2
+                    ]  # chop off the confidnece
+                    confidence = self.pose2d[human_name][camera_name][keypoint_idx, 2]
+                    camera = self.cameras[camera_name]
+
+                    # ---------use high confidence predictions------------------
+                    if confidence > self.keypoint_thres:
+                        extrinsics = camera.extrinsics[:3, :]  # 3x4
+
+                        # get the ray in 3D
+
+                        ray_3d = ximage_to_xdevice(point_2d, camera)  # 1 x 2
+                        ray_3d = np.append(ray_3d, 1)
+
+                        assert len(ray_3d) == 3
+
+                        point = ray_3d.copy()
+                        point[2] = confidence  # add keypoint confidence to the point
+                        points.append(point)
+                        proj_matricies.append(extrinsics)
+                        choosen_cameras.append(
+                            camera_name
+                        )  # camera chosen for triangulation for this point
+
+                # ---------------------------------------------------------------------------------------------                 
+                if len(points) >= self.min_views:                
+                    # triangulate for a single point                    
+                    point_3d = self.triangulate_point_from_multiple_views_linear(proj_matricies, points)                  
+                    points_3d[human_name][keypoint_idx, :] = point_3d
+                                        
+        return points_3d["aria01"]
+    
     # Original implementation
     # https://github.com/karfly/learnable-triangulation-pytorch/blob/9d1a26ea893a513bdff55f30ecbfd2ca8217bf5d/mvn/models/triangulation.py#L72
     def triangulate_ransac(
@@ -172,6 +223,7 @@ class Triangulator:
 
         # All possible combinations of camera view
         all_comb = itertools.combinations(list(range(n_views)), 2)
+        #all_comb = itertools.combinations(list(range(n_views)), n_views)
         all_comb_list = [list(curr_comb) for curr_comb in all_comb]
         if sample_all_combinations:
             n_iters = len(all_comb_list)
@@ -286,6 +338,10 @@ class Triangulator:
             point_3d numpy array of shape (3,): triangulated point
         """
         assert len(proj_matricies) == len(points)
+        
+        proj_matricies = np.array(proj_matricies)
+        points = np.array(points)
+        n_views = len(points)
 
         points_confidence = points[:, 2].copy()
         points = points[:, :2].copy()
