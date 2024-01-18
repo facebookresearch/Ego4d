@@ -25,5 +25,3 @@ UNIV_TO_BUCKET = {
 }
 
 BUCKET_TO_UNIV = {v: k for k, v in UNIV_TO_BUCKET.items()}
-BUCKET_TO_UNIV["ego4d-sfu"] = "sfu"
-BUCKET_TO_UNIV["ego4d-unc"] = "unc"
