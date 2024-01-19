@@ -41,12 +41,12 @@ manifests = {
     "eye_gaze": [],
     "point_cloud": [],
     "capture_raw_stitched_videos": [],
+    "downscaled_takes/448": [],
+    "features/omnivore_video": [],
     "capture_raw_vrs": [],
     # TODO: later date
     # "takes_dropped": [],
     # "ego_pose_pseudo_gt": [],
-    # "features/omnivore_video": [],
-    # "downscaled_takes": [],
     # "narrate_and_act_transc": [],
 }
 
@@ -169,7 +169,7 @@ for c in tqdm(egoexo["captures"]):
     for bn, s3_path in traj_files:
         ext = os.path.splitext(bn)[-1]
         assert ext.startswith(".")
-        if "global_points" in bn:
+        if "semidense" in bn:
             point_cloud_paths.append(
                 PathSpecification(
                     source_path=s3_path,
@@ -407,7 +407,7 @@ if "annotations" in manifests:
                         )
                     )
 
-if "downscaled_takes" in manifests:
+if "downscaled_takes/448" in manifests:
     downscaled_takes = downloader.ls(
         os.path.join(release_dir, "downscaled_takes/"), recursive=True
     )
@@ -427,9 +427,8 @@ if "downscaled_takes" in manifests:
         )
 
     for take_uid, paths in by_take.items():
-        manifests["downscaled_takes"].append(
+        manifests["downscaled_takes/448"].append(
             ManifestEntry(
-                name="448",
                 uid=take_uid,
                 paths=paths,
                 benchmarks=take_uid_to_benchmarks.get(take_uid, None),
@@ -448,7 +447,6 @@ if "features/omnivore_video" in manifests:
                 manifests[f"features/{feature_name}"].append(
                     ManifestEntry(
                         uid="omnivore_video_config",
-                        name="config",
                         paths=[
                             PathSpecification(
                                 source_path=path,
@@ -462,13 +460,19 @@ if "features/omnivore_video" in manifests:
             if file_name == "" or file_name == "manifest.json":
                 continue
             take_uid, cam_id, stream_id = file_name.split("_")
+            t = take_by_take_uid[take_uid]
+            vid_k = (t["capture_uid"], vid.get("cam_id"))
+            is_ego = capture_cam_id_to_is_ego.get(vid_k)
+            views = None
+            if is_ego is not None:
+                views = ["ego"] if is_ego else ["exo"]
             by_take[take_uid].append(
                 PathSpecification(
                     source_path=path,
                     relative_path=f"features/{feature_name}/{file_name}",
+                    views=views,
+                    universities=[t["university_name"]],
                     file_type="pt",
-                    views=None,  # TODO
-                    universities=None,  # TODO
                 )
             )
 

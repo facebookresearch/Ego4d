@@ -7,7 +7,7 @@ io:
   dataset_version: egoexo
   uid_list: null
   video_limit: -1
-  out_path: /checkpoint/miguelmartin/egoexo_features/omnivore
+  out_path: /checkpoint/miguelmartin/egoexo_features/omnivore_public
   debug_path: /checkpoint/miguelmartin/egoexo_features/omnivore_debug
   debug_mode: false
   exclude_no_audio: false
@@ -28,13 +28,13 @@ inference_config:
 schedule_config:
   run_locally: false
   log_folder: slurm_log/%j
-  timeout_min: 1000
+  timeout_min: 250
   constraint: volta
   slurm_partition: eht
   slurm_array_parallelism: 256
   gpus_per_node: 1
   cpus_per_task: 10
-  overhead: 1.2
+  overhead: 1.3
   time_per_forward_pass: 3.1
   schedule_time_per_node: 10.0
 model_config:
