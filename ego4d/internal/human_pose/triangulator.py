@@ -144,7 +144,7 @@ class Triangulator:
                     errors_3d[keypoint_idx] = reprojection_error_vector                    
 
             if debug:
-                print("{}, error:{}".format(human_name, error))
+                print("{}, error:{}\n".format(human_name, error))
 
         return points_3d["aria01"], inliers_3d, errors_3d 
 

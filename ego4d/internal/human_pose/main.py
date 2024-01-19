@@ -522,7 +522,7 @@ def calculate_reprojection_errors(ctx, exo_cameras, pose3d_new, multi_view_pose2
 
 def transform(pose3d_new, pose3d, body_keypoints_list):
     keypoints_3d = dict()
-    print("3D pose updates | Advanced")
+    print("3D pose updates")
     for kp_id in range(len(body_keypoints_list)):
         kp_name = body_keypoints_list[kp_id]['label'].lower()
         if kp_name in pose3d:            
@@ -541,7 +541,7 @@ def transform(pose3d_new, pose3d, body_keypoints_list):
 
 def transform_basic(pose3d_new, body_keypoints_list):
     keypoints_3d = dict()
-    print("3D pose updates | Basic")
+    print("3D pose updates")
     for kp_id in range(len(body_keypoints_list)):
         kp_name = body_keypoints_list[kp_id]['label'].lower()
         is_valid = np.sum(pose3d_new[kp_id,:])!=0
@@ -559,7 +559,7 @@ def transform_basic(pose3d_new, body_keypoints_list):
 
 
 def convert_to_array_hand(pose2d, keypoints_list, all_cam_list):
-    pose2d_transformed = dict()
+    pose2d_transformed = dict()    
     for cam_name in pose2d:
         target_cam_name = cam_name
         if cam_name.find('aria')!=-1:
@@ -578,17 +578,18 @@ def convert_to_array_hand(pose2d, keypoints_list, all_cam_list):
                 if ann['placement']=='auto':
                     confidence = 0
                 else:
-                    print(cam_name, kp_name, ann['x'], ann['y'])
+                    print('Manual annotation (x, y):', cam_name, kp_name, ann['x'], ann['y'])
                 pose_array.append([ann['x'], ann['y'], confidence])
             else:
                 pose_array.append([0, 0, 0])
 
         pose_array = np.array(pose_array)
-        
         if cam_name.find('aria')!=-1: 
             #pose_array = aria_extracted_to_original(pose_array)
-            # Transform annotations to ARIA rotated frame            
-            pose_array = aria_original_to_extracted(pose_array)                                   
+            # Transform annotations to ARIA rotated frame
+            print("Transformed original keypoints to ARIA rotated points")            
+            pose_array = aria_original_to_extracted(pose_array)                                               
+        print()        
         
         pose2d_transformed[target_cam_name] = pose_array
     return pose2d_transformed
@@ -768,13 +769,14 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
     print(f"Num annotations found:", len(annotation))   
     count = 0 
     for frame_number in annotation:        
-        num_annotators = len(annotation[frame_number])
+        num_annotators = len(annotation[frame_number])        
         print(frame_number, num_annotators)
         projected_2d_annotation[frame_number] = list()
         
         for annotation_index in range(num_annotators):
             frame_data = annotation[frame_number][annotation_index]
-            pose2d = frame_data["annotation2D"]            
+            pose2d = frame_data["annotation2D"]
+            print(f"Loading annotation for cams {all_used_cam}\n")          
             multi_view_pose2d = convert_to_array_hand(pose2d, hand_keypoints_list, all_used_cam)                   
             if len(multi_view_pose2d.keys())==0:
                 print("No camera annotations found")                
@@ -789,9 +791,8 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
                         aria_camera_models[stream_name_to_id[ego_cam_name]],
                     )
 
-                
-                # triangulate
-                print(frame_number, all_used_cam, aria_exo_cameras.keys(), multi_view_pose2d.keys())                
+                print(f'Triangulating frame {frame_number} using cams {all_used_cam}')
+                # triangulate                
                 triangulator = Triangulator(
                     frame_number,
                     all_used_cam,
@@ -802,19 +803,13 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
                     inlier_reproj_error_check=False,
                     #inlier_reproj_error_check=True,
                 )
-                pose3d_new, inlier_views, reprojection_error_vector = triangulator.run(debug=True, keypoints_list=hand_keypoints_list)  ## N x 4 (x, y, z, confidence)                                
-                #pose3d_new = triangulator.run_linear()
+                pose3d_new, inlier_views, reprojection_error_vector = triangulator.run(debug=True, keypoints_list=hand_keypoints_list)  ## N x 4 (x, y, z, confidence)                                                
                 if "annotation3D" not in frame_data:
                     pose3d = {}
                 else:           
                     pose3d = frame_data["annotation3D"]
                                 
-                inlier_kp = get_inlier_by_camera_hand(all_used_cam, inlier_views)                
-                
-                #print(pose3d_new)
-                #print(pose3d)                                
-                print(inlier_kp)            
-                
+                inlier_kp = get_inlier_by_camera_hand(all_used_cam, inlier_views)                                
                 proj_error, projected_2d = calculate_reprojection_errors_hand(all_used_cam, aria_exo_cameras, pose3d_new, multi_view_pose2d, inlier_kp)                            
                 
                 projected_2d_annotation[frame_number].append(projected_2d)
