@@ -117,13 +117,19 @@ for take_uid, split in split_data["take_uid_to_split"].items():
 take_uid_to_benchmarks = defaultdict(list)
 take_uid_to_benchmarks.update(split_data.get("take_uid_to_benchmark", {}))
 
-s3_buckets = {x["university_id"] for x in egoexo["takes"] if x["take_uid"] in egoexo["released_takes"]}
+s3_buckets = {
+    x["university_id"]
+    for x in egoexo["takes"]
+    if x["take_uid"] in egoexo["released_takes"]
+}
 
 manifests["downscaled_takes/448"] = []
 if "downscaled_takes/448" in manifests:
     by_take = defaultdict(list)
     for bucket in s3_buckets:
-        ds_base_dir = os.path.join(f"s3://{bucket}/{base_release_dir}", "downscaled_takes/448/")
+        ds_base_dir = os.path.join(
+            f"s3://{bucket}/{base_release_dir}", "downscaled_takes/448/"
+        )
         print(ds_base_dir)
         for bn, path in downloader.ls(ds_base_dir, recursive=True):
             take_name = path.split("downscaled_takes/")[1].split("/")[1]
@@ -231,7 +237,7 @@ for manifest_key in ["takes", "takes_dropped"]:
                                 relative_path=os.path.join(root_dir, d, bn),
                                 views=None,
                                 universities=[t["university_name"]],
-                                file_type=ext[1:]
+                                file_type=ext[1:],
                             )
                         )
                     else:
@@ -241,7 +247,7 @@ for manifest_key in ["takes", "takes_dropped"]:
                                 relative_path=os.path.join(root_dir, d, bn),
                                 views=None,
                                 universities=[t["university_name"]],
-                                file_type=ext[1:]
+                                file_type=ext[1:],
                             )
                         )
 
@@ -256,7 +262,7 @@ for manifest_key in ["takes", "takes_dropped"]:
                             splits=take_uid_to_splits.get(take_uid, None),
                         )
                     )
-                
+
                 if d != "eye_gaze":
                     assert d == "trajectory"
                     manifests["take_trajectory"].append(
@@ -271,18 +277,21 @@ for manifest_key in ["takes", "takes_dropped"]:
             manifests["take_vrs"].append(
                 ManifestEntry(
                     uid=take_uid,
-                    paths=[PathSpecification(
-                        source_path=t["_vrs_all_streams_s3_path"],
-                        relative_path=os.path.join(root_dir, t["vrs_all_streams_relative_path"]),
-                        views=["ego"],
-                        universities=[t["university_name"]],
-                        file_type="vrs",
-                    )],
+                    paths=[
+                        PathSpecification(
+                            source_path=t["_vrs_all_streams_s3_path"],
+                            relative_path=os.path.join(
+                                root_dir, t["vrs_all_streams_relative_path"]
+                            ),
+                            views=["ego"],
+                            universities=[t["university_name"]],
+                            file_type="vrs",
+                        )
+                    ],
                     benchmarks=take_uid_to_benchmarks.get(take_uid, None),
                     splits=take_uid_to_splits.get(take_uid, None),
                 )
             )
-
 
         manifests[manifest_key].append(
             ManifestEntry(
@@ -593,7 +602,6 @@ if "narrate_and_act_transc" in manifests:
 all_bs = set()
 for k, v in manifests.items():
     out_dir = os.path.join(release_dir, f"{k}/")
-    # out_dir = os.path.join(f"s3://ego4d-consortium-sharing/egoexo-public/v1_test", f"{k}/")
     manifest_file = os.path.join(out_dir, "manifest.json")
     for m in v:
         for b in m.benchmarks or []:
