@@ -39,7 +39,8 @@ manifests = {
     "captures": [],
     "take_trajectory": [],
     "take_point_cloud": [],
-    "take_vrs": [],  # TODO
+    "take_vrs": [],
+    "take_vrs_noimagestream": [],
     "capture_trajectory": [],
     "capture_eye_gaze": [],
     "capture_point_cloud": [],
@@ -210,17 +211,6 @@ for manifest_key in ["takes", "takes_dropped"]:
 
         # add vrs path (no rgb stream)
         if t["has_trimmed_vrs"]:
-            sp = t["_vrs_s3_path"]
-            assert sp is not None
-            paths.append(
-                PathSpecification(
-                    source_path=sp,
-                    relative_path=os.path.join(root_dir, t["vrs_relative_path"]),
-                    views=["ego"],
-                    universities=[t["university_name"]],
-                    file_type="vrs",
-                )
-            )
             for d in ["trajectory", "eye_gaze"]:
                 d_paths = []
                 pc_paths = []
@@ -251,8 +241,6 @@ for manifest_key in ["takes", "takes_dropped"]:
                             )
                         )
 
-                paths.extend(pc_paths)
-                paths.extend(d_paths)
                 if len(pc_paths) > 0:
                     manifests["take_point_cloud"].append(
                         ManifestEntry(
@@ -274,12 +262,34 @@ for manifest_key in ["takes", "takes_dropped"]:
                         )
                     )
 
+            sp = t["_vrs_s3_path"]
+            assert sp is not None
+            manifests["take_vrs_noimagestream"].append(
+                ManifestEntry(
+                    uid=take_uid,
+                    paths=[
+                        PathSpecification(
+                            source_path=sp,
+                            relative_path=os.path.join(
+                                root_dir, t["vrs_relative_path"]
+                            ),
+                            views=["ego"],
+                            universities=[t["university_name"]],
+                            file_type="vrs",
+                        )
+                    ],
+                    benchmarks=take_uid_to_benchmarks.get(take_uid, None),
+                    splits=take_uid_to_splits.get(take_uid, None),
+                )
+            )
+            sp_all_streams = t["_vrs_all_streams_s3_path"]
+            assert sp_all_streams is not None
             manifests["take_vrs"].append(
                 ManifestEntry(
                     uid=take_uid,
                     paths=[
                         PathSpecification(
-                            source_path=t["_vrs_all_streams_s3_path"],
+                            source_path=sp_all_streams,
                             relative_path=os.path.join(
                                 root_dir, t["vrs_all_streams_relative_path"]
                             ),

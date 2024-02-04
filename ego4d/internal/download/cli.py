@@ -403,12 +403,20 @@ def create_arg_parse(script_name: str, base_dir: str, release_name: Optional[str
         "--parts",
         type=str,
         nargs="+",
-        default=["metadata", "captures", "takes", "take_trajectory", "annotations"],
+        default=[
+            "metadata",
+            "captures",
+            "takes",
+            "take_trajectory",
+            "take_vrs_noimagestream",
+            "annotations",
+        ],
         help="""
 What parts of the dataset to download, one of:
 - metadata
 - annotations
 - takes
+- take_vrs_noimagestream
 - take_trajectory
 - take_point_cloud
 - take_vrs
