@@ -34,7 +34,7 @@ egoexo -o <out-dir>
 ```
 
 By default, this will download the recommended set of data. This is equivalent
-to providing `--parts metadata annotations takes captures trajectory`. This is quite large
+to providing `--parts metadata annotations takes captures take_trajectory`. This is quite large
 (~14TiB), and as such the rest of this document will describe how to filter down
 this set or include parts that are not in the "recommended" set.
 

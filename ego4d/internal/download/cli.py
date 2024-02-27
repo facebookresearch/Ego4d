@@ -24,6 +24,11 @@ T = TypeVar("T")
 U = TypeVar("U")
 
 
+def _s3_path_join(a: str, b: str) -> str:
+    assert a.startswith("s3://")
+    return os.path.join(a, b).replace("\\", "/")  # hacky, but it works
+
+
 def _path_ok(p: PathSpecification, args) -> bool:
     ok = True
     if (
@@ -175,17 +180,18 @@ If you meant to download the public release, please use the script `ego4d/egoexo
     os.makedirs(out_dir, exist_ok=True)
     assert os.path.isdir(out_dir), f"output dir {out_dir} is not a directory"
 
-    release_dir = os.path.join(base_dir, release_name)
+    release_dir = _s3_path_join(base_dir, release_name)
     if not release_dir.endswith("/"):
         release_dir += "/"
 
     num_paths = 0
     all_paths = []
+    part_errs = []
     for part in parts:
-        manifest_path = os.path.join(release_dir, part, "manifest.json")
-        assert pathmgr.exists(
-            manifest_path
-        ), f"{part} does not have a manifest path (looking at {manifest_path})"
+        manifest_path = _s3_path_join(_s3_path_join(release_dir, part), "manifest.json")
+        if not pathmgr.exists(manifest_path):
+            part_errs.append(part)
+            continue
         ms = manifest_loads(pathmgr.open(manifest_path).read())
         for m in ms:
             num_paths += len(m.paths)
@@ -193,6 +199,27 @@ If you meant to download the public release, please use the script `ego4d/egoexo
                 continue
 
             all_paths.extend([p for p in m.paths if _path_ok(p, args)])
+
+    if len(part_errs) == len(parts):
+        print("ERROR: could not get manifests for all parts (nothing to download)")
+        print(
+            """NOTE: Did you configure your AWS client correctly? See: https://github.com/facebookresearch/Ego4d/issues/277
+
+This could also be due to your internet connection.
+
+If you are located in China, please try using a VPN. Please refer to these posts:
+- https://github.com/facebookresearch/Ego4d/issues/223
+- https://github.com/facebookresearch/Ego4d/issues/162
+- https://github.com/facebookresearch/Ego4d/issues/284
+"""
+        )
+        print("Quitting ...")
+        sys.exit(1)
+    elif len(part_errs) > 0:
+        print(f"ERROR: some supplied parts ({part_errs}) do not exist")
+        print("NOTE: did you spell the parts correctly?")
+        print("Quitting ...")
+        sys.exit(2)
 
     if num_paths != len(all_paths):
         print(f"Filtered {num_paths} -> {len(all_paths)} files")
@@ -214,16 +241,25 @@ If you meant to download the public release, please use the script `ego4d/egoexo
     ]
     all_s3_stat_failures = len(s3_zero_sizes) + len(s3_stat_failures)
     if all_s3_stat_failures > 0:
+        bucket_failures = {
+            path.source_path.split("s3://")[1].split("/")[0]
+            for path, _ in s3_stat_failures
+        }
         print(
-            f"WARN: failed to get stats for {all_s3_stat_failures} files, will skip. [zero_size={len(s3_zero_sizes)}, exceptions={all_s3_stat_failures}]"
+            f"""WARN: failed to get stats for {all_s3_stat_failures} files, will skip. [zero_size={len(s3_zero_sizes)}, exceptions={all_s3_stat_failures}.
+
+This could be due to your internet connection.
+
+If you are located in China, please try using a VPN. Please refer to these posts:
+- https://github.com/facebookresearch/Ego4d/issues/223
+- https://github.com/facebookresearch/Ego4d/issues/162
+- https://github.com/facebookresearch/Ego4d/issues/284
+
+Additional debugging information:
+- S3 Buckets failed: {bucket_failures}
+"""
         )
-        print(
-            "*** BUCKET FAILURES ***: ",
-            {
-                path.source_path.split("s3://")[1].split("/")[0]
-                for path, _ in s3_stat_failures
-            },
-        )
+
     total_size_bytes = sum(x for _, x in path_size_pairs if x is not None)
     total_size_gib = total_size_bytes / 1024**3
 
@@ -349,9 +385,9 @@ def create_arg_parse(script_name: str, base_dir: str, release_name: Optional[str
 
     Advanced usage examples:
         - Download point clouds and annotations 
-            {script_name} -o <out_dir> --parts annotations point_cloud -y
-        - Download VRS files for a capture
-            {script_name} -o <out_dir> --parts capture_raw_vrs --uids <uid1>
+            {script_name} -o <out_dir> --parts annotations take_point_cloud -y
+        - Download VRS files (with RGB stream) for a take
+            {script_name} -o <out_dir> --parts take_vrs --uids <uid1>
 
 """
     )
@@ -367,9 +403,28 @@ def create_arg_parse(script_name: str, base_dir: str, release_name: Optional[str
         "--parts",
         type=str,
         nargs="+",
-        default=["metadata", "captures", "takes", "trajectory", "annotations"],
+        default=[
+            "metadata",
+            "captures",
+            "takes",
+            "take_trajectory",
+            "take_vrs_noimagestream",
+            "annotations",
+        ],
         help="""
-What parts of the dataset to download, one of: {metadata, annotations, takes, captures, trajectory, eye_gaze, point_cloud, capture_raw_stitched_videos, capture_raw_vrs, ego_pose_pseudo_gt}
+What parts of the dataset to download, one of:
+- metadata
+- annotations
+- takes
+- take_vrs_noimagestream
+- take_trajectory
+- take_point_cloud
+- take_vrs
+- captures
+- capture_trajectory
+- capture_eye_gaze
+- downscaled_takes/448
+- features/omnivore_video
 
 By default the following parts will be downloaded: {metadata, captures, takes, trajectory, annotations}.
 

@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="ego4d",
-    version="1.5.2",
+    version="1.6.1",
     author="FAIR",
     author_email="info@ego4d-data.org",
     description="Ego4D Dataset CLI",
