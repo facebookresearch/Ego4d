@@ -204,7 +204,11 @@ def get_all_clips(video, video_length, sampler):
     annotation = {}
     n_clips = 0
     while True:
-        clip = sampler(last_clip_time, video_length, annotation)
+        try:
+            clip = sampler(last_clip_time, video_length, annotation)
+        except:
+            import traceback; traceback.print_exc()
+            breakpoint()
         last_clip_time = clip.clip_end_sec
         n_clips += 1
 

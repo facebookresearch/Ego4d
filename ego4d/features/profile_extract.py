@@ -24,10 +24,12 @@ def profile_extraction(config: FeatureExtractConfig):
 
     batch_sizes = [1]
     num_workers = [8]
-    prefetch_factor = [2]  # , 3, 4, 5]
+    # num_workers = [0]
+    prefetch_factor = [2]
+    # prefetch_factor = [None]
     model = load_model(config)
 
-    num_examples = -1
+    num_examples = 250
 
     print(
         "prefetch_factor,batch_size,num_workers,total,mean,forward_pass,to_load,transfer_to_device"  # noqa
