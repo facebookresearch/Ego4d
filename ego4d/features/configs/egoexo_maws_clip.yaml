@@ -28,7 +28,7 @@ inference_config:
 schedule_config:
   run_locally: false
   log_folder: slurm_log/%j
-  timeout_min: 300
+  timeout_min: 180
   constraint: volta
   slurm_partition: eht
   slurm_array_parallelism: 256
@@ -41,15 +41,5 @@ model_config:
   model_name: "vit_2b14_xlmr_l"
   base_model: "maws_clip"
   input_type: "video"
-  side_size: 224
-  crop_size: 224
-  mean:
-  - 0.485
-  - 0.456
-  - 0.406
-  std:
-  - 0.229
-  - 0.224
-  - 0.225
 model_module_str: ego4d.features.models.maws
 check_fv_count: false  # doing this due to variable frame rate

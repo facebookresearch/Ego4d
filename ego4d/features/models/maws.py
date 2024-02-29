@@ -25,10 +25,6 @@ class ModelConfig(BaseModelConfig):
     model_name: str = "vit_2b14_xlmr_l"
     base_model: str = "maws_clip"
     input_type: str = "video"
-    side_size: int = 224
-    crop_size: int = 224
-    mean: Tuple[float] = (0.485, 0.456, 0.406)
-    std: Tuple[float] = (0.229, 0.224, 0.225)
 
 
 class WrapModel(Module):
@@ -63,9 +59,8 @@ def load_model(
 def norm_pixels(x):
     return x / 255.0
 
-def video_to_image(x, size):
-    # x = x.permute(1, 2, 0, 3, 4).view(-1, 3, size, size)
-    x = x.permute(1, 0, 2, 3)
+def video_to_image(x):
+    x = x.permute(1, 0, 2, 3).squeeze(0)
     return x
 
 
@@ -73,10 +68,12 @@ def get_transform(inference_config: InferenceConfig, config: ModelConfig):
     assert inference_config.frame_window == 1
     transforms = [
         Lambda(norm_pixels),
-        NormalizeVideo(config.mean, config.std),
-        ShortSideScale(size=config.side_size),
-        CenterCropVideo(config.crop_size),
-        Lambda(functools.partial(video_to_image, size=config.crop_size)),
+        Lambda(video_to_image),
+        Resize(size=224, interpolation=3),  # pyre-ignore
+        CenterCrop(size=224),
+        Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        ),
     ]
 
     return ApplyTransformToKey(
