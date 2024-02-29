@@ -46,7 +46,7 @@ def _yuv_to_rgb(img: torch.Tensor) -> torch.Tensor:
     b = y + 2.029 * u
 
     rgb = torch.stack([r, g, b], -1)
-    return rgb.permute(3, 0, 1, 2)
+    return rgb
 
 
 class StridedReader:
@@ -79,12 +79,16 @@ class TorchAudioStreamReader(StridedReader):
         frame_window_size: int,
         stride: int,
         gpu_idx: int,
+        norm_pixel_scale: bool = True,
+        channel_first: bool = False,
     ):
         super().__init__(path, stride, frame_window_size)
 
         self.mean = mean
         self.crop = crop
         self.std = std
+        self.norm_pixel_scale = norm_pixel_scale
+        self.pixel_scale = 1.0 if norm_pixel_scale else 255
         self.resize = resize
         self.resize_transform = (
             ShortSideScale(self.resize) if self.resize is not None else None
@@ -95,6 +99,12 @@ class TorchAudioStreamReader(StridedReader):
         self.crop_transform = (
             CenterCropVideo(self.crop) if self.crop is not None else None
         )
+        self.has_transform = (
+            self.norm_transform is not None or 
+            self.crop_transform is not None or 
+            self.resize_transform is not None
+        )
+        self.channel_first = channel_first
         self.create_underlying_cont(gpu_idx)
 
     def create_underlying_cont(self, gpu_id):
@@ -102,9 +112,8 @@ class TorchAudioStreamReader(StridedReader):
 
         decoder_basename = self.meta["codec"]
         if self.gpu_id >= 0:
-            # TODO(miguelmartin): this resize may not work as it is:
-            # 1. not shortest side (can fix with -1xside knowing w/h of video)
-            # 2. unsure about the interpolation
+            # TODO(miguelmartin): 
+            # interpolation algorithm is known & seems to be implementation specific
             decoder_opt = (
                 # TODO(miguelmartin): this resize is not the shortest side scale
                 {"resize": f"{self.resize}x{self.resize}", "gpu": f"{gpu_id}"}
@@ -144,14 +153,35 @@ class TorchAudioStreamReader(StridedReader):
 
         assert fs is not None
         assert len(fs) == 1
-        ret = _yuv_to_rgb(fs[0])  # TODO: optimize me
-        assert ret.shape[1] == self.frame_window_size
-        if self.resize_transform is not None:
-            ret = self.resize_transform(ret)
-        if self.crop_transform is not None:
-            ret = self.crop_transform(ret)
-        if self.norm_transform is not None:
-            ret = self.norm_transform(ret)
+        ret = _yuv_to_rgb(fs[0])  # pyre-ignore
+        if self.has_transform:
+            ret = ret.permute(3, 0, 1, 2)
+            assert ret.shape[1] == self.frame_window_size
+            # NOTE: all transforms expect C, T, H, W
+            if self.resize_transform is not None:
+                ret = self.resize_transform(ret)
+            if self.crop_transform is not None:
+                ret = self.crop_transform(ret)
+            if not self.norm_pixel_scale:
+                ret = (ret * 255)
+            if self.norm_transform is not None:
+                ret = self.norm_transform(ret)
+            elif not self.norm_pixel_scale:
+                ret = ret.to(dtype=torch.uint8)
+
+            # C, T, H, W -> T, H, W, C
+            if not self.channel_first:
+                ret = ret.permute(1, 2, 3, 0)
+        elif self.channel_first:
+            # T, H, W, C -> C, T, H, W
+            ret = ret.permute(3, 0, 1, 2)
+            if self.norm_pixel_scale:
+                ret = (ret * 255)
+                ret = ret.to(dtype=torch.uint8)
+        else:
+            # T, H, W, C
+            pass
+
         return {
             "video": ret,
             "frame_start_idx": frame_i,
@@ -170,6 +200,8 @@ class PyAvReader(StridedReader):
         frame_window_size: int,
         stride: int,
         gpu_idx: int,
+        pixel_scale: float = 1.0,
+        channel_first: bool = False,
     ):
         super().__init__(path, stride, frame_window_size)
 
@@ -190,6 +222,13 @@ class PyAvReader(StridedReader):
             CenterCropVideo(self.crop) if self.crop is not None else None
         )
         self.path = path
+        self.pixel_scale = pixel_scale
+        self.has_transform = (
+            self.norm_transform is not None or 
+            self.crop_transform is not None or 
+            self.resize_transform is not None
+        )
+        self.channel_first = channel_first
         self.create_underlying_cont(gpu_idx)
 
     def create_underlying_cont(self, _):
@@ -212,18 +251,30 @@ class PyAvReader(StridedReader):
             fs.append(
                 (
                     f.pts,
-                    torch.tensor(f.to_ndarray(format="rgb24"), dtype=torch.float32)
-                    / 255,
+                    (torch.tensor(f.to_ndarray(format="rgb24"), dtype=torch.float32) / 255) * self.pixel_scale,
                 )
             )
         fs = sorted(fs, key=lambda x: x[0])
-        ret = torch.stack([x[1] for x in fs]).permute(3, 0, 1, 2)
-        if self.resize_transform is not None:
-            ret = self.resize_transform(ret)
-        if self.crop_transform is not None:
-            ret = self.crop_transform(ret)
-        if self.norm_transform is not None:
-            ret = self.norm_transform(ret)
+        ret = torch.stack([x[1] for x in fs])
+        if self.has_transform:
+            ret = ret.permute(3, 0, 1, 2)
+            # NOTE: all transforms expect C, T, H, W
+            if self.resize_transform is not None:
+                ret = self.resize_transform(ret)
+            if self.crop_transform is not None:
+                ret = self.crop_transform(ret)
+            if self.norm_transform is not None:
+                ret = self.norm_transform(ret)
+            # C, T, H, W -> T, H, W, C
+            if not self.channel_first:
+                ret = ret.permute(1, 2, 3, 0)
+        elif self.channel_first:
+            # T, H, W, C => C, T, H, W
+            ret = ret.permute(3, 0, 1, 2)
+        else:
+            # T, H, W, C
+            pass
+
         return {
             "video": ret,
             "frame_start_idx": frame_i,

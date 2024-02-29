@@ -3,7 +3,6 @@ import datetime
 import functools
 import json
 import os
-import shutil
 import sys
 import traceback
 from typing import List
@@ -13,7 +12,6 @@ import torch
 import whisper
 from ego4d.egoexo.expert_commentary.data import (
     load_all_raw_commentaries,
-    RAW_EXTRACTED_COMM_ROOT,
 )
 
 from ego4d.research.common import batch_it
@@ -74,7 +72,7 @@ if __name__ == "__main__":
         "--commentary_root",
         type=str,
         help="Path to expert commentary root directory",
-        default=RAW_EXTRACTED_COMM_ROOT,
+        required=True,
     )
     parser.add_argument(
         "-b",
@@ -100,7 +98,7 @@ if __name__ == "__main__":
         "--model_name",
         type=str,
         help="Name of whisper model",
-        default="medium.en",
+        default="large-v2",
     )
     parser.add_argument(
         "--device",
