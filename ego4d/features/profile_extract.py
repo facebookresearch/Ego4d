@@ -23,10 +23,8 @@ def profile_extraction(config: FeatureExtractConfig):
     print(f"Got {len(videos)} videos")
 
     batch_sizes = [1]
-    num_workers = [8]
-    # num_workers = [0]
+    num_workers = [2]
     prefetch_factor = [2]
-    # prefetch_factor = [None]
     model = load_model(config)
 
     num_examples = 250

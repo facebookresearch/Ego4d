@@ -233,8 +233,6 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
             if len(uid_takes) < len(takes):
                 print(f"Filtered {len(takes)} -> {len(uid_takes)} on uid config")
                 takes = uid_takes
-        # TODO: removeme
-        takes = [t for t in takes if t["parent_task_name"] == "Cooking"][0:10]
 
         completed_uids = set(_uids_for_dir(config.out_path))
         videos = []

@@ -14,8 +14,8 @@ io:
 inference_config:
   device: cuda
   batch_size: 1
-  num_workers: 9
-  prefetch_factor: 2
+  num_workers: 0
+  prefetch_factor: null
   fps: 30
   frame_window: 1
   stride: 1
@@ -28,7 +28,7 @@ inference_config:
 schedule_config:
   run_locally: false
   log_folder: slurm_log/%j
-  timeout_min: 180
+  timeout_min: 1900
   constraint: volta
   slurm_partition: eht
   slurm_array_parallelism: 256
