@@ -35,7 +35,7 @@ schedule_config:
   gpus_per_node: 1
   cpus_per_task: 10
   overhead: 1.2
-  time_per_forward_pass: 0.2
+  time_per_forward_pass: 0.25
   schedule_time_per_node: 10.0
 model_config:
   model_name: "vit_2b14_xlmr_l"
