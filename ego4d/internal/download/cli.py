@@ -279,9 +279,7 @@ Additional debugging information:
         for path_size_pair, actual_size in curr_paths
         if actual_size is not None and actual_size > 0
     }
-    existing_gib = sum(
-        size / 1024**3 for _, size in existing_paths if size is not None
-    )
+    existing_gib = sum(size / 1024**3 for _, size in existing_paths if size is not None)
     existing_len = len(existing_paths)
     progress_percent = existing_gib / total_size_gib if total_size_gib > 0 else 1.0
 
@@ -334,7 +332,7 @@ Additional debugging information:
     if args.delete:
         print("Scanning for files to delete ...")
         files_that_exist = []
-        for (dirpath, _, filenames) in os.walk(out_dir):
+        for dirpath, _, filenames in os.walk(out_dir):
             files_that_exist.extend([os.path.join(dirpath, f) for f in filenames])
 
         files_that_exist = set(files_that_exist)

@@ -41,6 +41,8 @@ COCO_SKELETON_FLIP_PAIRS = {
     "ear": ("left_ear", "right_ear"),
     "neck": ("left_neck", "right_neck"),
 }
+
+
 ##------------------------------------------------------------------------------------
 ## performs triangulation
 class TriangulatorNonLinear:

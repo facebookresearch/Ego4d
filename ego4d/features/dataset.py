@@ -243,14 +243,16 @@ def create_dset(
     transform = Compose(transforms_to_use)
 
     clip_sampler = UniformClipSampler(
-        clip_duration=Fraction(
-            config.inference_config.frame_window, config.inference_config.fps
-        )
-        if isinstance(config.inference_config.frame_window, int)
-        else config.inference_config.frame_window,
-        stride=Fraction(config.inference_config.stride, config.inference_config.fps)
-        if isinstance(config.inference_config.stride, int)
-        else config.inference_config.stride,
+        clip_duration=(
+            Fraction(config.inference_config.frame_window, config.inference_config.fps)
+            if isinstance(config.inference_config.frame_window, int)
+            else config.inference_config.frame_window
+        ),
+        stride=(
+            Fraction(config.inference_config.stride, config.inference_config.fps)
+            if isinstance(config.inference_config.stride, int)
+            else config.inference_config.stride
+        ),
         backpad_last=True,
     )
 

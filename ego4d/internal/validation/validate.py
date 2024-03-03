@@ -1418,7 +1418,11 @@ def _check_files_exist(
 def _check_mp4_files(manifest: ManifestEgoExo, num_workers: int) -> List[Error]:
     ret = []
     vps = {
-        (vc.university_capture_id, vc.university_video_id, vc.component_index,): (
+        (
+            vc.university_capture_id,
+            vc.university_video_id,
+            vc.component_index,
+        ): (
             os.path.join(
                 manifest.captures[
                     vc.university_capture_id

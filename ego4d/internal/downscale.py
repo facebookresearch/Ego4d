@@ -4,6 +4,7 @@ Performs downscaling of takes videos with the SLURM cluster.
 Credits to Santhosh Kumar Ramakrishnan for providing the original snippet this
 code originates from.
 """
+
 import datetime
 import json
 import math

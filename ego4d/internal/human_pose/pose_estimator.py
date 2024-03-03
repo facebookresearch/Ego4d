@@ -20,6 +20,7 @@ from mmpose.core.bbox.transforms import (
 from mmpose.datasets import DatasetInfo
 from tqdm import tqdm
 
+
 ##------------------------------------------------------------------------------------
 class PoseModel:
     def __init__(

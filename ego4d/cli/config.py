@@ -119,9 +119,9 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         raise RuntimeError(f"Could not find AWS profile '{cfg.aws_profile_name}'.")
 
     return ValidatedConfig(
-        output_directory=Path(cfg.output_directory).expanduser()
-        if cfg.output_directory
-        else None,
+        output_directory=(
+            Path(cfg.output_directory).expanduser() if cfg.output_directory else None
+        ),
         version=cfg.version,
         datasets=set(cfg.datasets),
         benchmarks=set(cfg.benchmarks),

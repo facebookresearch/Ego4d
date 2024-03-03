@@ -1452,9 +1452,9 @@ def mode_exo_hand_pose3d(config: Config):
             curr_exo_hand_pose2d_kpts = np.concatenate(
                 (right_hand_pose2d, left_hand_pose2d), axis=0
             )  # (42,3)
-            curr_pose2d_dict[
-                exo_camera_name
-            ] = curr_exo_hand_pose2d_kpts.copy()  # (42,3)
+            curr_pose2d_dict[exo_camera_name] = (
+                curr_exo_hand_pose2d_kpts.copy()
+            )  # (42,3)
             # Heuristics
             if np.mean(curr_exo_hand_pose2d_kpts[:21, -1]) > 0.3:
                 curr_exo_hand_pose2d_kpts[0, -1] = 1

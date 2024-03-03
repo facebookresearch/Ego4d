@@ -34,7 +34,10 @@ def _one_hot_encoding(n: int, clazzes: Union[int, List[int]]) -> torch.Tensor:
 
 def create_ego_charades_dset(
     config: TrainConfig, use_ego_sent: bool, ego_only: bool
-) -> Tuple[Dataset, Tensor,]:
+) -> Tuple[
+    Dataset,
+    Tensor,
+]:
     """
     Loads the ego charades dataset and returns a dataset and the associated
     sentence embeddings for each class (as a single tensor, where class_idx ==
@@ -81,7 +84,10 @@ def create_ego_charades_dset(
 
 def create_kinetics_dset(
     config: TrainConfig,
-) -> Tuple[Dataset, Tensor,]:
+) -> Tuple[
+    Dataset,
+    Tensor,
+]:
     k400_config = config.pre_config.k400
     root = os.path.join(
         config.pre_config.root_dir,

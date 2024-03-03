@@ -7,6 +7,7 @@ from ego4d.internal.human_pose.camera import ximage_to_xdevice
 from ego4d.internal.human_pose.utils import COCO_KP_ORDER
 from scipy.optimize import least_squares
 
+
 # ------------------------------------------------------------------------------------
 ## performs triangulation
 class Triangulator:

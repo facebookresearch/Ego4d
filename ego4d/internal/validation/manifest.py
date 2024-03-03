@@ -634,15 +634,21 @@ def load_egoexo_manifest(manifest_dir: str) -> ManifestEgoExo:
         videos=video_metadata,
         video_components=video_component_metadata,
         colmap=colmap_metadata,
-        physical_setting={k: v[0] for k, v in physical_setting.items()}
-        if physical_setting is not None
-        else None,
-        objects={k: v[0] for k, v in object_metadata.items()}
-        if object_metadata is not None
-        else None,
-        participants={k: v[0] for k, v in participant_metadata.items()}
-        if participant_metadata is not None
-        else None,
+        physical_setting=(
+            {k: v[0] for k, v in physical_setting.items()}
+            if physical_setting is not None
+            else None
+        ),
+        objects=(
+            {k: v[0] for k, v in object_metadata.items()}
+            if object_metadata is not None
+            else None
+        ),
+        participants=(
+            {k: v[0] for k, v in participant_metadata.items()}
+            if participant_metadata is not None
+            else None
+        ),
         extra_data=extra_data,  # pyre-ignore
     )
 

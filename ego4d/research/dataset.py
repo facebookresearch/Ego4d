@@ -91,9 +91,11 @@ class VideoDataset(torch.utils.data.Dataset):
                 cont_iter = tqdm(cont_iter)
 
             self.fs_cumsum = [
-                min(len(ct), max_num_frames_per_video)
-                if max_num_frames_per_video
-                else len(ct)
+                (
+                    min(len(ct), max_num_frames_per_video)
+                    if max_num_frames_per_video
+                    else len(ct)
+                )
                 for _, ct in cont_iter
             ]
             self.fs_cumsum = [0] + torch.cumsum(
@@ -122,7 +124,7 @@ class VideoDataset(torch.utils.data.Dataset):
     def create_underlying_cont(self, gpu_id):
         # TODO clear_cuda_context_cache()
         self.gpu_id = gpu_id
-        for (_, c) in self.conts.values():
+        for _, c in self.conts.values():
             if c is not None:
                 c.create_underlying_cont(self.gpu_id)
 

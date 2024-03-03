@@ -143,9 +143,9 @@ def write_attachment(
     default_attachment_json[0]["payload"][0]["data"][
         "camera_intrinsics"
     ] = intrinsic_list
-    default_attachment_json[0]["payload"][0]["data"][
-        "camera_extrinsics"
-    ] = extrinsic_list[:-1]
+    default_attachment_json[0]["payload"][0]["data"]["camera_extrinsics"] = (
+        extrinsic_list[:-1]
+    )
 
     T_extrinsic = np.array(extrinsic_list)
     T_intrinsic = np.zeros((3, 4))
@@ -175,9 +175,9 @@ def write_attachment(
                 "y": projected_pose[i][1] / projected_pose[i][2],
                 "id": halo_id,
                 "mediaID": frame_name,
-                "placement": "manual"
-                if frame_name in high_conf_frame_list[i]
-                else "auto",
+                "placement": (
+                    "manual" if frame_name in high_conf_frame_list[i] else "auto"
+                ),
             }
 
     gt_payload = {
