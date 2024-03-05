@@ -22,6 +22,7 @@ from ego4d.internal.human_pose.camera import (
     batch_xworld_to_yimage,
     batch_xworld_to_yimage_check_camera_z,
     create_camera,
+    create_camera_simple,
     create_camera_data,
     get_aria_camera_models,
 )
@@ -50,7 +51,7 @@ pathmgr = PathManager()
 pathmgr.register_handler(S3PathHandler(profile="default"))
 
 cvpr_data_dir="/large_experiments/egoexo/cvpr"
-project_root_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_test/"
+project_root_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/"
 
 annotation_base_dir = os.path.join(project_root_dir, "ego_pose_latest")
 annotation_output_base_dir = os.path.join(project_root_dir, "ego_pose_post_triangulation")
@@ -371,11 +372,11 @@ def extract_camera_data(config: Config):
     camera_info["metadata"] = dict()
     camera_info["metadata"]['take_name'] = config.inputs.take_name
     camera_info["metadata"]['take_uid']  = ctx.take["take_uid"]
-    
+
     for cam_id in ctx.exo_cam_names:        
         key_str = cam_id                   
         cam_data = exo_traj_df[exo_traj_df.cam_uid == cam_id].iloc[0].to_dict()
-
+        
         exo_cameras[key_str] = {                            
             "camera_data": create_camera_data(
                 device_row=cam_data,
@@ -390,7 +391,7 @@ def extract_camera_data(config: Config):
         processed_cam_data = process_exocam_data(exo_cameras[key_str])
         camera_info[key_str] = processed_cam_data
             
-    for idx in range(start_frame, end_frame):
+    for idx in range(start_frame, end_frame):        
         row_df = synced_df.iloc[idx]
         skip_frame = False
         for stream_name in config.inputs.aria_streams:            
@@ -587,8 +588,8 @@ def convert_to_array_hand(pose2d, keypoints_list, all_cam_list):
         if cam_name.find('aria')!=-1: 
             #pose_array = aria_extracted_to_original(pose_array)
             # Transform annotations to ARIA rotated frame
-            print("Transformed original keypoints to ARIA rotated points")            
-            pose_array = aria_original_to_extracted(pose_array)                                               
+            print("Skip Transformed original keypoints to ARIA rotated points")            
+            #pose_array = aria_original_to_extracted(pose_array)                                               
         print()        
         
         pose2d_transformed[target_cam_name] = pose_array
@@ -666,8 +667,12 @@ def mode_body_pose3d(config: Config, annot_type='annotation'):
     
     projected_2d_annotation = dict()
     print(f"Num annotations found:", len(annotation))    
+    count = 0
     for frame_number in annotation:        
         num_annotators = len(annotation[frame_number])
+        if count>5:
+            break
+        count+=1
         print(frame_number, num_annotators)
         projected_2d_annotation[frame_number] = list()
         for annotation_index in range(num_annotators):
@@ -718,6 +723,7 @@ def mode_body_pose3d(config: Config, annot_type='annotation'):
     json.dump(projected_2d_annotation, open(annotation_output_json_path, "w"))            
 
 
+   
 def mode_hand_pose3d(config: Config, annot_type='annotation'):
     """
     Hand pose3d estimation with exo+ego cameras
@@ -840,6 +846,130 @@ def mode_hand_pose3d(config: Config, annot_type='annotation'):
     print(f"Saving retriangulated annotations to {annotation_output_json_path}")
     json.dump(projected_2d_annotation, open(annotation_output_json_path, "w"))  
     
+def mode_hand_pose3d_v2(config: Config, annot_type='annotation'):
+    """
+    Hand pose3d estimation with exo+ego cameras
+    """    
+    skel_type = "hand"
+    
+
+    # Load dataset info
+    ctx = get_context(config)
+    with open(ctx.dataset_json_path, 'r') as f:
+        dset = json.load(f)
+    
+    ego_cam_names = [f"{cam}_rgb" for cam in ctx.ego_cam_names]    
+    exo_cam_names = (ctx.exo_cam_names) 
+    all_used_cam = exo_cam_names + ego_cam_names
+    #all_used_cam = exo_cam_names 
+    tri_threshold = 0.3
+    
+    # Load exo cameras
+    aria_exo_cameras = {
+        exo_camera_name: create_camera_simple(
+            dset["frames"][f"{exo_camera_name}_0"]["camera_data"], None
+        )
+        for exo_camera_name in ctx.exo_cam_names
+    }    
+
+    '''
+    capture_dir = os.path.join(
+        cvpr_data_dir, "captures", ctx.take["capture"]["root_dir"]
+    )
+    print(capture_dir)
+    aria_dir = os.path.join(capture_dir, "videos")
+    aria_path = os.path.join(aria_dir, f"{ctx.ego_cam_names[0]}.vrs")
+    assert os.path.exists(aria_path), f"Cannot find {aria_path}"    
+    print(aria_path)
+    aria_camera_models = get_aria_camera_models(aria_path)
+    stream_name_to_id = {
+        f"{ctx.ego_cam_names[0]}_rgb": "214-1",
+        f"{ctx.ego_cam_names[0]}_slam-left": "1201-1",
+        f"{ctx.ego_cam_names[0]}_slam-right": "1201-2",
+    }
+    '''
+    
+    annotation_dir = os.path.join(annotation_base_dir, skel_type, annot_type)    
+    annotation_json_path=os.path.join(annotation_dir, ctx.take["take_uid"]+".json")    
+    print(f"Loading annotation from {annotation_json_path}")
+    with open(annotation_json_path, 'r') as f:
+        annotation = json.load(f)
+    
+    projected_2d_annotation = dict()
+    print(f"Num annotations found:", len(annotation))   
+    count = 0 
+    for frame_number in annotation:        
+        num_annotators = len(annotation[frame_number])        
+        print(frame_number, num_annotators)
+        projected_2d_annotation[frame_number] = list()
+        
+        for annotation_index in range(num_annotators):
+            frame_data = annotation[frame_number][annotation_index]
+            pose2d = frame_data["annotation2D"]
+            print(f"Loading annotation for cams {all_used_cam}\n")          
+            multi_view_pose2d = convert_to_array_hand(pose2d, hand_keypoints_list, all_used_cam)                   
+            if len(multi_view_pose2d.keys())==0:
+                print("No camera annotations found")                
+                pose3d_new = {}                
+            else:                                                      
+                # triangulate
+                # Add ego camera for the frame in the camera dict
+                
+                for ego_cam_name in ego_cam_names:
+                    print(f'Loading {frame_number} | {ego_cam_name} without ARIA camera model')
+                    ego_cam_data = dset['frames'][ego_cam_name][frame_number]["camera_data"]
+                    aria_exo_cameras[ego_cam_name] = create_camera_simple(ego_cam_data, None)                         
+                   
+                print(f'Triangulating frame {frame_number} using cams {all_used_cam}')
+                # triangulate                
+                triangulator = Triangulator(
+                    frame_number,
+                    all_used_cam,
+                    aria_exo_cameras,
+                    multi_view_pose2d,
+                    keypoint_thres=tri_threshold,
+                    num_keypoints=42,
+                    inlier_reproj_error_check=False,
+                    #inlier_reproj_error_check=True,
+                )
+                pose3d_new, inlier_views, reprojection_error_vector = triangulator.run(debug=True, keypoints_list=hand_keypoints_list)  ## N x 4 (x, y, z, confidence)                                                
+                if "annotation3D" not in frame_data:
+                    pose3d = {}
+                else:           
+                    pose3d = frame_data["annotation3D"]
+                                
+                inlier_kp = get_inlier_by_camera_hand(all_used_cam, inlier_views)                                
+                proj_error, projected_2d = calculate_reprojection_errors_hand(all_used_cam, aria_exo_cameras, pose3d_new, multi_view_pose2d, inlier_kp)                            
+                
+                projected_2d_annotation[frame_number].append(projected_2d)
+                print(f"Average Projection Error: {config.inputs.take_name}-{frame_number}: {proj_error}\n")                 
+                                
+                if len(pose3d)==0:
+                    pose3d_new = transform_basic(pose3d_new, hand_keypoints_list)
+                else:
+                    pose3d_new = transform(pose3d_new, pose3d, hand_keypoints_list)
+                                
+            annotation[frame_number][annotation_index]["annotation3D"] = pose3d_new
+                                            
+        print('-'*80)
+
+        count+=1
+        if count==3:
+            break
+
+    
+    annotation_output_dir = os.path.join(annotation_output_base_dir, skel_type, annot_type)    
+    os.makedirs(annotation_output_dir, exist_ok=True)
+
+    annotation_output_json_path=os.path.join(annotation_output_dir, ctx.take["take_uid"]+".json")    
+    print(f"Saving retriangulated annotations to {annotation_output_json_path}")
+    json.dump(annotation, open(annotation_output_json_path, "w"))            
+
+    annotation_output_json_path=os.path.join(annotation_output_dir, ctx.take["take_uid"]+"_projected.json")    
+    print(f"Saving retriangulated annotations to {annotation_output_json_path}")
+    json.dump(projected_2d_annotation, open(annotation_output_json_path, "w"))  
+
+
 def add_arguments(parser):
     parser.add_argument("--config-name", default="georgiatech_covid_02_2")
     parser.add_argument(
@@ -929,9 +1059,9 @@ def main(args):
         elif step == "update_body_automatic":            
             mode_body_pose3d(config, 'automatic') 
         elif step == "update_hand_annotations":                        
-            mode_hand_pose3d(config)
+            mode_hand_pose3d_v2(config)
         elif step == "update_hand_automatic":            
-            mode_hand_pose3d(config, 'automatic')              
+            mode_hand_pose3d_v2(config, 'automatic')              
         else:
             raise Exception(f"Unknown step: {step}")
         print(f"[Info] Time for {step}: {time.time() - start_time} s")

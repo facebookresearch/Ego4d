@@ -82,6 +82,25 @@ def create_camera(camera_data, camera_model):
     )  ## map world point to camera frame
     return Camera(**ret)
 
+def create_camera_simple(camera_data, camera_model):
+    ret = copy.deepcopy(camera_data)    
+    ret["camera_model"] = _create_exo_camera(ret["device_row"])
+
+    for key in [
+        "center",
+        "T_device_world",
+        "T_world_device",
+        "T_device_camera",
+        "T_camera_device",
+    ]:
+        ret[key] = np.array(camera_data[key])
+
+    ret["extrinsics"] = (
+        ret["T_camera_device"] @ ret["T_device_world"]
+    )  ## map world point to camera frame
+    return Camera(**ret)
+
+
 
 def create_camera_data(
     device_row: Dict[str, Any],
