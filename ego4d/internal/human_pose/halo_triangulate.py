@@ -160,14 +160,19 @@ def compute_2d_reconstruction_error(orig, projected):
         projection2d[key]['type'] = 'manual'
         
         proj_2d = projected[key]
-        projection2d[key]['projected'] = proj_2d
+        projection2d[key]['projection'] = proj_2d
         
         orig_2d = dict()
         orig_2d['x'], orig_2d['y'] = item[0], item[1]
         projection2d[key]['orig'] = orig_2d        
         
-        projection2d[key]['err'] = np.sum([np.abs(orig_2d[k]-proj_2d[k]) for k in ['x', 'y']])           
-        
+        projection2d[key]['err'] = np.sum([np.abs(orig_2d[k]-proj_2d[k]) for k in ['x', 'y']])
+
+    for key in projected:        
+        if key not in projection2d:        
+            projection2d[key] = dict()
+            projection2d[key]['type'] = 'auto'
+            projection2d[key]['projection'] = projected[key]    
     return projection2d
         
 
@@ -183,9 +188,9 @@ def run_triangulation(annotation, camera_matrices):
             annotation3D_orig  = annotation['annotation3D'][kp_name]                             
             output[kp_name]['orig_3d'] = annotation3D_orig
             output[kp_name]['new_3d'] = annotation3D_new
-            projected_points2D = project2d(annotation3D_new, camera_matrices)  
-            projection2d = compute_2d_reconstruction_error(kp_data, projected_points2D)           
-            output[kp_name]['2d'] = projection2d
+            projected_points2D = project2d(annotation3D_new, camera_matrices)              
+            projection2d = compute_2d_reconstruction_error(kp_data, projected_points2D)                         
+            output[kp_name]['data_2d'] = projection2d
     return output
         
 
