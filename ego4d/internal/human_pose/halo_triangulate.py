@@ -3,6 +3,7 @@
 
 # This is stored in the old camera format
 # python halo_triangulate.py /large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/hand/camera_pose/ /large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/hand/annotation/ old
+from collections import defaultdict
 import numpy as np
 import json
 import sys
@@ -17,14 +18,15 @@ def load_json(fname):
 def triangulate(camera_calibrations):
     # Check if input is valid
     if not camera_calibrations or len(camera_calibrations) < 2:
+        print('Missing camera calibrations')
         return None
-    for calibration in camera_calibrations:
+    for calibration in camera_calibrations:        
         if not calibration or len(calibration) != 4:
             return None
-        x, y, M, cam_name = calibration
-        if not (isinstance(x, float) and isinstance(y, float) and isinstance(M, np.ndarray)):
-            return None
-
+        #x, y, M, cam_name = calibration        
+        #if not (isinstance(x, float) and isinstance(y, float) and isinstance(M, np.ndarray)):            
+        #    return None
+    
     # Create reducer function
     def reducer(calibration):
         x, y, M, _ = calibration
@@ -174,23 +176,39 @@ def compute_2d_reconstruction_error(orig, projected):
             projection2d[key]['type'] = 'auto'
             projection2d[key]['projection'] = projected[key]    
     return projection2d
-        
+
+def summarize_error(result):
+    errors = defaultdict(list)
+    for kp_name in result:
+        data_2d = result[kp_name]['data_2d']
+        for cam_name in data_2d:
+            if 'err' in data_2d[cam_name]:
+                errors[cam_name].append(data_2d[cam_name]['err'])
+    for cam_name in errors:
+        print(cam_name, np.mean(np.array(errors[cam_name])))
+
 
 def run_triangulation(annotation, camera_matrices):
     output = dict()    
     pose2d_transformed = process_annotation(annotation['annotation2D'], camera_matrices)
     for kp_name in pose2d_transformed:        
-        kp_data = pose2d_transformed[kp_name]            
-        output[kp_name] = dict()
-        output[kp_name]['num_views'] = len(kp_data)        
-        annotation3D_new = triangulate(kp_data)
+        kp_data = pose2d_transformed[kp_name]
+        
+        if len(kp_data)<2: # Cannot triangulate
+            continue
+        
         if kp_name in annotation['annotation3D']:
+            output[kp_name] = dict()
+            output[kp_name]['num_views'] = len(kp_data)        
             annotation3D_orig  = annotation['annotation3D'][kp_name]                             
             output[kp_name]['orig_3d'] = annotation3D_orig
+            
+            annotation3D_new = triangulate(kp_data)
             output[kp_name]['new_3d'] = annotation3D_new
+                    
             projected_points2D = project2d(annotation3D_new, camera_matrices)              
             projection2d = compute_2d_reconstruction_error(kp_data, projected_points2D)                         
-            output[kp_name]['data_2d'] = projection2d
+            output[kp_name]['data_2d'] = projection2d        
     return output
         
 
@@ -208,10 +226,10 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
             camera_matrices = process_camera_pose_new(camera_data, frame_number)            
                     
         output = run_triangulation(annotation, camera_matrices)
-        print(json.dumps(output, indent=2))
+        #print(json.dumps(output, indent=2))
+        summarize_error(output)        
         print('=='*10)
-        break
-
+        
 def main():
     camera_dir = sys.argv[1]
     annotation_dir = sys.argv[2]
