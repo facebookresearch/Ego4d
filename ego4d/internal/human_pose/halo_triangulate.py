@@ -177,15 +177,26 @@ def compute_2d_reconstruction_error(orig, projected):
             projection2d[key]['projection'] = projected[key]    
     return projection2d
 
-def summarize_error(result):
-    errors = defaultdict(list)
-    for kp_name in result:
-        data_2d = result[kp_name]['data_2d']
-        for cam_name in data_2d:
-            if 'err' in data_2d[cam_name]:
-                errors[cam_name].append(data_2d[cam_name]['err'])
-    for cam_name in errors:
-        print(cam_name, np.mean(np.array(errors[cam_name])))
+def summarize_error(results, level=0):    
+    frame_numbers = list(results.keys())
+    overall_errors = defaultdict(list) 
+    for frame_number in frame_numbers:        
+        result = results[frame_number]        
+        errors = defaultdict(list) 
+        for kp_name in result:
+            data_2d = result[kp_name]['data_2d']
+            for cam_name in data_2d:
+                if 'err' in data_2d[cam_name]:
+                    errors[cam_name].append(data_2d[cam_name]['err'])
+                    overall_errors[cam_name].append(data_2d[cam_name]['err'])
+        
+        if level==1:
+            for cam_name in errors:
+                print(cam_name, np.mean(np.array(errors[cam_name])))
+    
+    for cam_name in overall_errors:
+        print(cam_name, len(overall_errors[cam_name]), np.mean(np.array(overall_errors[cam_name])))
+    
 
 
 def run_triangulation(annotation, camera_matrices):
@@ -216,8 +227,9 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
     camera_data = load_json(os.path.join(camera_dir, annotation_file))    
     annotation_data = load_json(os.path.join(annotation_dir, annotation_file))    
     frame_numbers = annotation_data.keys()
+    output = dict()
     for frame_number in frame_numbers:
-        print(frame_number)
+        #print(frame_number)
         annotation = annotation_data[frame_number][0]
         if camera_format=='old':
             camera_pose = camera_data[frame_number]
@@ -225,10 +237,11 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
         else:
             camera_matrices = process_camera_pose_new(camera_data, frame_number)            
                     
-        output = run_triangulation(annotation, camera_matrices)
-        #print(json.dumps(output, indent=2))
-        summarize_error(output)        
-        print('=='*10)
+        output[frame_number] = run_triangulation(annotation, camera_matrices)
+    
+    #print(json.dumps(output, indent=2))
+    summarize_error(output, level=0)
+    print('=='*10)
         
 def main():
     camera_dir = sys.argv[1]
