@@ -1,6 +1,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 import importlib
+import math
 import json
 import os
 import random
@@ -253,6 +254,14 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
                     # NOTE: known constants for not downsampled videos
                     w = 1408 if is_aria else 3840
                     h = 1408 if is_aria else 2160
+                    # TODO: downscaled or not
+                    # if w < h:
+                    #     h = math.ceil((h/w) * 448)
+                    #     w = 448
+                    # else:
+                    #     w = math.ceil((w/h) * 448)
+                    #     h = 448
+
                     uid = f"{take['take_uid']}_{cam_id}_{stream_name}"
                     if (
                         not unfiltered
@@ -268,6 +277,8 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
                                 config.egoexo_data_dir,
                                 "takes",
                                 take["root_dir"],
+                                # TODO
+                                # "downscaled/448",
                                 stream["relative_path"],
                             ),
                             # NOTE: w/h used to estimate time to complete

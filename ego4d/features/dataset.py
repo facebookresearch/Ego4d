@@ -38,33 +38,33 @@ def get_frames(container, t1, t2, buffer, max_buffer_size, frame_window_size):
         if is_in_range(frame):
             ret.append(frame)
 
-    prev_pts = None
-    if len(ret) == 0 or ret[-1].pts + 1 < t2 / tb:
-        if len(buffer) > 0:
-            container.seek(buffer[max(buffer.keys())].pts, stream=container.streams.video[0])
-
-        for frame in container.decode(video=0):
-            if frame.pts is None:
-                raise AssertionError("frame is None")
-            if prev_pts is not None and frame.pts < prev_pts:
-                breakpoint()
-                raise AssertionError("failed assumption pts in order: ")
-            if not isinstance(frame, av.VideoFrame):
-                raise AssertionError("other packets not supported")
-
-            prev_pts = frame.pts
-
-            buffer[frame.pts] = frame
-
-            if len(buffer) > max_buffer_size:
-                del buffer[min(buffer.keys())]
-
-            if is_in_range(frame):
-                ret.append(frame)
-            elif exceeds_range(frame):
-                break
-
     ret.sort(key=lambda x: x.pts)
+
+    if len(ret) == 0 or ret[-1].pts + 1 < t2 / tb:
+        while True:
+            try:
+                for frame in container.decode(video=0):
+                    if frame.pts is None:
+                        raise AssertionError("frame is None")
+                    if not isinstance(frame, av.VideoFrame):
+                        raise AssertionError("other packets not supported")
+
+                    buffer[frame.pts] = frame
+
+                    if len(buffer) > max_buffer_size:
+                        del buffer[min(buffer.keys())]
+
+                    if is_in_range(frame):
+                        ret.append(frame)
+                    elif exceeds_range(frame):
+                        break
+                break
+            except av.error.EOFError:
+                seek_pts = buffer[max(buffer.keys())].pts
+                container.seek(seek_pts, stream=container.streams.video[0])
+
+        ret.sort(key=lambda x: x.pts)
+    
     ret = list({frame.pts: frame for frame in ret}.values())
     pts_in_ret = [frame.pts for frame in ret]
     if not (np.diff(pts_in_ret) > 0).all():
@@ -74,7 +74,7 @@ def get_frames(container, t1, t2, buffer, max_buffer_size, frame_window_size):
 
 
 class EncodedVideoCached:
-    def __init__(self, path, frame_buffer_size=64):
+    def __init__(self, path, frame_buffer_size=16):
         self.path = path
         self.vid = EncodedVideo.from_path(path, decoder="pyav")
         self.vid._container.seek(0)
