@@ -252,7 +252,7 @@ def main():
     for annotation_file in annotation_files[:5]:
         print(annotation_file)
         triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
-        break
+        #break
 
 if __name__ == "__main__":
     main()
