@@ -1,8 +1,6 @@
 # This is stored in the new camera format
 # python halo_triangulate.py /large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/camera_pose/ /large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/hand/annotation/ new
 
-# This is stored in the old camera format
-# python halo_triangulate.py /large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/hand/camera_pose/ /large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/hand/annotation/ old
 from collections import defaultdict
 import numpy as np
 import json
@@ -14,6 +12,10 @@ def load_json(fname):
         data = json.load(f)    
     return data
 
+
+def write_json(data, file_path):
+    with open(file_path, 'w') as json_file:
+        json.dump(data, json_file)
 
 def triangulate(camera_calibrations):
     # Check if input is valid
@@ -180,24 +182,71 @@ def compute_2d_reconstruction_error(orig, projected):
 def summarize_error(results, level=0):    
     frame_numbers = list(results.keys())
     overall_errors = defaultdict(list) 
-    for frame_number in frame_numbers:        
-        result = results[frame_number]        
-        errors = defaultdict(list) 
-        for kp_name in result:
-            data_2d = result[kp_name]['data_2d']
-            for cam_name in data_2d:
-                if 'err' in data_2d[cam_name]:
-                    errors[cam_name].append(data_2d[cam_name]['err'])
-                    overall_errors[cam_name].append(data_2d[cam_name]['err'])
-        
-        if level==1:
-            for cam_name in errors:
-                print(cam_name, np.mean(np.array(errors[cam_name])))
+    for frame_number in frame_numbers:
+        num_raters = len(results[frame_number])
+        for rater_idx in range(num_raters):
+            result = results[frame_number][rater_idx]
+            errors = defaultdict(list) 
+            for kp_name in result:
+                data_2d = result[kp_name]['data_2d']
+                for cam_name in data_2d:
+                    if 'err' in data_2d[cam_name]:
+                        errors[cam_name].append(data_2d[cam_name]['err'])
+                        overall_errors[cam_name].append(data_2d[cam_name]['err'])
+            
+            if level==1:
+                for cam_name in errors:
+                    print(cam_name, np.mean(np.array(errors[cam_name])))
     
     for cam_name in overall_errors:
         print(cam_name, len(overall_errors[cam_name]), np.mean(np.array(overall_errors[cam_name])))
     
+def generate_output_json(results):
+    transformed_annotation = dict()
+    frame_numbers = list(results.keys())    
+    for frame_number in frame_numbers:
+        num_raters = len(results[frame_number])
+        frame_results = list()
+        for rater_idx in range(num_raters):
+            result = results[frame_number][rater_idx]
+            frame_result = dict()
+            frame_result['annotation3D'] = dict()
+            
+            for kp_name in result:                
+                frame_result['annotation3D'][kp_name] = result[kp_name]['new_3d'] 
+                frame_result['annotation3D'][kp_name]['num_views_for_3d'] = result[kp_name]['num_views'] 
 
+            frame_result['annotation2D'] = dict()
+            for kp_name in result:                
+                for camera_name in result[kp_name]['data_2d']:
+                    if camera_name not in frame_result['annotation2D']:
+                        frame_result['annotation2D'][camera_name] = dict()                    
+                
+            for kp_name in result:
+                data_2d = result[kp_name]['data_2d']                
+                for camera_name in data_2d:
+                    pt_type = data_2d[camera_name]['type']                    
+                    if pt_type == 'manual':
+                        x_coordinate = data_2d[camera_name]['orig']['x']
+                        y_coordinate = data_2d[camera_name]['orig']['y']
+                        placement = 'manual'                        
+                    else:
+                        x_coordinate = data_2d[camera_name]['projection']['x']
+                        y_coordinate = data_2d[camera_name]['projection']['y']
+                        placement = 'auto'
+                  
+                    frame_result['annotation2D'][camera_name][kp_name] = dict()
+                    frame_result['annotation2D'][camera_name][kp_name]['x'] = x_coordinate
+                    frame_result['annotation2D'][camera_name][kp_name]['y'] = y_coordinate
+                    frame_result['annotation2D'][camera_name][kp_name]['placement'] = placement
+                                                                                   
+            frame_results.append(frame_result)
+
+        transformed_annotation[frame_number] = frame_results
+        
+    return transformed_annotation
+
+                
 
 def run_triangulation(annotation, camera_matrices):
     output = dict()    
@@ -230,32 +279,50 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
     output = dict()
     for frame_number in frame_numbers:
         #print(frame_number)
-        annotation = annotation_data[frame_number][0]
-        if camera_format=='old':
-            camera_pose = camera_data[frame_number]
-            camera_matrices = process_camera_pose(camera_pose)
-        else:
-            camera_matrices = process_camera_pose_new(camera_data, frame_number)            
-                    
-        output[frame_number] = run_triangulation(annotation, camera_matrices)
+        num_raters = len(annotation_data[frame_number])
+        output[frame_number] = list()
+        for rater_idx in range(num_raters):
+            annotation = annotation_data[frame_number][rater_idx]        
+            if camera_format=='old':
+                camera_pose = camera_data[frame_number]
+                camera_matrices = process_camera_pose(camera_pose)
+            else:
+                camera_matrices = process_camera_pose_new(camera_data, frame_number)            
+                        
+            output[frame_number].append(run_triangulation(annotation, camera_matrices))
     
     #print(json.dumps(output, indent=2))
     summarize_error(output, level=0)
+    output_json = generate_output_json(output)    
     print('=='*10)
+    return output_json
         
-def main():
-    camera_dir = sys.argv[1]
-    annotation_dir = sys.argv[2]
-    camera_format = sys.argv[3]
+def main():    
+    config_file = "halo_triangulate_config.json"
+    config = load_json(config_file)
+    annotation_type = config["annotation_type"]
+    body_or_hand = config["body_or_hand"]
+    camera_format = config["camera_format"]
+    
+    camera_dir = config["camera_dir"]
+    annotation_dir = os.path.join(config["annotation_dir"], body_or_hand, annotation_type)
+    output_dir =  os.path.join(config["output_dir"], camera_format, body_or_hand, annotation_type)
+    if not os.path.isdir(output_dir):
+        cmd = 'mkdir -p ' + output_dir
+        os.system(cmd)
 
     annotation_files = os.listdir(annotation_dir)
     for annotation_file in annotation_files[:5]:
         print(annotation_file)
-        triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
-        #break
+        output_json = triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
+        output_json_path = os.path.join(output_dir, annotation_file)
+        print(output_json_path)
+        write_json(output_json, output_json_path)        
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
