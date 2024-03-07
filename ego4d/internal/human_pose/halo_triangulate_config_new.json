@@ -1,0 +1,8 @@
+{
+    "camera_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/camera_pose/",
+    "annotation_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/",
+    "output_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/triangulated_results/",
+    "camera_format": "new",
+    "annotation_type": "annotation",
+    "body_or_hand": "hand"
+}

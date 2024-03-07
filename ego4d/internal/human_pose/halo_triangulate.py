@@ -1,6 +1,3 @@
-# This is stored in the new camera format
-# python halo_triangulate.py /large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/camera_pose/ /large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/hand/annotation/ new
-
 from collections import defaultdict
 import numpy as np
 import json
@@ -273,7 +270,12 @@ def run_triangulation(annotation, camera_matrices):
         
 
 def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file):    
-    camera_data = load_json(os.path.join(camera_dir, annotation_file))    
+    camera_file = os.path.join(camera_dir, annotation_file)
+    if not os.path.exists(camera_file):
+        print('Missing camera file')
+        return None
+    
+    camera_data = load_json(camera_file)    
     annotation_data = load_json(os.path.join(annotation_dir, annotation_file))    
     frame_numbers = annotation_data.keys()
     output = dict()
@@ -312,12 +314,17 @@ def main():
         os.system(cmd)
 
     annotation_files = os.listdir(annotation_dir)
-    for annotation_file in annotation_files[:5]:
-        print(annotation_file)
-        output_json = triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
+    print('Num annotation files:', len(annotation_files))    
+    for idx, annotation_file in enumerate(annotation_files):
+        print(idx, annotation_file)
         output_json_path = os.path.join(output_dir, annotation_file)
         print(output_json_path)
-        write_json(output_json, output_json_path)        
+        if os.path.exists(output_json_path):
+            continue
+        
+        output_json = triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
+        if output_json is not None:                
+            write_json(output_json, output_json_path)        
 
 if __name__ == "__main__":
     main()
