@@ -300,7 +300,9 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
     return output_json
         
 def main():    
-    config_file = "halo_triangulate_config.json"
+    config_file = "halo_triangulate_config_old.json"
+    #config_file = "halo_triangulate_config_new.json"
+    
     config = load_json(config_file)
     annotation_type = config["annotation_type"]
     body_or_hand = config["body_or_hand"]
