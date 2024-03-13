@@ -15,3 +15,4 @@ tp/*
 **/outputs/**
 .ipynb_checkpoints
 ego4d/internal/human_pose/outputs/*
+expert_commentary_log/**
