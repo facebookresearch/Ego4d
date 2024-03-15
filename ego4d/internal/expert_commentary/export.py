@@ -3,7 +3,7 @@ import json
 import os
 from collections import defaultdict
 
-from ego4d.egoexo.expert_commentary.data import (
+from ego4d.internal.expert_commentary.extract import (
     load_uniq_commentaries,
     RAW_EXTRACTED_COMM_ROOT,
 )
