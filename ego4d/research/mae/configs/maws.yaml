@@ -1,0 +1,37 @@
+input_config:
+  # TODO: batch stuff here?
+  reader_class: "PyAvReader"
+  # reader_class: "TorchAudioStreamReader"
+  egoexo_input:
+    root_dir: "/checkpoint/miguelmartin/egoexo_data/dev/"
+  ego4d_input:
+    video_root_dir: "/datasets01/ego4d_track2/v1/full_scale"
+    metadata_path: "/checkpoint/miguelmartin/ego4d_data/ego4d.json" 
+model_config:
+  # model_name: "vit_huge_mae_pretraining"
+  model_name: "TODO"
+batch_size: 32
+num_workers: 20
+prefetch_factor: 4
+num_epochs: 1600
+accelerator: "gpu"
+devices: 1
+tb_log_dir: "/private/home/miguelmartin/ego4d/ego4d_public/runs"
+tb_log_name: "mae"
+lr: 0.001
+beta1: 0.9
+beta2: 0.98
+wd: 0.1
+eps: 1.0e-6
+eval_per_iter: 500
+eval_init: true
+checkpoint_dir: "/checkpoint/miguelmartin/maws_mae/checkpoints"
+slurm_config:
+  slurm_log_folder: "slurm_log"
+  timeout_min: 240
+  constraint: "volta"
+  slurm_partition: "pixar"
+  slurm_array_parallelism: null
+  gpus_per_node: 1
+  cpus_per_task: 10
+  run_locally: false
