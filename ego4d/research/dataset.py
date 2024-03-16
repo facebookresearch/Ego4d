@@ -146,7 +146,8 @@ class VideoDataset(torch.utils.data.Dataset):
                 ret["frame_start_idx"],
                 ret["frame_end_idx"],
             )
-        ret.update(labels)
+            ret.update(labels)
+
         if self.transform_fn is not None:
             ret = self.transform_fn(ret)
         return ret
