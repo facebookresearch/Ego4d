@@ -423,6 +423,8 @@ What parts of the dataset to download, one of:
 - capture_eye_gaze
 - downscaled_takes/448
 - features/omnivore_video
+- ego_pose_pseudo_gt
+- expert_commentary
 
 By default the following parts will be downloaded: {metadata, captures, takes, trajectory, annotations}.
 
