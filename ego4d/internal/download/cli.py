@@ -342,6 +342,7 @@ Additional debugging information:
         print(
             f"Deleting: {len(files_to_delete)} files ({len(files_that_exist)} total files)"
         )
+        breakpoint()
         for f in tqdm(files_to_delete):
             os.remove(f)
 

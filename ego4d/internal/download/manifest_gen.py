@@ -25,11 +25,18 @@ from tqdm.auto import tqdm
 pathmgr = PathManager()  # for downloading files
 pathmgr.register_handler(S3PathHandler(profile="default"))
 
-base_release_dir = "egoexo-public/v1/"
-release_dir = f"s3://ego4d-consortium-sharing/{base_release_dir}"
-internal_release_dir = (
-    "s3://ego4d-consortium-sharing/egoexo/releases/public_internal/v1/"
-)
+dev_release = False
+
+if dev_release:
+    base_release_dir = "egoexo/releases/dev/"
+    release_dir = f"s3://ego4d-consortium-sharing/{base_release_dir}"
+    internal_release_dir = release_dir
+else:
+    base_release_dir = "egoexo-public/v1/"
+    release_dir = f"s3://ego4d-consortium-sharing/{base_release_dir}"
+    internal_release_dir = (
+        "s3://ego4d-consortium-sharing/egoexo/releases/public_internal/v1/"
+    )
 
 
 manifests = {
@@ -50,11 +57,13 @@ manifests = {
     "expert_commentary": [],
     # "narrate_and_act_transc": [],
 }
+if dev_release:
+    manifests["takes_dropped"] = []
 
 egoexo = {
     "released_takes": os.path.join(internal_release_dir, "released_takes.json"),
     "takes": os.path.join(internal_release_dir, "takes.json"),
-    "takes_dropped": os.path.join(internal_release_dir, "takes_dropped.json"),
+    "takes_dropped": os.path.join(internal_release_dir, "_takes_dropped.json"),
     "captures": os.path.join(internal_release_dir, "captures.json"),
     "physical_setting": os.path.join(internal_release_dir, "physical_setting.json"),
     "participants": os.path.join(internal_release_dir, "participants.json"),
@@ -87,6 +96,9 @@ for k, v in egoexo.items():
     else:
         egoexo[k] = []
 
+if len(egoexo["released_takes"]) == 0:
+    egoexo["released_takes"] = [x["take_uid"] for x in egoexo["takes"]]
+
 s3_buckets = set()
 for c in tqdm(egoexo["captures"]):
     s3_bucket = c["_s3_root_dir"].split("/")[2]
@@ -104,6 +116,7 @@ capture_cam_id_to_is_ego = {
 }
 
 split_file_path = os.path.join(release_dir, "annotations/splits.json")
+split_file_path = "s3://ego4d-consortium-sharing/egoexo-public/v1/annotations/splits.json"
 split_data = json.load(pathmgr.open(split_file_path))
 take_uid_to_splits = {k: [v] for k, v in split_data["take_uid_to_split"].items()}
 
@@ -263,45 +276,46 @@ for manifest_key in ["takes", "takes_dropped"]:
                     )
 
             sp = t["_vrs_s3_path"]
-            assert sp is not None
-            manifests["take_vrs_noimagestream"].append(
-                ManifestEntry(
-                    uid=take_uid,
-                    paths=[
-                        PathSpecification(
-                            source_path=sp,
-                            relative_path=os.path.join(
-                                root_dir, t["vrs_relative_path"]
-                            ),
-                            views=["ego"],
-                            universities=[t["university_name"]],
-                            file_type="vrs",
-                        )
-                    ],
-                    benchmarks=take_uid_to_benchmarks.get(take_uid, None),
-                    splits=take_uid_to_splits.get(take_uid, None),
+            if sp is not None:
+                manifests["take_vrs_noimagestream"].append(
+                    ManifestEntry(
+                        uid=take_uid,
+                        paths=[
+                            PathSpecification(
+                                source_path=sp,
+                                relative_path=os.path.join(
+                                    root_dir, t["vrs_relative_path"]
+                                ),
+                                views=["ego"],
+                                universities=[t["university_name"]],
+                                file_type="vrs",
+                            )
+                        ],
+                        benchmarks=take_uid_to_benchmarks.get(take_uid, None),
+                        splits=take_uid_to_splits.get(take_uid, None),
+                    )
                 )
-            )
+            
             sp_all_streams = t["_vrs_all_streams_s3_path"]
-            assert sp_all_streams is not None
-            manifests["take_vrs"].append(
-                ManifestEntry(
-                    uid=take_uid,
-                    paths=[
-                        PathSpecification(
-                            source_path=sp_all_streams,
-                            relative_path=os.path.join(
-                                root_dir, t["vrs_all_streams_relative_path"]
-                            ),
-                            views=["ego"],
-                            universities=[t["university_name"]],
-                            file_type="vrs",
-                        )
-                    ],
-                    benchmarks=take_uid_to_benchmarks.get(take_uid, None),
-                    splits=take_uid_to_splits.get(take_uid, None),
+            if sp_all_streams is not None:
+                manifests["take_vrs"].append(
+                    ManifestEntry(
+                        uid=take_uid,
+                        paths=[
+                            PathSpecification(
+                                source_path=sp_all_streams,
+                                relative_path=os.path.join(
+                                    root_dir, t["vrs_all_streams_relative_path"]
+                                ),
+                                views=["ego"],
+                                universities=[t["university_name"]],
+                                file_type="vrs",
+                            )
+                        ],
+                        benchmarks=take_uid_to_benchmarks.get(take_uid, None),
+                        splits=take_uid_to_splits.get(take_uid, None),
+                    )
                 )
-            )
 
         manifests[manifest_key].append(
             ManifestEntry(
@@ -485,74 +499,75 @@ if "annotations" in manifests:
             "take_uid_as_key": True,
         },
     }
-    egopose_base_dir = os.path.join(release_dir, "annotations/ego_pose/")
-    for split in ["train", "val"]:
-        for part in ["body", "hand", "camera_pose"]:
-            subdir = os.path.join(egopose_base_dir, split, part)
-            print(subdir)
+    if not dev_release:
+        egopose_base_dir = os.path.join(release_dir, "annotations/ego_pose/")
+        for split in ["train", "val"]:
+            for part in ["body", "hand", "camera_pose"]:
+                subdir = os.path.join(egopose_base_dir, split, part)
+                print(subdir)
 
-            annotation_files = []
+                annotation_files = []
 
-            # go over each potential manifest --part
-            for manifest_key, metadata in egopose_part_subdirs.items():
-                for ann_dir in metadata["subdirs"][part]:
-                    dst_relative_subdir = os.path.join(
-                        "annotations/ego_pose/", split, part, ann_dir
-                    )
-                    abs_subdir = os.path.join(subdir, ann_dir)
-
-                    if not abs_subdir.endswith("/"):
-                        abs_subdir += "/"
-                    ann_files = downloader.ls(abs_subdir)
-                    for bn, s3_path in ann_files:
-                        if len(bn) == 0:
-                            continue
-                        if bn == "manifest.json":
-                            continue
-                        take_uid = os.path.splitext(bn)[0]
-                        uid = take_uid
-                        splits = take_uid_to_splits.get(take_uid, [])
-                        assert len(splits) == 1 and splits[0] == split, "split diff: {splits} vs {split}"
-                        benchmarks = ["egopose", "ego_pose"]
-                        if part in ["body", "hand"]:
-                            benchmarks += [
-                                f"{part}_pose",
-                                f"ego_{part}_pose",
-                                f"{part}pose",
-                                f"ego{part}pose",
-                                f"ego_{part}pose",
-                            ]
-                        else:
-                            assert part == "camera_pose"
-                            for body_part in ["body", "hand"]:
-                                benchmarks += [
-                                    f"{body_part}_pose",
-                                    f"ego_{body_part}_pose",
-                                    f"{body_part}pose",
-                                    f"ego{body_part}pose",
-                                    f"ego_{body_part}pose",
-                                    f"camera_pose",
-                                ]
-
-                        manifests[manifest_key].append(
-                            ManifestEntry(
-                                uid=uid,
-                                benchmarks=benchmarks,
-                                splits=splits,
-                                paths=[
-                                    PathSpecification(
-                                        source_path=s3_path,
-                                        relative_path=f"{dst_relative_subdir}/{bn}",
-                                    )
-                                ],
-                            )
+                # go over each potential manifest --part
+                for manifest_key, metadata in egopose_part_subdirs.items():
+                    for ann_dir in metadata["subdirs"][part]:
+                        dst_relative_subdir = os.path.join(
+                            "annotations/ego_pose/", split, part, ann_dir
                         )
+                        abs_subdir = os.path.join(subdir, ann_dir)
+
+                        if not abs_subdir.endswith("/"):
+                            abs_subdir += "/"
+                        ann_files = downloader.ls(abs_subdir)
+                        for bn, s3_path in ann_files:
+                            if len(bn) == 0:
+                                continue
+                            if bn == "manifest.json":
+                                continue
+                            take_uid = os.path.splitext(bn)[0]
+                            uid = take_uid
+                            splits = take_uid_to_splits.get(take_uid, [])
+                            assert len(splits) == 1 and splits[0] == split, "split diff: {splits} vs {split}"
+                            benchmarks = ["egopose", "ego_pose"]
+                            if part in ["body", "hand"]:
+                                benchmarks += [
+                                    f"{part}_pose",
+                                    f"ego_{part}_pose",
+                                    f"{part}pose",
+                                    f"ego{part}pose",
+                                    f"ego_{part}pose",
+                                ]
+                            else:
+                                assert part == "camera_pose"
+                                for body_part in ["body", "hand"]:
+                                    benchmarks += [
+                                        f"{body_part}_pose",
+                                        f"ego_{body_part}_pose",
+                                        f"{body_part}pose",
+                                        f"ego{body_part}pose",
+                                        f"ego_{body_part}pose",
+                                        f"camera_pose",
+                                    ]
+
+                            manifests[manifest_key].append(
+                                ManifestEntry(
+                                    uid=uid,
+                                    benchmarks=benchmarks,
+                                    splits=splits,
+                                    paths=[
+                                        PathSpecification(
+                                            source_path=s3_path,
+                                            relative_path=f"{dst_relative_subdir}/{bn}",
+                                        )
+                                    ],
+                                )
+                          )
     # egopose_anns = [
     #     x for x in manifests["annotations"]
     #     if x.benchmarks is not None and "egopose" in x.benchmarks
     # ]
 
-if "expert_commentary" in manifests:
+if not dev_release and "expert_commentary" in manifests:
     manifests["expert_commentary"] = []
     ec_base_dir = os.path.join(
         release_dir, "annotations/expert_commentary/"
@@ -578,7 +593,6 @@ if "expert_commentary" in manifests:
                 ],
             )
         )
-        
 
 if "features/omnivore_video" in manifests:
     for feature_name in ["omnivore_video"]:
