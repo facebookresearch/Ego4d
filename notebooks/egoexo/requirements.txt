@@ -1,0 +1,4 @@
+av==8.1.0
+projectaria_tools==1.5.0
+torchvision==0.12.0
+
