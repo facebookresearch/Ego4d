@@ -1,24 +1,36 @@
+** Deprecated values START**
 batch_job_name=project_retriangulation_test
+data_dir=/large_experiments/egoexo/v1
+cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_test/
+run_type=local
+cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_production/
+** Deprecated values DONE**
+
+** Setup
+cd /private/home/suyogjain/egoexo/jan24/Ego4d/ego4d/internal/human_pose
+bash
+conda activate human_pose_sj
+
+
+** Final flag values
 batch_job_name=project_retriangulation_production
 frame_start=0
 frame_end=1000000000
 min_area_ratio=0.003
 storage_level=30
-cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_test/
-cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_production/
-data_dir=/large_experiments/egoexo/v1
+cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_production_v2/
 data_dir=/private/home/suyogjain/egoexo/jan24/data
 partition=learnaccel
-
 run_type=submitit
-run_type=local
+
 
 take_name=indiana_bike_06_9
 take_name=cmu_bike01_1+cmu_bike01_2+cmu_bike01_3+cmu_bike01_4+cmu_bike01_5
 take_name=sfu_cooking_007_7
 
 
-steps=extract_camera_info+preprocess
+steps=extract_camera_info
+steps=preprocess
 steps=update_body_annotations
 steps=update_body_automatic
 steps=update_hand_annotations
@@ -46,10 +58,7 @@ repo_root_dir=/private/home/${USER}/code/Ego4d
 
 /checkpoint/miguelmartin/egoexo_data/public_release/
 
-cd /private/home/suyogjain/egoexo/Ego4d/ego4d/internal/human_pose
-cd /private/home/suyogjain/egoexo/jan24/Ego4d/ego4d/internal/human_pose
-bash
-conda activate human_pose_sj
+
 
 aws s3 ls s3://ego4d-consortium-sharing/egoexo/releases/dev/annotations/ego_pose_latest/body/annotation/
 

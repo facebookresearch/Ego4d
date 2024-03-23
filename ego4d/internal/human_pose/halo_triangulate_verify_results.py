@@ -44,6 +44,7 @@ def compare_results(annotation_json_path, output_json_path):
     
 def main():    
     config_file = "halo_triangulate_config_old.json"    
+    #config_file = "halo_triangulate_config_new.json"    
     config = load_json(config_file)
     annotation_type = config["annotation_type"]
     body_or_hand = config["body_or_hand"]

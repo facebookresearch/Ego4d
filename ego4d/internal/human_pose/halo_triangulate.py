@@ -246,14 +246,17 @@ def generate_output_json(results):
                 
 
 def run_triangulation(annotation, camera_matrices):
-    output = dict()    
+    output = dict()
+    if 'annotation3D' not in annotation:
+        return None
+    
     pose2d_transformed = process_annotation(annotation['annotation2D'], camera_matrices)
     for kp_name in pose2d_transformed:        
         kp_data = pose2d_transformed[kp_name]
         
         if len(kp_data)<2: # Cannot triangulate
             continue
-        
+                
         if kp_name in annotation['annotation3D']:
             output[kp_name] = dict()
             output[kp_name]['num_views'] = len(kp_data)        
@@ -290,8 +293,12 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
                 camera_matrices = process_camera_pose(camera_pose)
             else:
                 camera_matrices = process_camera_pose_new(camera_data, frame_number)            
-                        
-            output[frame_number].append(run_triangulation(annotation, camera_matrices))
+
+            result_triangulation = run_triangulation(annotation, camera_matrices)
+            if result_triangulation is None:
+                continue
+            
+            output[frame_number].append(result_triangulation)
     
     #print(json.dumps(output, indent=2))
     summarize_error(output, level=0)
@@ -300,8 +307,8 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
     return output_json
         
 def main():    
-    config_file = "halo_triangulate_config_old.json"
-    #config_file = "halo_triangulate_config_new.json"
+    #config_file = "halo_triangulate_config_old.json"
+    config_file = "halo_triangulate_config_new.json"
     
     config = load_json(config_file)
     annotation_type = config["annotation_type"]
@@ -318,7 +325,7 @@ def main():
     annotation_files = os.listdir(annotation_dir)
     print('Num annotation files:', len(annotation_files))    
     for idx, annotation_file in enumerate(annotation_files):
-        print(idx, annotation_file)
+        print(idx, len(annotation_files), annotation_file)
         output_json_path = os.path.join(output_dir, annotation_file)
         print(output_json_path)
         if os.path.exists(output_json_path):
@@ -326,7 +333,7 @@ def main():
         
         output_json = triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
         if output_json is not None:                
-            write_json(output_json, output_json_path)        
+            write_json(output_json, output_json_path)     
 
 if __name__ == "__main__":
     main()

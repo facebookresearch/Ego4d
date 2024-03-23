@@ -51,7 +51,7 @@ pathmgr = PathManager()
 pathmgr.register_handler(S3PathHandler(profile="default"))
 
 cvpr_data_dir="/large_experiments/egoexo/cvpr"
-project_root_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/"
+project_root_dir = "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production_v2/"
 
 annotation_base_dir = os.path.join(project_root_dir, "ego_pose_latest")
 annotation_output_base_dir = os.path.join(project_root_dir, "ego_pose_post_triangulation")
