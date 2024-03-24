@@ -38,6 +38,7 @@ manifests = {
     "takes": [],
     "captures": [],
     "take_trajectory": [],
+    "take_eye_gaze": [],
     "take_point_cloud": [],
     "take_vrs": [],
     "take_vrs_noimagestream": [],
@@ -254,6 +255,16 @@ for manifest_key in ["takes", "takes_dropped"]:
                 if d != "eye_gaze":
                     assert d == "trajectory"
                     manifests["take_trajectory"].append(
+                        ManifestEntry(
+                            uid=take_uid,
+                            paths=d_paths,
+                            benchmarks=take_uid_to_benchmarks.get(take_uid, None),
+                            splits=take_uid_to_splits.get(take_uid, None),
+                        )
+                    )
+                else:
+                    assert d == "eye_gaze"
+                    manifests["take_eye_gaze"].append(
                         ManifestEntry(
                             uid=take_uid,
                             paths=d_paths,
@@ -607,7 +618,6 @@ if "narrate_and_act_transc" in manifests:
                 splits=take_uid_to_splits.get(take_uid, None),
             )
         )
-
 
 all_bs = set()
 for k, v in manifests.items():
