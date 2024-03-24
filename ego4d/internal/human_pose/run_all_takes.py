@@ -55,11 +55,9 @@ for idx, take_list in enumerate(take_chunks):
     print(idx)
     cmd = get_cmd(take_list)
     os.system(cmd)
-    break
-    
-    #print()    
-    #print("5 minutes have passed.")
-    #time.sleep(300)
+    user_input = input("Please enter to kick of the next batch:")
+    print(f"Enqueing next batch now..")
+
 
 
 
