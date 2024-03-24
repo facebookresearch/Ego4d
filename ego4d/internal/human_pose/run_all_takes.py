@@ -49,14 +49,16 @@ def get_cmd(take_list):
 
 release_takes = pd.read_csv('/private/home/suyogjain/egoexo/jan24/release_take_metadata.csv')
 take_names = list(release_takes['take_name'])
+take_names = [x for x in take_names if 'bouldering' not in x]
+
 take_chunks = chunk_list(take_names, 75)
 
-for idx, take_list in enumerate(take_chunks):
+for idx, take_list in enumerate(take_chunks):    
     print(idx)
     cmd = get_cmd(take_list)
     os.system(cmd)
     user_input = input("Please enter to kick of the next batch:")
-    print(f"Enqueing next batch now..")
+    print(f"Enqueing next batch now..")    
 
 
 

@@ -972,12 +972,14 @@ def mode_hand_pose3d_v2(config: Config, annot_type='annotation'):
 
 
 def add_arguments(parser):
+    '''
     parser.add_argument("--config-name", default="georgiatech_covid_02_2")
     parser.add_argument(
         "--config_path", default="configs", help="Path to the config folder"
-    )
+    )    
+    '''
     parser.add_argument(
-        "--take_name",
+        "--take_names",
         default="georgiatech_covid_02_2",
         type=str,
         help="take names to run, concatenated by '+', "
@@ -1041,9 +1043,11 @@ def new_run(config: Config):
     else:
         raise AssertionError(f"unknown mode: {config.mode}")
 
-def main(args):
-    # Note: this function is called from launch_main.py
+def run_pipeline(args, take_name):
+    # Note: this function is called from launch_main.py    
     config = get_hydra_config(args)
+    print(config)
+    print(take_name)
 
     steps = args.steps.split("+")
     print(f"steps: {steps}")

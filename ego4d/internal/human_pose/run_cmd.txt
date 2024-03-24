@@ -4,6 +4,7 @@ data_dir=/large_experiments/egoexo/v1
 cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_test/
 run_type=local
 cache_root_dir=/large_experiments/egoexo/egopose/${USER}/project_retriangulation_production/
+--config-name dev_release_base \
 ** Deprecated values DONE**
 
 ** Setup
@@ -40,11 +41,10 @@ take_name=uniandes_basketball_003_28
 python launch_main.py \
 --base_work_dir /checkpoint/$USER/flow/ego4d \
 --batch_job_name ${batch_job_name} \
---config-name dev_release_base \
 --partition ${partition} \
 --run_type ${run_type} \
 --steps ${steps} \
---take_name ${take_name} \
+--take_names ${take_name} \
 cache_root_dir=${cache_root_dir} \
 data_dir=${data_dir} \
 inputs.from_frame_number=${frame_start} \
@@ -55,6 +55,27 @@ mode_preprocess.vrs_bin_path=/private/home/jinghuang/code/vrs/build/tools/vrs/vr
 mode_bbox.min_area_ratio=${min_area_ratio} \
 outputs.storage_level=${storage_level} \
 repo_root_dir=/private/home/${USER}/code/Ego4d
+
+
+python launch_utils.py \
+--base_work_dir /checkpoint/$USER/flow/ego4d \
+--batch_job_name ${batch_job_name} \
+--config-name dev_release_base \
+--partition ${partition} \
+--run_type ${run_type} \
+--take_names ${take_name} \
+cache_root_dir=${cache_root_dir} \
+data_dir=${data_dir} \
+inputs.from_frame_number=${frame_start} \
+inputs.to_frame_number=${frame_end} \
+inputs.sample_interval=${sample_interval} \
+inputs.subclip_json_dir=/checkpoint/jinghuang/datasets/EgoExoPose/subclip_info/dummy \
+mode_preprocess.vrs_bin_path=/private/home/jinghuang/code/vrs/build/tools/vrs/vrs \
+mode_bbox.min_area_ratio=${min_area_ratio} \
+outputs.storage_level=${storage_level} \
+repo_root_dir=/private/home/${USER}/code/Ego4d
+
+
 
 /checkpoint/miguelmartin/egoexo_data/public_release/
 
