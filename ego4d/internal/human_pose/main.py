@@ -98,7 +98,8 @@ class Context:
 def get_context(config: Config) -> Context:    
     take_json_path = os.path.join(config.data_dir, "takes.json")
     takes = json.load(open(take_json_path))
-    take = [t for t in takes if t["root_dir"] == config.inputs.take_name]
+    #take = [t for t in takes if t["root_dir"] == config.inputs.take_name]
+    take = [t for t in takes if t["take_name"] == config.inputs.take_name]
     if len(take) != 1:
         print(f"Take: {config.inputs.take_name} does not exist")
         sys.exit(1)
@@ -111,7 +112,7 @@ def get_context(config: Config) -> Context:
     data_dir = config.data_dir
     cache_rel_dir = os.path.join(
         "cache",
-        take["root_dir"],
+        take["take_name"],
     )
     cache_dir = os.path.join(
         config.cache_root_dir,
@@ -119,7 +120,7 @@ def get_context(config: Config) -> Context:
     )
     # Initialize exo cameras from calibration file since sometimes some exo camera is missing
     traj_dir = os.path.join(
-        data_dir, "captures", take["capture"]["root_dir"], "trajectory"
+        data_dir, take["capture"]["root_dir"], "trajectory"
     )
     exo_traj_path = os.path.join(traj_dir, "gopro_calibs.csv")
     exo_traj_df = pd.read_csv(exo_traj_path)
@@ -325,7 +326,7 @@ def extract_camera_data(config: Config):
     assert config.mode_preprocess.download_video_files, "must download files"
     
     mps_capture_dir = os.path.join(
-        ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
+        ctx.data_dir, ctx.take["capture"]["root_dir"]
     )    
     print(mps_capture_dir)
     traj_dir = os.path.join(mps_capture_dir, "trajectory")
@@ -357,7 +358,7 @@ def extract_camera_data(config: Config):
     }
 
     capture_dir = os.path.join(
-        cvpr_data_dir, "captures", ctx.take["capture"]["root_dir"]
+        cvpr_data_dir,  ctx.take["capture"]["root_dir"]
     )
     print(capture_dir)
     aria_dir = os.path.join(capture_dir, "videos")
