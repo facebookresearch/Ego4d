@@ -1,17 +1,9 @@
 import argparse
-import datetime
 import getpass
-import json
 import submitit
-import copy
 import functools
 import pandas as pd
-try:
-    from virtual_fs import virtual_os as os
-    from virtual_fs.virtual_io import open
-except ImportError:
-    import os
-import subprocess
+import os
 import ego4d.internal.human_pose.extract_camera_info as extract_camera_info
 
 
@@ -95,7 +87,7 @@ def create_executor(args, log_dir):
         slurm_partition=args.partition,
         slurm_constraint=args.gpu_type,
     )  
-    executor.update_parameters(array_parallelism=2)
+    executor.update_parameters(array_parallelism=256)
     return executor
 
 
