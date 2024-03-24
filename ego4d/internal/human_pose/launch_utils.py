@@ -5,7 +5,7 @@ import json
 import submitit
 import copy
 import functools
-
+import pandas as pd
 try:
     from virtual_fs import virtual_os as os
     from virtual_fs.virtual_io import open
@@ -105,28 +105,19 @@ def main():
     args = parser.parse_args()   
     print(args)
 
-    
+    release_takes = pd.read_csv('/private/home/suyogjain/egoexo/jan24/release_take_metadata.csv')
+    take_names = list(release_takes['take_name'])
+    take_names = [x for x in take_names if 'bouldering' not in x]
+    print(len(take_names))
+
     log_dir = os.path.join(args.base_work_dir, args.batch_job_name)    
     executor = create_executor(args, log_dir)
     print(executor)
-
-    take_name_list = args.take_names.split("+") 
-    print(take_name_list)
     
     func = functools.partial(extract_camera_info.run_pipeline, args)
-    
-    jobs = executor.map_array(func, take_name_list)
+    jobs = executor.map_array(func, take_names)
     print(f"Jobs: {jobs}")   
     
-    #print("Args: {}".format(args))
-    #jobs = executor.map_array(task, args, task_name)  # just a list of jobs
-
-
-    '''
-    for job_id in range(args.job_num):
-        task.config_single_job(args, job_id)
-        launch_job_array(task, args)
-    '''
 
 if __name__ == "__main__":
     main()

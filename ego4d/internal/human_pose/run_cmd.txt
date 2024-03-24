@@ -63,7 +63,6 @@ python launch_utils.py \
 --config-name dev_release_base \
 --partition ${partition} \
 --run_type ${run_type} \
---take_names ${take_name} \
 cache_root_dir=${cache_root_dir} \
 data_dir=${data_dir} \
 inputs.from_frame_number=${frame_start} \
