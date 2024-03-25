@@ -283,7 +283,7 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
     camera_file = os.path.join(camera_dir, annotation_file)
     if not os.path.exists(camera_file):
         print('Missing camera file')
-        return None
+        return None, None
     
     camera_data = load_json(camera_file)    
     annotation_data = load_json(os.path.join(annotation_dir, annotation_file))    
