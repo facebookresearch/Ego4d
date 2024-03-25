@@ -225,7 +225,6 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
         return videos
     else:
         takes = json.load(open(os.path.join(config.egoexo_data_dir, "takes.json")))
-        takes += json.load(open(os.path.join(config.egoexo_data_dir, "takes_dropped.json")))
         all_uids = [t["take_uid"] for t in takes]
         uids = config.uid_list
         if uids is None:
