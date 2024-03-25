@@ -2,20 +2,20 @@ fps: 30
 force_yes: false
 io:
   filter_completed: true
-  egoexo_data_dir: "/checkpoint/miguelmartin/egoexo_data/dev/"
+  egoexo_data_dir: "/large_experiments/egoexo/dev/"
   eligible_cam_prefixes: null
   dataset_version: egoexo
   uid_list: null
   video_limit: -1
-  out_path: /checkpoint/miguelmartin/egoexo_features/maws_clip_2b_public
+  out_path: /checkpoint/miguelmartin/egoexo_features/maws_clip_2b
   debug_path: /checkpoint/miguelmartin/egoexo_features/maws_clip_2b_debug
   debug_mode: false
   exclude_no_audio: false
 inference_config:
   device: cuda
   batch_size: 1
-  num_workers: 2
-  prefetch_factor: 2
+  num_workers: 0
+  prefetch_factor: null
   fps: 30
   frame_window: 1
   stride: 1
@@ -28,7 +28,7 @@ inference_config:
 schedule_config:
   run_locally: false
   log_folder: slurm_log/%j
-  timeout_min: 3100
+  timeout_min: 600
   constraint: volta
   slurm_partition: eht
   slurm_array_parallelism: 256

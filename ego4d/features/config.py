@@ -225,6 +225,7 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
         return videos
     else:
         takes = json.load(open(os.path.join(config.egoexo_data_dir, "takes.json")))
+        takes += json.load(open(os.path.join(config.egoexo_data_dir, "takes_dropped.json")))
         all_uids = [t["take_uid"] for t in takes]
         uids = config.uid_list
         if uids is None:
@@ -270,17 +271,18 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
                     ):
                         continue
 
+                    path = os.path.join(config.egoexo_data_dir, take["root_dir"], stream["relative_path"])
+                    if not os.path.exists(path):
+                        # ???
+                        path = os.path.join(config.egoexo_data_dir, "takes", take["root_dir"], stream["relative_path"])
+
+                    if not os.path.exists(path):
+                        continue
+
                     videos.append(
                         Video(
                             uid=uid,
-                            path=os.path.join(
-                                config.egoexo_data_dir,
-                                "takes",
-                                take["root_dir"],
-                                # TODO
-                                # "downscaled/448",
-                                stream["relative_path"],
-                            ),
+                            path=path,
                             # NOTE: w/h used to estimate time to complete
                             w=w,
                             h=h,
