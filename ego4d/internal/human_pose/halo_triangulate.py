@@ -195,8 +195,15 @@ def summarize_error(results, level=0):
                 for cam_name in errors:
                     print(cam_name, np.mean(np.array(errors[cam_name])))
     
+    error_dict = dict()
     for cam_name in overall_errors:
         print(cam_name, len(overall_errors[cam_name]), np.mean(np.array(overall_errors[cam_name])))
+        error_dict[cam_name] = dict()
+        error_dict[cam_name]['num_frames'] = len(overall_errors[cam_name])
+        error_dict[cam_name]['error'] = np.mean(np.array(overall_errors[cam_name]))
+
+    return error_dict
+
     
 def generate_output_json(results):
     transformed_annotation = dict()
@@ -301,14 +308,14 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
             output[frame_number].append(result_triangulation)
     
     #print(json.dumps(output, indent=2))
-    summarize_error(output, level=0)
+    error_json = summarize_error(output, level=0)
     output_json = generate_output_json(output)    
     print('=='*10)
-    return output_json
+    return output_json, error_json
         
 def main():    
-    config_file = "halo_triangulate_config_old.json"
-    #config_file = "halo_triangulate_config_new.json"
+    #config_file = "halo_triangulate_config_old.json"
+    config_file = "halo_triangulate_config_new.json"
     
     config = load_json(config_file)
     annotation_type = config["annotation_type"]
@@ -318,8 +325,14 @@ def main():
     camera_dir = config["camera_dir"]
     annotation_dir = os.path.join(config["annotation_dir"], body_or_hand, annotation_type)
     output_dir =  os.path.join(config["output_dir"], camera_format, body_or_hand, annotation_type)
+    error_output_dir =  os.path.join(config["error_output_dir"], camera_format, body_or_hand, annotation_type)
+    
     if not os.path.isdir(output_dir):
         cmd = 'mkdir -p ' + output_dir
+        os.system(cmd)
+
+    if not os.path.isdir(error_output_dir):
+        cmd = 'mkdir -p ' + error_output_dir
         os.system(cmd)
 
     annotation_files = os.listdir(annotation_dir)
@@ -327,13 +340,15 @@ def main():
     for idx, annotation_file in enumerate(annotation_files):
         print(idx, len(annotation_files), annotation_file)
         output_json_path = os.path.join(output_dir, annotation_file)
+        error_json_path  = os.path.join(error_output_dir, annotation_file)
         print(output_json_path)
         if os.path.exists(output_json_path):
             continue
         
-        output_json = triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
+        output_json, error_json = triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
         if output_json is not None:                
             write_json(output_json, output_json_path)     
+            write_json(error_json, error_json_path)        
 
 if __name__ == "__main__":
     main()
