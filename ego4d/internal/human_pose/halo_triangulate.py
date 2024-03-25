@@ -333,6 +333,17 @@ def run_pipeline(params, annotation_file):
         write_json(output_json, output_json_path)     
         write_json(error_json, error_json_path)        
 
+def run_pipeline_list(params, annotation_files):
+    for annotation_file in annotation_files:
+        run_pipeline(params, annotation_file)
+
+def chunk_list(input_list, chunk_size):
+    # Create a list of lists, where each sublist has chunk_size elements
+    return [
+        input_list[i : i + chunk_size] for i in range(0, len(input_list), chunk_size)
+    ]
+
+
 def create_executor(log_dir):    
     executor = submitit.AutoExecutor(folder=log_dir+"/%j")    
     executor.update_parameters(           
@@ -378,16 +389,17 @@ def main():
     params["camera_format"] = camera_format
     print(params)
 
-    run_local = False  
+    run_local = True  
     if run_local:  
         for idx, annotation_file in enumerate(annotation_files):
             print(idx, len(annotation_files))        
             run_pipeline(params, annotation_file)
     else:
         log_dir = "/checkpoint/suyogjain/flow/ego4d/project_retriangulation_production_v2_retriangulation/"
-        executor = create_executor(log_dir)    
-        func = functools.partial(run_pipeline, params)
-        jobs = executor.map_array(func, annotation_files)
+        executor = create_executor(log_dir)
+        annotation_files_chunks = chunk_list(annotation_files, 10)    
+        func = functools.partial(run_pipeline_list, params)
+        jobs = executor.map_array(func, annotation_files_chunks)
         print(f"Jobs: {jobs}")   
 
         
