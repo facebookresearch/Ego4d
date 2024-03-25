@@ -56,6 +56,7 @@ mode_bbox.min_area_ratio=${min_area_ratio} \
 outputs.storage_level=${storage_level} \
 repo_root_dir=/private/home/${USER}/code/Ego4d
 
+** Final camera extraction info **
 
 python launch_utils.py \
 --base_work_dir /checkpoint/$USER/flow/ego4d \

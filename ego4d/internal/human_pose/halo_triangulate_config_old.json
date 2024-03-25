@@ -1,8 +1,8 @@
 {
-    "camera_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/hand/camera_pose/",
-    "annotation_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/ego_pose_latest/",
-    "output_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production/triangulated_results/",
+    "camera_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production_v2/ego_pose_pre_triangulation/ego_pose_latest_part_2/body/camera_pose/",
+    "annotation_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production_v2/ego_pose_pre_triangulation/ego_pose_latest_part_2/",
+    "output_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production_v2/triangulated_results/",
     "camera_format": "old",
-    "annotation_type": "automatic",
+    "annotation_type": "annotation",
     "body_or_hand": "body"
 }

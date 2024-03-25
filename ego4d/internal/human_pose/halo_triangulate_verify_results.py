@@ -15,13 +15,13 @@ def match_keypoints3d(orig, trans):
     for kp_name in orig:
         if kp_name in trans:
             pt_orig  = orig[kp_name]
-            pt_trans = trans[kp_name]            
-            err = np.sum([np.abs(pt_orig[k]-pt_trans[k]) for k in ['x', 'y', 'z']])           
+            pt_trans = trans[kp_name]             
+            err = np.sum([np.abs(pt_orig[k]-pt_trans[k]) for k in ['x', 'y', 'z']])                       
             errors.append(err)
     if len(errors)==0:
         return None
     
-    mean_error = np.mean(np.array(errors))
+    mean_error = np.mean(np.array(errors))    
     return mean_error
             
 def compare_results(annotation_json_path, output_json_path):
@@ -32,15 +32,16 @@ def compare_results(annotation_json_path, output_json_path):
     for frame_number in frame_numbers:
         if len(original[frame_number])==1:
             original_annot = original[frame_number][0]
-            transfomred_annot = transfomred[frame_number][0]
-            mean_error = match_keypoints3d(original_annot['annotation3D'], transfomred_annot['annotation3D'])
+            transfomred_annot = transfomred[frame_number][0]            
+            mean_error = match_keypoints3d(original_annot['annotation3D'], transfomred_annot['annotation3D'])            
             if mean_error is not None:
                 all_errors.append(mean_error)
     
-
-    final_error = np.mean(np.array(all_errors))
+    
+    final_error = np.mean(np.array(all_errors))    
     if final_error>0.001:
         print(final_error)        
+    return final_error
     
 def main():    
     config_file = "halo_triangulate_config_old.json"    
@@ -60,7 +61,7 @@ def main():
         output_json_path = os.path.join(output_dir, annotation_file)
         print(idx, annotation_file)        
         if os.path.exists(output_json_path):
-            error = compare_results(annotation_json_path, output_json_path)
+            error = compare_results(annotation_json_path, output_json_path)              
             
 if __name__ == "__main__":
     main()
