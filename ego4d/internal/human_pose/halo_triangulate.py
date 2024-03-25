@@ -3,7 +3,8 @@ import numpy as np
 import json
 import sys
 import os
-
+import submitit
+import functools
 def load_json(fname):
     with open(fname) as f:
         data = json.load(f)    
@@ -312,7 +313,38 @@ def triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
     output_json = generate_output_json(output)    
     print('=='*10)
     return output_json, error_json
+
+def run_pipeline(params, annotation_file):
+    output_dir = params["output_dir"]
+    error_output_dir = params["error_output_dir"]
+    camera_dir = params["camera_dir"]
+    annotation_dir = params["annotation_dir"]
+    camera_format = params["camera_format"]
+    
+    output_json_path = os.path.join(output_dir, annotation_file)
+    error_json_path  = os.path.join(error_output_dir, annotation_file)
+    print(output_json_path)
+    
+    if os.path.exists(output_json_path):
+        return
         
+    output_json, error_json = triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
+    if output_json is not None:                
+        write_json(output_json, output_json_path)     
+        write_json(error_json, error_json_path)        
+
+def create_executor(log_dir):    
+    executor = submitit.AutoExecutor(folder=log_dir+"/%j")    
+    executor.update_parameters(           
+        cpus_per_task=10,
+        nodes=1,
+        timeout_min=3 * 24 * 60,
+        name="default",        
+        slurm_partition="learnaccel"        
+    )  
+    executor.update_parameters(array_parallelism=256)
+    return executor
+
 def main():    
     #config_file = "halo_triangulate_config_old.json"
     config_file = "halo_triangulate_config_new.json"
@@ -335,21 +367,30 @@ def main():
         cmd = 'mkdir -p ' + error_output_dir
         os.system(cmd)
 
-    annotation_files = os.listdir(annotation_dir)
-    print('Num annotation files:', len(annotation_files))    
-    for idx, annotation_file in enumerate(annotation_files):
-        print(idx, len(annotation_files), annotation_file)
-        output_json_path = os.path.join(output_dir, annotation_file)
-        error_json_path  = os.path.join(error_output_dir, annotation_file)
-        print(output_json_path)
-        if os.path.exists(output_json_path):
-            continue
-        
-        output_json, error_json = triangulate_take(camera_dir, annotation_dir, camera_format, annotation_file)
-        if output_json is not None:                
-            write_json(output_json, output_json_path)     
-            write_json(error_json, error_json_path)        
+    annotation_files = os.listdir(annotation_dir)    
+    print('Num annotation files:', len(annotation_files))  
 
+    params = dict()
+    params["output_dir"] = output_dir
+    params["error_output_dir"] = error_output_dir
+    params["camera_dir"] = camera_dir
+    params["annotation_dir"] = annotation_dir
+    params["camera_format"] = camera_format
+    print(params)
+
+    run_local = False  
+    if run_local:  
+        for idx, annotation_file in enumerate(annotation_files):
+            print(idx, len(annotation_files))        
+            run_pipeline(params, annotation_file)
+    else:
+        log_dir = "/checkpoint/suyogjain/flow/ego4d/project_retriangulation_production_v2_retriangulation/"
+        executor = create_executor(log_dir)    
+        func = functools.partial(run_pipeline, params)
+        jobs = executor.map_array(func, annotation_files)
+        print(f"Jobs: {jobs}")   
+
+        
 if __name__ == "__main__":
     main()
 
