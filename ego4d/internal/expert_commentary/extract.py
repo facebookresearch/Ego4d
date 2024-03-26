@@ -8,10 +8,10 @@ from typing import List
 from tqdm.auto import tqdm
 
 RAW_COMMENTARY_ROOT = (
-    "/checkpoint/miguelmartin/expert_commentary/240207/raw_data_do_not_sync"
+    "/checkpoint/miguelmartin/expert_commentary/do_not_use/240207/raw_data_do_not_sync"
 )
 RAW_EXTRACTED_COMM_ROOT = (
-    "/checkpoint/miguelmartin/expert_commentary/240207/raw_data_extracted"
+    "/checkpoint/miguelmartin/expert_commentary/do_not_use/240207/raw_data_extracted"
 )
 
 
