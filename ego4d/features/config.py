@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import hydra
-import numpy as np
 import pandas as pd
 from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
@@ -233,6 +232,7 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
             if len(uid_takes) < len(takes):
                 print(f"Filtered {len(takes)} -> {len(uid_takes)} on uid config")
                 takes = uid_takes
+
         completed_uids = set(_uids_for_dir(config.out_path))
         videos = []
         for take in takes:
@@ -252,6 +252,14 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
                     # NOTE: known constants for not downsampled videos
                     w = 1408 if is_aria else 3840
                     h = 1408 if is_aria else 2160
+                    # TODO: downscaled or not
+                    # if w < h:
+                    #     h = math.ceil((h/w) * 448)
+                    #     w = 448
+                    # else:
+                    #     w = math.ceil((w/h) * 448)
+                    #     h = 448
+
                     uid = f"{take['take_uid']}_{cam_id}_{stream_name}"
                     if (
                         not unfiltered
@@ -260,15 +268,19 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
                     ):
                         continue
 
+                    path = os.path.join(
+                        config.egoexo_data_dir,
+                        take["root_dir"],
+                        stream["relative_path"],
+                    )
+
+                    if not os.path.exists(path):
+                        continue
+
                     videos.append(
                         Video(
                             uid=uid,
-                            path=os.path.join(
-                                config.egoexo_data_dir,
-                                "takes",
-                                take["root_dir"],
-                                stream["relative_path"],
-                            ),
+                            path=path,
                             # NOTE: w/h used to estimate time to complete
                             w=w,
                             h=h,

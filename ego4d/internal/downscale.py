@@ -17,8 +17,8 @@ from ego4d.research.common import batch_it
 from tqdm.auto import tqdm
 
 
-ROOT_DIR = "/checkpoint/miguelmartin/egoexo_data/dev/"
-DS_TAKES_DIR = "/checkpoint/miguelmartin/egoexo/downscaled_takes_public/"
+ROOT_DIR = "/large_experiments/egoexo/dev/"
+DS_TAKES_DIR = "/checkpoint/miguelmartin/egoexo/v2/downscaled_takes/"
 
 
 def call_ffmpeg(paths):
@@ -64,7 +64,6 @@ def main():
     num_machines: int = 50
     root_dir: str = ROOT_DIR
     ds_take_dir: str = DS_TAKES_DIR
-    root_dir = "/large_experiments/egoexo/v1/"
 
     takes_to_process = json.load(open(os.path.join(root_dir, "takes.json")))
 
@@ -77,7 +76,9 @@ def main():
                 rel_path = stream["relative_path"]
                 if rel_path is None:
                     continue
-                src_path = os.path.join(root_dir, "takes", take["root_dir"], rel_path)
+                if "with" in rel_path:  # TODO: add is_collage field
+                    continue
+                src_path = os.path.join(root_dir, take["root_dir"], rel_path)
                 dst_path = os.path.join(ds_take_dir, take["root_dir"], rel_path)
                 assert os.path.exists(src_path)
                 num_vids += 1

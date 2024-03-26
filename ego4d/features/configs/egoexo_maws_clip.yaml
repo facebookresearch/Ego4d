@@ -1,0 +1,45 @@
+fps: 30
+force_yes: false
+io:
+  filter_completed: true
+  egoexo_data_dir: "/large_experiments/egoexo/dev/"
+  eligible_cam_prefixes: null
+  dataset_version: egoexo
+  uid_list: null
+  video_limit: -1
+  out_path: /checkpoint/miguelmartin/egoexo_features/maws_clip_2b
+  debug_path: /checkpoint/miguelmartin/egoexo_features/maws_clip_2b_debug
+  debug_mode: false
+  exclude_no_audio: false
+inference_config:
+  device: cuda
+  batch_size: 1
+  num_workers: 0
+  prefetch_factor: null
+  fps: 30
+  frame_window: 1
+  stride: 1
+  include_audio: false
+  include_video: true
+  norm_config:
+    normalize_audio: false
+    resample_audio_rate: 16000
+    resampling_method: "sinc_interpolation"
+schedule_config:
+  run_locally: false
+  log_folder: slurm_log/%j
+  timeout_min: 600
+  constraint: volta
+  slurm_partition: eht
+  slurm_array_parallelism: 256
+  gpus_per_node: 1
+  cpus_per_task: 10
+  overhead: 2.0
+  time_per_forward_pass: 0.25
+  schedule_time_per_node: 10.0
+model_config:
+  model_name: "vit_2b14_xlmr_l"
+  base_model: "maws_clip"
+  input_type: "video"
+model_module_str: ego4d.features.models.maws
+check_fv_count: false  # doing this due to variable frame rate

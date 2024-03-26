@@ -5,6 +5,7 @@ from fractions import Fraction
 from typing import Any, Dict, List, Optional
 
 import av
+import av.error
 import numpy as np
 import torch
 from ego4d.features.config import FeatureExtractConfig, get_transform, Video
@@ -20,7 +21,7 @@ from torchvision.transforms import Compose
 from tqdm.auto import tqdm
 
 
-def get_frames(container, t1, t2, buffer, max_buffer_size):
+def get_frames(container, t1, t2, buffer, max_buffer_size, frame_window_size):
     # [t1, t2]
     ret = []
 
@@ -33,33 +34,42 @@ def get_frames(container, t1, t2, buffer, max_buffer_size):
     def exceeds_range(frame):
         return frame.pts * tb >= t2
 
-    for frame in buffer:
+    for frame in buffer.values():
         if is_in_range(frame):
             ret.append(frame)
 
-    prev_pts = None
-    for frame in container.decode(video=0):
-        if frame.pts is None:
-            raise AssertionError("frame is None")
-        if prev_pts is not None and frame.pts < prev_pts:
-            raise AssertionError("failed assumption pts in order: ")
-        if not isinstance(frame, av.VideoFrame):
-            raise AssertionError("other packets not supported")
+    ret.sort(key=lambda x: x.pts)
 
-        prev_pts = frame.pts
+    if len(ret) == 0 or ret[-1].pts + 1 < t2 / tb:
+        while True:
+            try:
+                for frame in container.decode(video=0):
+                    if frame.pts is None:
+                        raise AssertionError("frame is None")
+                    if not isinstance(frame, av.VideoFrame):
+                        raise AssertionError("other packets not supported")
 
-        buffer.append(frame)
+                    buffer[frame.pts] = frame
 
-        if len(buffer) > max_buffer_size:
-            del buffer[0]
+                    if len(buffer) > max_buffer_size:
+                        del buffer[min(buffer.keys())]
 
-        if is_in_range(frame):
-            ret.append(frame)
-        elif exceeds_range(frame):
-            break
+                    if is_in_range(frame):
+                        ret.append(frame)
+                    elif exceeds_range(frame):
+                        break
+                break
+            except av.error.EOFError:
+                seek_pts = buffer[max(buffer.keys())].pts
+                container.seek(seek_pts, stream=container.streams.video[0])
+
+        ret.sort(key=lambda x: x.pts)
+
+    ret = list({frame.pts: frame for frame in ret}.values())
     pts_in_ret = [frame.pts for frame in ret]
     if not (np.diff(pts_in_ret) > 0).all():
         raise AssertionError("not increasing sequence of frames")
+    assert len(ret) == frame_window_size, f"{len(ret)} != {frame_window_size}"
     return ret
 
 
@@ -70,10 +80,10 @@ class EncodedVideoCached:
         self.vid._container.seek(0)
 
         self.frame_buffer_size = frame_buffer_size
-        self.frame_buffer = []
+        self.frame_buffer = {}
         self.last_t = None
 
-    def get_clip(self, t1, t2):
+    def get_clip(self, t1, t2, frame_window_size):
         if self.last_t is not None and t1 < self.last_t:
             raise AssertionError("cannot seek backward")
 
@@ -85,6 +95,7 @@ class EncodedVideoCached:
             t2 + vs,
             self.frame_buffer,
             self.frame_buffer_size,
+            frame_window_size,
         )
         self.last_t = t1
         return {
@@ -104,7 +115,12 @@ class EncodedVideoCached:
 
 class IndexableVideoDataset(torch.utils.data.Dataset):
     def __init__(
-        self, config: FeatureExtractConfig, videos: List[Video], sampler, transform
+        self,
+        config: FeatureExtractConfig,
+        videos: List[Video],
+        sampler,
+        transform,
+        frame_window_size,
     ):
         assert (
             config.inference_config.include_audio
@@ -116,6 +132,7 @@ class IndexableVideoDataset(torch.utils.data.Dataset):
         self.clips = []
         self.sampler = sampler
         self.transform = transform
+        self.frame_window_size = frame_window_size
 
         if self.config.inference_config.include_video:
             self.encoded_videos = {v.uid: EncodedVideoCached(v.path) for v in videos}
@@ -152,7 +169,7 @@ class IndexableVideoDataset(torch.utils.data.Dataset):
         ) = clip
 
         encoded_video = self.encoded_videos[video.uid]
-        datum = encoded_video.get_clip(clip_start, clip_end)
+        datum = encoded_video.get_clip(clip_start, clip_end, self.frame_window_size)
         v_frames = datum["video"]
         a_frames = datum["audio"]
         sample_dict = {
@@ -256,7 +273,13 @@ def create_dset(
         backpad_last=True,
     )
 
-    return IndexableVideoDataset(config, videos, clip_sampler, transform)
+    return IndexableVideoDataset(
+        config,
+        videos,
+        clip_sampler,
+        transform,
+        config.inference_config.frame_window,
+    )
 
 
 def create_data_loader(dset, config: FeatureExtractConfig) -> DataLoader:

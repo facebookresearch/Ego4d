@@ -65,6 +65,7 @@ def get_transform(inference_config: InferenceConfig, config: ModelConfig):
     else:
         assert inference_config.frame_window == 1
         transforms = [
+            Lambda(norm_pixels),
             NormalizeVideo(config.mean, config.std),
             ShortSideScale(size=config.side_size),
             CenterCropVideo(config.crop_size),

@@ -17,14 +17,19 @@ def profile_extraction(config: FeatureExtractConfig):
         print(
             f"Video 0/{len(videos)} ({videos[0].frame_count} | {videos[0].path}): {videos[0]}"
         )
+    # videos = [v for v in all_videos if v.frame_count <= 500]
+    videos = [v for v in all_videos if v.frame_count > 2000 and v.frame_count <= 10000]
+    # videos = [v for v in all_videos if "f1bdf9f3-4f65-4c70-b8ba-b3d4607c0cff" in v.uid]
+    videos = videos[1:2]
+    print(videos)
+
     assert len(videos) > 0, "No videos to process!"
-    videos = videos[0:5]
 
     print(f"Got {len(videos)} videos")
 
     batch_sizes = [1]
-    num_workers = [8]
-    prefetch_factor = [2]  # , 3, 4, 5]
+    num_workers = [2]
+    prefetch_factor = [2]
     model = load_model(config)
 
     num_examples = -1
