@@ -14,7 +14,7 @@ from ego4d.research.clep.config import (
 )
 from ego4d.research.clep.preprocess.common import get_language_model
 from ego4d.research.common import batch_it, create_executor
-from ego4d.research.dataset import save_ego4d_features_to_hdf5
+from ego4d.research.dataset import save_features_to_hdf5
 
 from tqdm.auto import tqdm
 
@@ -81,7 +81,7 @@ def preprocess_ego_features(
 
     out_path = os.path.join(config.pre_config.root_dir, pre_feature.hdf5_path)
     print("=>", out_path, flush=True)
-    save_ego4d_features_to_hdf5(
+    save_features_to_hdf5(
         video_uids=video_uids,
         feature_dir=feature_path,
         out_path=out_path,
