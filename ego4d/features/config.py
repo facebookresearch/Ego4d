@@ -1,8 +1,8 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
 import importlib
-import math
 import json
+import math
 import os
 import random
 from dataclasses import dataclass, field
@@ -270,10 +270,19 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
                     ):
                         continue
 
-                    path = os.path.join(config.egoexo_data_dir, take["root_dir"], stream["relative_path"])
+                    path = os.path.join(
+                        config.egoexo_data_dir,
+                        take["root_dir"],
+                        stream["relative_path"],
+                    )
                     if not os.path.exists(path):
                         # ???
-                        path = os.path.join(config.egoexo_data_dir, "takes", take["root_dir"], stream["relative_path"])
+                        path = os.path.join(
+                            config.egoexo_data_dir,
+                            "takes",
+                            take["root_dir"],
+                            stream["relative_path"],
+                        )
 
                     if not os.path.exists(path):
                         continue

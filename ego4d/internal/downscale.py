@@ -75,7 +75,7 @@ def main():
                 rel_path = stream["relative_path"]
                 if rel_path is None:
                     continue
-                if "with" in rel_path: # TODO: add is_collage field
+                if "with" in rel_path:  # TODO: add is_collage field
                     continue
                 src_path = os.path.join(root_dir, take["root_dir"], rel_path)
                 dst_path = os.path.join(ds_take_dir, take["root_dir"], rel_path)

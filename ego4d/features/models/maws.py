@@ -1,23 +1,23 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
+import functools
 from dataclasses import dataclass
 from typing import Tuple
 
 import torch
-import functools
 from ego4d.features.config import BaseModelConfig, InferenceConfig
+from maws.model_builder import build_model
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.nn import Module
 from torchvision.transforms import (
-    Compose,
-    Resize,
     CenterCrop,
-    ToTensor,
-    Normalize,
+    Compose,
     Lambda,
+    Normalize,
+    Resize,
+    ToTensor,
 )
 from torchvision.transforms._transforms_video import CenterCropVideo, NormalizeVideo
-from maws.model_builder import build_model
 
 
 @dataclass
@@ -59,6 +59,7 @@ def load_model(
 def norm_pixels(x):
     return x / 255.0
 
+
 def video_to_image(x):
     x = x.permute(1, 0, 2, 3).squeeze(0)
     return x
@@ -71,9 +72,7 @@ def get_transform(inference_config: InferenceConfig, config: ModelConfig):
         Lambda(video_to_image),
         Resize(size=224, interpolation=3),  # pyre-ignore
         CenterCrop(size=224),
-        Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-        ),
+        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ]
 
     return ApplyTransformToKey(

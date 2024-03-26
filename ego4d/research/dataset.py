@@ -38,8 +38,12 @@ class LabelledFeatureDset(torch.utils.data.Dataset):
         f_keys = set(self.features.keys())
         l_keys = set(uid for uid, _ in self.uid_label_pairs)
         if len(l_keys - f_keys) > 0:
-            print(f"WARN: missing {len(l_keys - f_keys)} keys in feature hdf5 path: {feature_hdf5_path}")
-            self.uid_label_pairs = [(uid, label) for uid, label in self.uid_label_pairs if uid in f_keys]
+            print(
+                f"WARN: missing {len(l_keys - f_keys)} keys in feature hdf5 path: {feature_hdf5_path}"
+            )
+            self.uid_label_pairs = [
+                (uid, label) for uid, label in self.uid_label_pairs if uid in f_keys
+            ]
 
     def __len__(self):
         return len(self.uid_label_pairs)

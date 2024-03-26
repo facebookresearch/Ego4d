@@ -64,7 +64,7 @@ def get_frames(container, t1, t2, buffer, max_buffer_size, frame_window_size):
                 container.seek(seek_pts, stream=container.streams.video[0])
 
         ret.sort(key=lambda x: x.pts)
-    
+
     ret = list({frame.pts: frame for frame in ret}.values())
     pts_in_ret = [frame.pts for frame in ret]
     if not (np.diff(pts_in_ret) > 0).all():
