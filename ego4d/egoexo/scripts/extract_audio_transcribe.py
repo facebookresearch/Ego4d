@@ -11,40 +11,43 @@ import submitit
 
 import whisper
 from ego4d.research.common import batch_it
-from projectaria_tools.core.vrs import extract_audio_track
 from tqdm.auto import tqdm
 
 
-ROOT_DIR = "/large_experiments/egoexo/dev/"
+ROOT_DIR = "/large_experiments/egoexo/v2/"
 OUT_TAKES_DIR = "/checkpoint/miguelmartin/egoexo/v2/audio/"
+PART_BY_UNI = True
 
 
 def extract_audio_and_run_whisper(x, model):
-    audio_outpath = os.path.join(
-        OUT_TAKES_DIR, x["take_name"], "audio", f"{x['vrs_base_name']}.wav"
+    # need this here - otherwise pickle error
+    from projectaria_tools.core.vrs import extract_audio_track
+
+    base_dir = (
+        os.path.join(OUT_TAKES_DIR, x["take_name"])
+        if not PART_BY_UNI
+        else os.path.join(OUT_TAKES_DIR, x["uni_id"], x["take_name"])
     )
+    os.makedirs(base_dir, exist_ok=True)
+    audio_outpath = os.path.join(base_dir, "audio", f"{x['vrs_base_name']}.wav")
     transcribe_outpath = os.path.join(
-        OUT_TAKES_DIR,
-        x["take_name"],
+        base_dir,
         "audio",
         f"{x['vrs_base_name']}_transcriptions.json",
     )
-    if True:
+    if not os.path.exists(audio_outpath):
         _ = extract_audio_track(
             x["vrs_path"],
             audio_outpath,
         )
         os.remove(audio_outpath + ".json")
 
-    if not os.path.exists(transcribe_outpath):
+    if os.path.exists(audio_outpath) and not os.path.exists(transcribe_outpath):
         temp = model.transcribe(audio_outpath, word_timestamps=True)
         json.dump(temp, open(transcribe_outpath, "w"), indent=2)
 
 
 def process_all(xs):
-    global ROOT_DIR
-    global DS_TAKES_DIR
-
     model_name = "large-v3"
     device = "cuda"
     model = whisper.load_model(model_name, device=device)
@@ -54,11 +57,12 @@ def process_all(xs):
 
 
 def main():
+    # TODO: argparse
     num_machines: int = 256
     root_dir: str = ROOT_DIR
     out_dir: str = OUT_TAKES_DIR
 
-    takes_to_process = json.load(open("/large_experiments/egoexo/v2/takes.json"))
+    takes_to_process = json.load(open(os.path.join(ROOT_DIR, "takes.json")))
 
     map_values = []
     completed = 0
@@ -66,7 +70,7 @@ def main():
     for take in takes_to_process:
         td = os.path.join(root_dir, take["root_dir"])
         fs = os.listdir(td)
-        fs = [f for f in fs if "vrs" in f and "noimagestream" not in f]
+        fs = [f for f in fs if "noimagestream" in f]
         if len(fs) == 0:
             continue
         vrs_f = fs[0]
@@ -74,9 +78,10 @@ def main():
         map_values.append(
             {
                 "vrs_path": vrs_file_path,
-                "vrs_base_name": os.path.splitext(vrs_f)[0],
+                "vrs_base_name": os.path.splitext(vrs_f)[0].split("_")[0],
                 "take_dir": td,
                 "take_name": take["take_name"],
+                "uni_id": take["university_id"],
             }
         )
         num_vids += 1
