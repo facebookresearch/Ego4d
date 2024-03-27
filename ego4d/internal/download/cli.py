@@ -342,6 +342,7 @@ Additional debugging information:
         print(
             f"Deleting: {len(files_to_delete)} files ({len(files_that_exist)} total files)"
         )
+        breakpoint()
         for f in tqdm(files_to_delete):
             os.remove(f)
 
@@ -418,11 +419,16 @@ What parts of the dataset to download, one of:
 - take_trajectory
 - take_point_cloud
 - take_vrs
+- take_audio
+- take_transcription
 - captures
 - capture_trajectory
 - capture_eye_gaze
 - downscaled_takes/448
 - features/omnivore_video
+- features/maws_clip_2b
+- ego_pose_pseudo_gt
+- expert_commentary
 
 By default the following parts will be downloaded: {metadata, captures, takes, trajectory, annotations}.
 

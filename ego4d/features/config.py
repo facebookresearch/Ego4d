@@ -232,7 +232,6 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
             if len(uid_takes) < len(takes):
                 print(f"Filtered {len(takes)} -> {len(uid_takes)} on uid config")
                 takes = uid_takes
-
         completed_uids = set(_uids_for_dir(config.out_path))
         videos = []
         for take in takes:
@@ -252,14 +251,6 @@ def _videos(config: InputOutputConfig, unfiltered: bool = False) -> List[Video]:
                     # NOTE: known constants for not downsampled videos
                     w = 1408 if is_aria else 3840
                     h = 1408 if is_aria else 2160
-                    # TODO: downscaled or not
-                    # if w < h:
-                    #     h = math.ceil((h/w) * 448)
-                    #     w = 448
-                    # else:
-                    #     w = math.ceil((w/h) * 448)
-                    #     h = 448
-
                     uid = f"{take['take_uid']}_{cam_id}_{stream_name}"
                     if (
                         not unfiltered

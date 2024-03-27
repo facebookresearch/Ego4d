@@ -3,7 +3,7 @@ import json
 import os
 from collections import defaultdict
 
-from ego4d.egoexo.expert_commentary.data import (
+from ego4d.internal.expert_commentary.extract import (
     load_uniq_commentaries,
     RAW_EXTRACTED_COMM_ROOT,
 )
@@ -130,6 +130,7 @@ def export(
             out_f.write(f"cp {f} {t}\n")
     print("Copy with:")
     print("cat copy.txt | parallel --eta")
+    return copy_commands
 
 
 def check_export(copy_commands):
@@ -139,11 +140,15 @@ def check_export(copy_commands):
 
 
 if __name__ == "__main__":
-    released_takes = json.load(
-        open("/large_experiments/egoexo/dataset/released_takes.json")
+    date_ver = "240324"
+    released_takes_path = "/large_experiments/egoexo/v2/released_takes.json"
+    takes_path = "/large_experiments/egoexo/v2/takes.json"
+    takes = json.load(open(takes_path))
+    released_takes = (
+        json.load(open(takes_path))
+        if os.path.exists(released_takes_path)
+        else {x["take_uid"] for x in takes}
     )
-    takes = json.load(open("/large_experiments/egoexo/dataset/takes.json"))
-    date_ver = "240207"
     to_dir_base = f"/checkpoint/miguelmartin/expert_commentary/exports/{date_ver}"
 
     cc = export(released_takes=released_takes, takes=takes, to_dir_base=to_dir_base)

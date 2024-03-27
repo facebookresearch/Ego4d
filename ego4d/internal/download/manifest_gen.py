@@ -25,11 +25,20 @@ from tqdm.auto import tqdm
 pathmgr = PathManager()  # for downloading files
 pathmgr.register_handler(S3PathHandler(profile="default"))
 
-base_release_dir = "egoexo-public/v1/"
-release_dir = f"s3://ego4d-consortium-sharing/{base_release_dir}"
-internal_release_dir = (
-    "s3://ego4d-consortium-sharing/egoexo/releases/public_internal/v1/"
-)
+dev_release = False
+
+if dev_release:
+    ver_name = "dev"
+    base_release_dir = "egoexo/releases/dev/"
+    release_dir = f"s3://ego4d-consortium-sharing/{base_release_dir}"
+    internal_release_dir = release_dir
+else:
+    ver_name = "v2"
+    base_release_dir = f"egoexo-public/{ver_name}/"
+    release_dir = f"s3://ego4d-consortium-sharing/{base_release_dir}"
+    internal_release_dir = (
+        f"s3://ego4d-consortium-sharing/egoexo/releases/public_internal/{ver_name}/"
+    )
 
 
 manifests = {
@@ -47,19 +56,24 @@ manifests = {
     "capture_point_cloud": [],
     "downscaled_takes/448": [],
     "features/omnivore_video": [],
-    # TODO: later date
-    # "ego_pose_pseudo_gt": [],
-    # "narrate_and_act_transc": [],
+    "features/maws_clip_2b": [],
+    "ego_pose_pseudo_gt": [],
+    "expert_commentary": [],
+    "take_transcription": [],
+    "take_audio": [],
 }
+if dev_release:
+    manifests["takes_dropped"] = []
 
 egoexo = {
     "released_takes": os.path.join(internal_release_dir, "released_takes.json"),
     "takes": os.path.join(internal_release_dir, "takes.json"),
-    "takes_dropped": os.path.join(internal_release_dir, "takes_dropped.json"),
+    "takes_dropped": os.path.join(internal_release_dir, "_takes_dropped.json"),
     "captures": os.path.join(internal_release_dir, "captures.json"),
     "physical_setting": os.path.join(internal_release_dir, "physical_setting.json"),
     "participants": os.path.join(internal_release_dir, "participants.json"),
     "visual_objects": os.path.join(internal_release_dir, "visual_objects.json"),
+    "metadata": os.path.join(internal_release_dir, "metadata.json"),
 }
 
 downloader = S3Downloader("default")
@@ -67,6 +81,7 @@ print("Downloading metadata")
 for k, out_path in tqdm(egoexo.items()):
     s3_path = os.path.join(release_dir, f"{k}.json")
     if not pathmgr.exists(s3_path):
+        print(f"WARN: {s3_path} does not exist")
         continue
     # print(s3_path, out_path)
     paths = [
@@ -88,6 +103,9 @@ for k, v in egoexo.items():
     else:
         egoexo[k] = []
 
+if len(egoexo["released_takes"]) == 0:
+    egoexo["released_takes"] = [x["take_uid"] for x in egoexo["takes"]]
+
 s3_buckets = set()
 for c in tqdm(egoexo["captures"]):
     s3_bucket = c["_s3_root_dir"].split("/")[2]
@@ -104,7 +122,10 @@ capture_cam_id_to_is_ego = {
     for cam in c["cameras"]
 }
 
-split_file_path = os.path.join(release_dir, "annotations/splits.json")
+# split_file_path = os.path.join(release_dir, "annotations/splits.json")
+split_file_path = (
+    "s3://ego4d-consortium-sharing/egoexo-public/v2/annotations/splits.json"
+)
 split_data = json.load(pathmgr.open(split_file_path))
 take_uid_to_splits = {k: [v] for k, v in split_data["take_uid_to_split"].items()}
 
@@ -274,45 +295,46 @@ for manifest_key in ["takes", "takes_dropped"]:
                     )
 
             sp = t["_vrs_s3_path"]
-            assert sp is not None
-            manifests["take_vrs_noimagestream"].append(
-                ManifestEntry(
-                    uid=take_uid,
-                    paths=[
-                        PathSpecification(
-                            source_path=sp,
-                            relative_path=os.path.join(
-                                root_dir, t["vrs_relative_path"]
-                            ),
-                            views=["ego"],
-                            universities=[t["university_name"]],
-                            file_type="vrs",
-                        )
-                    ],
-                    benchmarks=take_uid_to_benchmarks.get(take_uid, None),
-                    splits=take_uid_to_splits.get(take_uid, None),
+            if sp is not None:
+                manifests["take_vrs_noimagestream"].append(
+                    ManifestEntry(
+                        uid=take_uid,
+                        paths=[
+                            PathSpecification(
+                                source_path=sp,
+                                relative_path=os.path.join(
+                                    root_dir, t["vrs_relative_path"]
+                                ),
+                                views=["ego"],
+                                universities=[t["university_name"]],
+                                file_type="vrs",
+                            )
+                        ],
+                        benchmarks=take_uid_to_benchmarks.get(take_uid, None),
+                        splits=take_uid_to_splits.get(take_uid, None),
+                    )
                 )
-            )
+
             sp_all_streams = t["_vrs_all_streams_s3_path"]
-            assert sp_all_streams is not None
-            manifests["take_vrs"].append(
-                ManifestEntry(
-                    uid=take_uid,
-                    paths=[
-                        PathSpecification(
-                            source_path=sp_all_streams,
-                            relative_path=os.path.join(
-                                root_dir, t["vrs_all_streams_relative_path"]
-                            ),
-                            views=["ego"],
-                            universities=[t["university_name"]],
-                            file_type="vrs",
-                        )
-                    ],
-                    benchmarks=take_uid_to_benchmarks.get(take_uid, None),
-                    splits=take_uid_to_splits.get(take_uid, None),
+            if sp_all_streams is not None:
+                manifests["take_vrs"].append(
+                    ManifestEntry(
+                        uid=take_uid,
+                        paths=[
+                            PathSpecification(
+                                source_path=sp_all_streams,
+                                relative_path=os.path.join(
+                                    root_dir, t["vrs_all_streams_relative_path"]
+                                ),
+                                views=["ego"],
+                                universities=[t["university_name"]],
+                                file_type="vrs",
+                            )
+                        ],
+                        benchmarks=take_uid_to_benchmarks.get(take_uid, None),
+                        splits=take_uid_to_splits.get(take_uid, None),
+                    )
                 )
-            )
 
         manifests[manifest_key].append(
             ManifestEntry(
@@ -323,6 +345,55 @@ for manifest_key in ["takes", "takes_dropped"]:
             )
         )
 
+if "take_transcription" in manifests:
+    assert "take_audio" in manifests
+    for take in egoexo["takes"]:
+        take_uid = take["take_uid"]
+        root_dir = take["root_dir"]
+        audio_root_dir = os.path.join(root_dir, "audio")
+        key = (take_uid, "audio")
+        if key not in by_take_and_dir:
+            continue
+
+        audio_paths = []
+        transcription_paths = []
+        for bn, p in by_take_and_dir[key]:
+            if bn.endswith(".json"):
+                transcription_paths += [
+                    PathSpecification(
+                        source_path=p,
+                        relative_path=os.path.join(root_dir, "audio", bn),
+                        views=None,
+                        universities=None,
+                    )
+                ]
+            else:
+                assert bn.endswith(".wav")
+                audio_paths += [
+                    PathSpecification(
+                        source_path=p,
+                        relative_path=os.path.join(root_dir, "audio", bn),
+                        views=None,
+                        universities=None,
+                    )
+                ]
+
+        manifests["take_audio"].append(
+            ManifestEntry(
+                uid=take_uid,
+                paths=audio_paths,
+                benchmarks=take_uid_to_benchmarks.get(take_uid, None),
+                splits=take_uid_to_splits.get(take_uid, None),
+            )
+        )
+        manifests["take_transcription"].append(
+            ManifestEntry(
+                uid=take_uid,
+                paths=transcription_paths,
+                benchmarks=take_uid_to_benchmarks.get(take_uid, None),
+                splits=take_uid_to_splits.get(take_uid, None),
+            )
+        )
 
 for c in tqdm(egoexo["captures"]):
     s3_bucket = c["_s3_root_dir"].split("/")[2]
@@ -480,63 +551,124 @@ if "annotations" in manifests:
 
     egopose_part_subdirs = {
         "annotations": {
-            "subdirs": [
-                "annotation",
-                "camera_pose",
-            ],
+            "subdirs": {
+                "body": ["annotation"],
+                "hand": ["annotation"],
+                "camera_pose": [""],
+            },
             "take_uid_as_key": False,
         },
         "ego_pose_pseudo_gt": {
-            "subdirs": ["automatic"],
+            "subdirs": {
+                "body": ["automatic"],
+                "hand": ["automatic"],
+                "camera_pose": [],
+            },
             "take_uid_as_key": True,
         },
     }
-    egopose_base_dir = os.path.join(release_dir, "annotations/ego_pose_latest/")
-    for body_type in ["body", "hand"]:
-        subdir = os.path.join(egopose_base_dir, body_type)
+    if not dev_release:
+        egopose_base_dir = os.path.join(release_dir, "annotations/ego_pose/")
+        for split in ["train", "val"]:
+            for part in ["body", "hand", "camera_pose"]:
+                subdir = os.path.join(egopose_base_dir, split, part)
+                print(subdir)
 
-        annotation_files = []
-        for manifest_key, metadata in egopose_part_subdirs.items():
+                annotation_files = []
 
-            for ann_dir in metadata["subdirs"]:
-                relative_subdir = os.path.join(
-                    "annotations/ego_pose/", body_type, ann_dir
-                )
-                ann_files = downloader.ls(os.path.join(subdir, ann_dir + "/"))
-                for bn, s3_path in ann_files:
-                    if len(bn) == 0:
-                        continue
-                    if bn == "manifest.json":
-                        continue
-                    take_uid = os.path.splitext(bn)[0]
-                    uid = take_uid
-                    manifests[manifest_key].append(
-                        ManifestEntry(
-                            # e.g.
-                            # - ego_pose/body/camera_pose
-                            # - ego_pose/body/annotation
-                            # - ego_pose/hand/camera_pose
-                            # - ego_pose/hand/annotation
-                            name="/".join(["ego_pose", body_type, ann_dir]),
-                            uid=uid,
-                            benchmarks=[
-                                "egopose",
-                                "ego_pose",
-                                f"{body_type}_pose",
-                                f"ego_{body_type}_pose",
-                            ],
-                            splits=take_uid_to_splits.get(take_uid, None),
-                            paths=[
-                                PathSpecification(
-                                    source_path=s3_path,
-                                    relative_path=f"{relative_subdir}/{bn}",
-                                )
-                            ],
+                # go over each potential manifest --part
+                for manifest_key, metadata in egopose_part_subdirs.items():
+                    for ann_dir in metadata["subdirs"][part]:
+                        dst_relative_subdir = os.path.join(
+                            "annotations/ego_pose/", split, part, ann_dir
                         )
-                    )
+                        abs_subdir = os.path.join(subdir, ann_dir)
+
+                        if not abs_subdir.endswith("/"):
+                            abs_subdir += "/"
+                        ann_files = downloader.ls(abs_subdir)
+                        for bn, s3_path in ann_files:
+                            if len(bn) == 0:
+                                continue
+                            if bn == "manifest.json":
+                                continue
+                            take_uid = os.path.splitext(bn)[0]
+                            uid = take_uid
+                            splits = take_uid_to_splits.get(take_uid, [])
+                            assert (
+                                len(splits) == 1 and splits[0] == split
+                            ), "split diff: {splits} vs {split}"
+                            benchmarks = ["egopose", "ego_pose"]
+                            if part in ["body", "hand"]:
+                                benchmarks += [
+                                    f"{part}_pose",
+                                    f"ego_{part}_pose",
+                                    f"{part}pose",
+                                    f"ego{part}pose",
+                                    f"ego_{part}pose",
+                                ]
+                            else:
+                                assert part == "camera_pose"
+                                for body_part in ["body", "hand"]:
+                                    benchmarks += [
+                                        f"{body_part}_pose",
+                                        f"ego_{body_part}_pose",
+                                        f"{body_part}pose",
+                                        f"ego{body_part}pose",
+                                        f"ego_{body_part}pose",
+                                        f"camera_pose",
+                                    ]
+
+                            manifests[manifest_key].append(
+                                ManifestEntry(
+                                    uid=uid,
+                                    benchmarks=benchmarks,
+                                    splits=splits,
+                                    paths=[
+                                        PathSpecification(
+                                            source_path=s3_path,
+                                            relative_path=f"{dst_relative_subdir}/{bn}",
+                                        )
+                                    ],
+                                )
+                            )
+    # egopose_anns = [
+    #     x for x in manifests["annotations"]
+    #     if x.benchmarks is not None and "egopose" in x.benchmarks
+    #     # if x.benchmarks is not None and "body_pose" in x.benchmarks
+    # ]
+
+if "expert_commentary" in manifests:
+    manifests["expert_commentary"] = []
+    ec_base_dir = os.path.join(release_dir, "annotations/expert_commentary/")
+    fs = downloader.ls(ec_base_dir, recursive=True)
+    for _, f in tqdm(fs):
+        base_dir = f[len(ec_base_dir) :]
+        take_name, expert_name = base_dir.split("/")[0:2]
+        if take_name not in take_name_to_uid:
+            continue
+        take_uid = take_name_to_uid[take_name]
+        uid = f"{take_uid}_{expert_name}"
+        splits = take_uid_to_splits[take_uid]
+
+        manifests["expert_commentary"].append(
+            ManifestEntry(
+                uid=uid,
+                benchmarks=["expert_commentary"],
+                splits=splits,
+                paths=[
+                    PathSpecification(
+                        source_path=f,
+                        relative_path=os.path.join(
+                            "annotations/expert_commentary/", base_dir
+                        ),
+                    ),
+                ],
+            )
+        )
 
 if "features/omnivore_video" in manifests:
-    for feature_name in ["omnivore_video"]:
+    for feature_name in ["omnivore_video", "maws_clip_2b"]:
         feature_files = downloader.ls(
             os.path.join(release_dir, "features/", feature_name + "/")
         )
@@ -588,36 +720,6 @@ if "features/omnivore_video" in manifests:
                 )
             )
 
-na_transc = downloader.ls(
-    os.path.join(release_dir, "annotations/narrate_and_act_transc/"), recursive=True
-)
-by_take = defaultdict(list)
-for file_name, path in na_transc:
-    if file_name == ".DS_Store":
-        continue
-    tn = os.path.splitext(file_name)[0]
-    if tn not in take_name_to_uid:
-        continue
-    take_uid = take_name_to_uid[tn]
-    by_take[take_uid].append(
-        PathSpecification(
-            source_path=path,
-            relative_path=f"annotations/narrate_and_act_transc/{tn}/{file_name}",
-            views=None,
-            universities=None,  # TODO
-        )
-    )
-
-if "narrate_and_act_transc" in manifests:
-    for take_uid, paths in by_take.items():
-        manifests["narrate_and_act_transc"].append(
-            ManifestEntry(
-                uid=take_uid,
-                paths=paths,
-                benchmarks=take_uid_to_benchmarks.get(take_uid, None),
-                splits=take_uid_to_splits.get(take_uid, None),
-            )
-        )
 
 all_bs = set()
 for k, v in manifests.items():

@@ -2,7 +2,7 @@ fps: 30
 force_yes: false
 io:
   filter_completed: true
-  egoexo_data_dir: "/checkpoint/miguelmartin/egoexo_data/dev/"
+  egoexo_data_dir: "/large_experiments/egoexo/v2/"
   eligible_cam_prefixes: null
   dataset_version: egoexo
   uid_list: null
@@ -28,7 +28,7 @@ inference_config:
 schedule_config:
   run_locally: false
   log_folder: slurm_log/%j
-  timeout_min: 250
+  timeout_min: 400
   constraint: volta
   slurm_partition: eht
   slurm_array_parallelism: 256

@@ -17,8 +17,8 @@ from ego4d.research.common import batch_it
 from tqdm.auto import tqdm
 
 
-ROOT_DIR = "/large_experiments/egoexo/dev/"
-DS_TAKES_DIR = "/checkpoint/miguelmartin/egoexo/v2/downscaled_takes/"
+ROOT_DIR = "/large_experiments/egoexo/v2/"
+DS_TAKES_DIR = "/checkpoint/miguelmartin/egoexo/v2/downscaled_takes/takes_by_uni"
 
 
 def call_ffmpeg(paths):
@@ -50,8 +50,6 @@ def call_ffmpeg(paths):
 
 
 def process_all(paths):
-    global ROOT_DIR
-    global DS_TAKES_DIR
     map_fn = call_ffmpeg
     with ThreadPoolExecutor(5) as pool:
         for _ in tqdm(
@@ -76,11 +74,13 @@ def main():
                 rel_path = stream["relative_path"]
                 if rel_path is None:
                     continue
-                if "with" in rel_path:  # TODO: add is_collage field
+                if stream["is_collage"]:
                     continue
                 src_path = os.path.join(root_dir, take["root_dir"], rel_path)
-                dst_path = os.path.join(ds_take_dir, take["root_dir"], rel_path)
-                assert os.path.exists(src_path)
+                dst_path = os.path.join(
+                    ds_take_dir, take["university_id"], take["take_name"], rel_path
+                )
+                assert os.path.exists(src_path), src_path
                 num_vids += 1
                 if os.path.exists(dst_path):
                     completed += 1

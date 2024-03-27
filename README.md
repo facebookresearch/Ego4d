@@ -1,10 +1,9 @@
 > [!IMPORTANT]
-> **EGO-EXO4D DATASET ANNOUNCEMENT:** *Ego-Exo4D* is now *available to the public*.
-> Please refer to the [website](https://ego-exo4d-data.org/),
-> [documentation](https://docs.ego-exo4d-data.org/), 
-> [paper](https://arxiv.org/abs/2311.18259), [blog
-> post](https://ai.meta.com/blog/ego-exo4d-video-learning-perception/) and
-> [video introduction](https://www.youtube.com/watch?v=GdooXEBAnI8).
+> **EGO-EXO4D DATASET ANNOUNCEMENT:** *Ego-Exo4D* **V2** is now *available to
+> the public*. V2 contains **1286.30 video hours** (**221.26 ego-hours**) across 5035
+> takes (*171% more data than V1*) with **more annotations** Please refer to the
+> [changelog](https://docs.ego-exo4d-data.org/changelog) for details on what
+> has changed.
 >
 > **EGO4D UPDATE:** *V2.1* has been released due to the addition of the
 > [Goal-Step](https://openreview.net/pdf?id=3BxYAaovKr) annotations and
