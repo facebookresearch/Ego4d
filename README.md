@@ -1,7 +1,7 @@
 > [!IMPORTANT]
 > **EGO-EXO4D DATASET ANNOUNCEMENT:** *Ego-Exo4D* **V2** is now *available to
 > the public*. V2 contains **1286.30 video hours** (**221.26 ego-hours**) across 5035
-> takes (*171% more data than V1*) with **more annotations** Please refer to the
+> takes with **more annotations** Please refer to the
 > [changelog](https://docs.ego-exo4d-data.org/changelog) for details on what
 > has changed.
 >
