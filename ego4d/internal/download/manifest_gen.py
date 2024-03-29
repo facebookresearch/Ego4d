@@ -847,7 +847,7 @@ def print_manifest_stats(release_dir: str):
         "ego_pose_pseudo_gt": "Pseudo-ground truth data for [Ego Pose](/annotations/ego_pose/)",
         "expert_commentary": "[Commentaries](/annotations/expert_commentary) for each expert (audio recordings)",
         "all": "All data within the release (you can use `--parts all`) ",
-        "default": "The default set of data in the release",
+        "default": "The default set of data in the release (you can use `--parts default` or provide no parts)",
     }
 
     manifests_by_name = {}
@@ -895,9 +895,7 @@ def print_manifest_stats(release_dir: str):
         if k in default:
             print(f"| **{k}** | {size:.3f} | {manifest_descs[k]} |")
         else:
-            print(f"| {k} | {size:.3f} | {v} |")
-    print(f"| *all* | {all_file_size/10**9:.3f} | {manifest_descs['all']} |")
-    print(f"| **default ** | {default_size/10**9:.3f} | {manifest_descs['default']} |")
+            print(f"| {k} | {size:.3f} | {manifest_descs[k]} |")
 
 
 print_manifest_stats(release_dir)

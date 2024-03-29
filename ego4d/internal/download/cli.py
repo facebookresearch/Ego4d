@@ -3,7 +3,6 @@ import os
 import sys
 import threading
 import traceback
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, List, Optional, Tuple, TypeVar
 
