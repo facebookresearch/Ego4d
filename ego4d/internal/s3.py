@@ -2,14 +2,23 @@ import os
 import random
 import time
 import traceback
-from typing import Any, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, List, Optional
 
 import boto3
 import boto3.session
 import botocore.client as bclient
+import botocore.exceptions
 from iopath import PathManager
 
 S3Client = bclient.BaseClient
+
+
+@dataclass
+class S3FileDesc:
+    basename: str
+    path: str
+    size: int
 
 
 def _get_location(bucket_name: str) -> str:
@@ -150,7 +159,7 @@ class S3Downloader:
         self.profile = profile
         self.callback = callback
 
-    def ls(self, path, recursive=False, max_keys=-1) -> List[Tuple[str, str]]:
+    def ls(self, path, recursive=False, max_keys=-1) -> List[S3FileDesc]:
         assert path.startswith("s3://")
         temp = path.split("s3://")[1].split("/")
         bucket_name = temp[0]
@@ -169,7 +178,11 @@ class S3Downloader:
                 Bucket=bucket_name, Prefix=object_name, Delimiter=delim
             )
             return [
-                (os.path.basename(f["Key"]), f"s3://{bucket_name}/{f['Key']}")
+                S3FileDesc(
+                    basename=os.path.basename(f["Key"]),
+                    path=f"s3://{bucket_name}/{f['Key']}",
+                    size=f["Size"],
+                )
                 for page in pages
                 for f in page.get("Contents", [])
             ]
@@ -184,12 +197,37 @@ class S3Downloader:
             if ls_result["KeyCount"] == 0:
                 return []
             return [
-                (os.path.basename(f["Key"]), f"s3://{bucket_name}/{f['Key']}")
+                S3FileDesc(
+                    basename=os.path.basename(f["Key"]),
+                    path=f"s3://{bucket_name}/{f['Key']}",
+                    size=f["Size"],
+                )
                 for f in ls_result["Contents"]
             ]
 
     def copy(self, path: str, out_path: str):
         self.obj(path).download_file(out_path, Callback=self.callback)
+
+    def file_desc(self, path: str) -> Optional[S3FileDesc]:
+        o = self.obj(path)
+        if o is None:
+            return None
+        try:
+            file_size = o.content_length
+            ret = S3FileDesc(
+                basename=os.path.basename(o.key),
+                path=path,
+                size=file_size,
+            )
+        except botocore.exceptions.ClientError as e:
+            # If a client error is thrown, then check that it was a 404 error.
+            # If it was a 404 error, then the file does not exist.
+            error_code = int(e.response["Error"]["Code"])
+            if error_code == 404:
+                return None
+            else:
+                raise e
+        return ret
 
     def obj(self, path):
         assert path.startswith("s3://")
@@ -197,4 +235,13 @@ class S3Downloader:
         bucket_name = temp[0]
         object_name = "/".join(temp[1:])
 
-        return self.resources.Object(bucket_name, object_name)
+        try:
+            return self.resources.Object(bucket_name, object_name)
+        except botocore.exceptions.ClientError as e:
+            # If a client error is thrown, then check that it was a 404 error.
+            # If it was a 404 error, then the file does not exist.
+            error_code = int(e.response["Error"]["Code"])
+            if error_code == 404:
+                return None
+            else:
+                raise e

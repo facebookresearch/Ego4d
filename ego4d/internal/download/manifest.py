@@ -19,7 +19,7 @@ class PathSpecification:
         default_factory=lambda: None, compare=False, hash=False
     )
     size: Optional[int] = field(default_factory=lambda: None, compare=False, hash=False)
-    checksum: Optional[int] = field(
+    checksum: Optional[str] = field(
         default_factory=lambda: None, compare=False, hash=False
     )
 
