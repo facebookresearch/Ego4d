@@ -24,6 +24,13 @@ T = TypeVar("T")
 U = TypeVar("U")
 
 
+# TODO: remove iopath dependency
+def _create_pathmgr(s3_profile: Optional[str]):
+    pathmgr = PathManager()
+    pathmgr.register_handler(S3PathHandler(profile=s3_profile))
+    return pathmgr
+
+
 def _s3_path_join(a: str, b: str) -> str:
     assert a.startswith("s3://")
     return os.path.join(a, b).replace("\\", "/")  # hacky, but it works
@@ -67,7 +74,7 @@ def _manifest_ok(m: ManifestEntry, args) -> bool:
 
 def map_all(
     values: List[T],
-    map_fn: Callable[[Optional[S3Downloader], T], Tuple[U, T, Optional[str]]],
+    map_fn: Callable[[T, Optional[S3Downloader]], Tuple[U, T, Optional[str]]],
     num_workers: int,
     s3_profile: Optional[str],
     needs_downloader: bool,
@@ -85,11 +92,13 @@ def map_all(
                 num_workers=num_workers,
                 callback=callback,
             )
-        else:
-            thread_data.downloader = None
 
     def wrap_map(x):
-        return map_fn(thread_data.downloader, x)
+        kwargs = {}
+        if needs_downloader:
+            kwargs["downloader"] = thread_data.downloader
+
+        return map_fn(x, **kwargs)  # pyre-ignore
 
     failures = []
     ret = []
@@ -118,6 +127,7 @@ def main(args):
     num_workers = args.num_workers
     s3_profile = args.s3_profile
     yes = args.yes
+    delete_yes = args.delete_yes
     args.uids = set(args.uids) if args.uids is not None else None
     args.benchmarks = set(args.benchmarks) if args.benchmarks is not None else None
     args.splits = set(args.splits) if args.splits is not None else None
@@ -126,21 +136,58 @@ def main(args):
         set(args.universities) if args.universities is not None else None
     )
 
+    if "all" in parts:
+        if len(parts) > 1:
+            print(
+                "WARN: you have supplied all parts; ignoring the other parts supplied"
+            )
+
+        parts = {
+            "metadata",
+            "annotations",
+            "takes",
+            "take_vrs_noimagestream",
+            "take_trajectory",
+            "take_eye_gaze",
+            "take_point_cloud",
+            "take_vrs",
+            "take_transcription",
+            "take_audio",
+            "captures",
+            "capture_trajectory",
+            "capture_eye_gaze",
+            "capture_point_cloud",
+            "downscaled_takes/448",
+            "features/omnivore_video",
+            "features/maws_clip_2b",
+            "ego_pose_pseudo_gt",
+            "expert_commentary",
+        }
+        print(f"NOTE: all part supplied; equivalent to: --parts {' '.join(parts)}")
+    if "default" in parts:
+        parts_to_add = {
+            "metadata",
+            "captures",
+            "takes",
+            "take_trajectory",
+            "take_vrs_noimagestream",
+            "annotations",
+        }
+        print(
+            f"NOTE: default part supplied; equivalent to: --parts {' '.join(parts_to_add)}"
+        )
+        parts.remove("default")
+        parts.update(parts_to_add)
+
     assert (
         release_name is not None
     ), """You must provide a release name via `--release`.
 If you meant to download the public release, please use the script `ego4d/egoexo/download/cli.py` instead.
 """
 
-    # TODO: remove iopath dependency
-    pathmgr = PathManager()
-    pathmgr.register_handler(S3PathHandler(profile=s3_profile))
-
     def check_file(
-        downloader: Optional[S3Downloader],
         path_expected_size: Tuple[PathSpecification, int],
     ) -> Tuple[Optional[int], Tuple[PathSpecification, int], Optional[str]]:
-        assert downloader is None
         path, expected_size = path_expected_size
         out_path = os.path.join(out_dir, path.relative_path)
         try:
@@ -153,7 +200,8 @@ If you meant to download the public release, please use the script `ego4d/egoexo
             return None, path_expected_size, traceback.format_exc()
 
     def get_size(
-        downloader: Optional[S3Downloader], path: PathSpecification
+        path: PathSpecification,
+        downloader: Optional[S3Downloader],
     ) -> Tuple[Optional[int], PathSpecification, Optional[str]]:
         assert downloader is not None
         try:
@@ -164,15 +212,15 @@ If you meant to download the public release, please use the script `ego4d/egoexo
             return None, path, traceback.format_exc()
 
     def download(
-        downloader: Optional[S3Downloader],
         path_size_pair: Tuple[PathSpecification, int],
+        downloader: Optional[S3Downloader],
     ) -> Tuple[Optional[int], Tuple[PathSpecification, int], Optional[str]]:
         assert downloader is not None
         path, _ = path_size_pair
         try:
             out_path = os.path.join(out_dir, path.relative_path)
             downloader.copy(path.source_path, out_path)
-            size, _, err = check_file(None, path_size_pair)
+            size, _, err = check_file(path_size_pair)
             return size, path_size_pair, err
         except Exception:
             return None, path_size_pair, traceback.format_exc()
@@ -184,14 +232,18 @@ If you meant to download the public release, please use the script `ego4d/egoexo
     if not release_dir.endswith("/"):
         release_dir += "/"
 
+    pathmgr = _create_pathmgr(s3_profile)
+
     num_paths = 0
     all_paths = []
     part_errs = []
-    for part in parts:
+    print("Obtaining part metadata ...", flush=True)
+    for part in tqdm(parts):
         manifest_path = _s3_path_join(_s3_path_join(release_dir, part), "manifest.json")
         if not pathmgr.exists(manifest_path):
             part_errs.append(part)
             continue
+
         ms = manifest_loads(pathmgr.open(manifest_path).read())
         for m in ms:
             num_paths += len(m.paths)
@@ -199,9 +251,11 @@ If you meant to download the public release, please use the script `ego4d/egoexo
                 continue
 
             all_paths.extend([p for p in m.paths if _path_ok(p, args)])
+    print("Done", flush=True)
 
     if len(part_errs) == len(parts):
         print("ERROR: could not get manifests for all parts (nothing to download)")
+        print("Did you supply the right parts?")
         print(
             """NOTE: Did you configure your AWS client correctly? See: https://github.com/facebookresearch/Ego4d/issues/277
 
@@ -224,48 +278,51 @@ If you are located in China, please try using a VPN. Please refer to these posts
     if num_paths != len(all_paths):
         print(f"Filtered {num_paths} -> {len(all_paths)} files")
 
-    # TODO: pre-cache this such that it is faster
-    print("Determining what to download ...")
-    path_size_pairs, s3_stat_failures = map_all(
-        all_paths,
-        map_fn=get_size,
-        num_workers=num_workers,
-        s3_profile=s3_profile,
-        needs_downloader=True,
-        progress_on_bytes=False,
-        total_bytes=None,
-    )
-    s3_zero_sizes = [path for path, size in path_size_pairs if size == 0]
-    success_path_size_pairs = [
-        (path, size) for path, size in path_size_pairs if size != 0
-    ]
-    all_s3_stat_failures = len(s3_zero_sizes) + len(s3_stat_failures)
-    if all_s3_stat_failures > 0:
-        bucket_failures = {
-            path.source_path.split("s3://")[1].split("/")[0]
-            for path, _ in s3_stat_failures
-        }
-        print(
-            f"""WARN: failed to get stats for {all_s3_stat_failures} files, will skip. [zero_size={len(s3_zero_sizes)}, exceptions={all_s3_stat_failures}.
+    path_size_pairs = [(x, x.size) for x in all_paths if x.size is not None]
+    not_cached_paths = [x for x in all_paths if x.size is None]
 
-This could be due to your internet connection.
-
-If you are located in China, please try using a VPN. Please refer to these posts:
-- https://github.com/facebookresearch/Ego4d/issues/223
-- https://github.com/facebookresearch/Ego4d/issues/162
-- https://github.com/facebookresearch/Ego4d/issues/284
-
-Additional debugging information:
-- S3 Buckets failed: {bucket_failures}
-"""
+    if len(not_cached_paths) > 0:
+        print("Determining what to download ...")
+        extra_path_size_pairs, s3_stat_failures = map_all(
+            not_cached_paths,
+            map_fn=get_size,
+            num_workers=num_workers,
+            s3_profile=s3_profile,
+            needs_downloader=True,
+            progress_on_bytes=False,
+            total_bytes=None,
         )
+        s3_zero_sizes = [path for path, size in extra_path_size_pairs if size == 0]
+        path_size_pairs += [
+            (path, size) for path, size in extra_path_size_pairs if size != 0
+        ]
+        all_s3_stat_failures = len(s3_zero_sizes) + len(s3_stat_failures)
+        if all_s3_stat_failures > 0:
+            bucket_failures = {
+                path.source_path.split("s3://")[1].split("/")[0]
+                for path, _ in s3_stat_failures
+            }
+            print(
+                f"""WARN: failed to get stats for {all_s3_stat_failures} files, will skip. [zero_size={len(s3_zero_sizes)}, exceptions={all_s3_stat_failures}.
+
+    This could be due to your internet connection.
+
+    If you are located in China, please try using a VPN. Please refer to these posts:
+    - https://github.com/facebookresearch/Ego4d/issues/223
+    - https://github.com/facebookresearch/Ego4d/issues/162
+    - https://github.com/facebookresearch/Ego4d/issues/284
+
+    Additional debugging information:
+    - S3 Buckets failed: {bucket_failures}
+    """
+            )
 
     total_size_bytes = sum(x for _, x in path_size_pairs if x is not None)
     total_size_gib = total_size_bytes / 1024**3
 
     print("Checking current download status ...")
     curr_paths, curr_stats_failures = map_all(
-        success_path_size_pairs,
+        path_size_pairs,
         map_fn=check_file,  # pyre-ignore
         num_workers=num_workers,
         s3_profile=s3_profile,
@@ -291,7 +348,7 @@ Additional debugging information:
 
     ps_to_dl = {
         path: size
-        for path, size in success_path_size_pairs
+        for path, size in path_size_pairs
         if (path, size) not in existing_paths
     }
     if len(ps_to_dl) == 0 and not args.force:
@@ -300,7 +357,7 @@ Additional debugging information:
 
     if args.force:
         print("Forcing everything to be re-downloaded ...")
-        ps_to_dl = {path: size for path, size in success_path_size_pairs}
+        ps_to_dl = {path: size for path, size in path_size_pairs}
 
     assert all(x is not None for x in ps_to_dl.values())
     expected_gb = sum(x / 1024**3 for x in ps_to_dl.values() if x is not None)
@@ -337,12 +394,24 @@ Additional debugging information:
 
         files_that_exist = set(files_that_exist)
         files_to_delete = files_that_exist - {
-            os.path.join(out_dir, x[0].relative_path) for x in success_path_size_pairs
+            os.path.join(out_dir, x[0].relative_path) for x in path_size_pairs
         }
-        print(
-            f"Deleting: {len(files_to_delete)} files ({len(files_that_exist)} total files)"
+        response = input(
+            f"Will delete: {len(files_to_delete)} files (there is {len(files_that_exist)} total files) "
+            f"Continue? (y/[n]): "
         )
-        breakpoint()
+        if not delete_yes:
+            if response.lower() in ["yes", "y"]:
+                confirm = True
+            else:
+                confirm = False
+        else:
+            confirm = True
+
+        if not confirm:
+            print("Aborting...")
+            sys.exit(0)
+
         for f in tqdm(files_to_delete):
             os.remove(f)
 
@@ -402,14 +471,7 @@ def create_arg_parse(script_name: str, base_dir: str, release_name: Optional[str
         "--parts",
         type=str,
         nargs="+",
-        default=[
-            "metadata",
-            "captures",
-            "takes",
-            "take_trajectory",
-            "take_vrs_noimagestream",
-            "annotations",
-        ],
+        default=["default"],
         help="""
 What parts of the dataset to download, one of:
 - metadata
@@ -417,6 +479,7 @@ What parts of the dataset to download, one of:
 - takes
 - take_vrs_noimagestream
 - take_trajectory
+- take_eye_gaze
 - take_point_cloud
 - take_vrs
 - take_audio
@@ -424,6 +487,7 @@ What parts of the dataset to download, one of:
 - captures
 - capture_trajectory
 - capture_eye_gaze
+- capture_point_cloud
 - downscaled_takes/448
 - features/omnivore_video
 - features/maws_clip_2b
@@ -492,6 +556,13 @@ Data relating to a particular university. Valid values are:
         "--yes",
         default=False,
         help="don't prompt to confirm",
+        action="store_true",
+    )
+    parser.add_argument(
+        "-dy",
+        "--delete_yes",
+        default=False,
+        help="don't prompt to confirm deletion",
         action="store_true",
     )
     parser.add_argument(
