@@ -395,24 +395,25 @@ If you are located in China, please try using a VPN. Please refer to these posts
         files_to_delete = files_that_exist - {
             os.path.join(out_dir, x[0].relative_path) for x in path_size_pairs
         }
-        response = input(
-            f"Will delete: {len(files_to_delete)} files (there is {len(files_that_exist)} total files) "
-            f"Continue? (y/[n]): "
-        )
-        if not delete_yes:
-            if response.lower() in ["yes", "y"]:
-                confirm = True
+        if len(files_to_delete) > 0:
+            response = input(
+                f"Will delete: {len(files_to_delete)} files (there is {len(files_that_exist)} total files) "
+                f"Continue? (y/[n]): "
+            )
+            if not delete_yes:
+                if response.lower() in ["yes", "y"]:
+                    confirm = True
+                else:
+                    confirm = False
             else:
-                confirm = False
-        else:
-            confirm = True
+                confirm = True
 
-        if not confirm:
-            print("Aborting...")
-            sys.exit(0)
+            if not confirm:
+                print("Aborting...")
+                sys.exit(0)
 
-        for f in tqdm(files_to_delete):
-            os.remove(f)
+            for f in tqdm(files_to_delete):
+                os.remove(f)
 
     print("Downloading ...")
     assert all(size is not None for size in ps_to_dl.values())
