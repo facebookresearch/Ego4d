@@ -244,6 +244,18 @@ If you meant to download the public release, please use the script `ego4d/egoexo
             continue
 
         ms = manifest_loads(pathmgr.open(manifest_path).read())
+        valid_benchmark_names = {b for m in ms for b in m.benchmarks or []}
+        invalid_benchmarks = args.benchmarks - valid_benchmark_names if args.benchmarks else set()
+        if len(invalid_benchmarks) > 0:
+            print(f"Provided invalid benchmarks: {invalid_benchmarks}")
+            print("Valid benchmark names include: ")
+            print()
+            for b in valid_benchmark_names:
+                print(b)
+            print()
+            print("Quitting ...")
+            sys.exit(3)
+
         for m in ms:
             num_paths += len(m.paths)
             if not _manifest_ok(m, args):
