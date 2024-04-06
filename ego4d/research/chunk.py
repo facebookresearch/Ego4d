@@ -32,12 +32,14 @@ class VideoChunk:
 
     video_timebase: Fraction
     audio_timebase: Fraction
+    audio_sample_rate: int
+    video_fps: Fraction
 
 
 def split_av_frames(
     video_path: str,
     window_size_sec: int = 5,
-    subsample_n_frames: Optional[int] = 30,  # 6 fps
+    subsample_n_frames: Optional[int] = None,
     limit: int = -1,
 ) -> Iterator[VideoChunk]:
     with av.open(video_path) as container:
@@ -46,10 +48,13 @@ def split_av_frames(
 
         streams_to_decode = {"video": 0}
         video_tb = container.streams.video[0].time_base
+        video_fps = container.streams.video[0].framerate
         audio_tb = None
+        audio_sample_rate = None
         if has_audio:
             streams_to_decode["audio"] = 0
             audio_tb = container.streams.audio[0].time_base
+            audio_sample_rate = container.streams.audio[0].sample_rate
 
         vf_buffer = {}
         af_buffer = {}
@@ -110,6 +115,8 @@ def split_av_frames(
                         ),
                         video_timebase=video_tb,
                         audio_timebase=audio_tb,
+                        video_fps=video_fps,
+                        audio_sample_rate=audio_sample_rate,
                     )
                 vf_buffer = {}
                 af_buffer = {}
@@ -165,6 +172,9 @@ def save_chunk(chunk: VideoChunk, out_dir: str, pathmgr: Optional[PathManager]) 
         "frame_height": chunk.video_frames.shape[2],
         "frame_width": chunk.video_frames.shape[3],
         "is_audio_mono": is_audio_mono,
+        "video_fps_numeratator": chunk.video_fps.numerator,
+        "video_fps_denom": chunk.video_fps.denominator,
+        "audio_sample_rate": chunk.audio_sample_rate,
     }
     json.dump(metadata, pathmgr.open(metadata_path, "w"), indent=2)
 
