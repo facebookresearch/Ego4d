@@ -245,7 +245,9 @@ If you meant to download the public release, please use the script `ego4d/egoexo
 
         ms = manifest_loads(pathmgr.open(manifest_path).read())
         valid_benchmark_names = {b for m in ms for b in m.benchmarks or []}
-        invalid_benchmarks = args.benchmarks - valid_benchmark_names if args.benchmarks else set()
+        invalid_benchmarks = (
+            args.benchmarks - valid_benchmark_names if args.benchmarks else set()
+        )
         if len(invalid_benchmarks) > 0:
             print(f"Provided invalid benchmarks: {invalid_benchmarks}")
             print("Valid benchmark names include: ")
@@ -347,7 +349,9 @@ If you are located in China, please try using a VPN. Please refer to these posts
         for path_size_pair, actual_size in curr_paths
         if actual_size is not None and actual_size > 0
     }
-    existing_gib = sum(size / 1024**3 for _, size in existing_paths if size is not None)
+    existing_gib = sum(
+        size / 1024**3 for _, size in existing_paths if size is not None
+    )
     existing_len = len(existing_paths)
     progress_percent = existing_gib / total_size_gib if total_size_gib > 0 else 1.0
 
@@ -360,7 +364,7 @@ If you are located in China, please try using a VPN. Please refer to these posts
     ps_to_dl = {
         path: size
         for path, size in path_size_pairs
-        if (path, size) not in existing_paths
+        if (path, size) not in existing_paths and size > 0
     }
     if len(ps_to_dl) == 0 and not args.force:
         print("Everything has been downloaded. Bye.")
@@ -389,13 +393,6 @@ If you are located in China, please try using a VPN. Please refer to these posts
     if not confirm:
         print("Aborting...")
         sys.exit(0)
-
-    print("Preparing output directories ...")
-    all_out_dirs = {
-        os.path.join(out_dir, os.path.dirname(x.relative_path)) for x in all_paths
-    }
-    for x in tqdm(all_out_dirs):
-        os.makedirs(x, exist_ok=True)
 
     if args.delete:
         print("Scanning for files to delete ...")
@@ -426,6 +423,13 @@ If you are located in China, please try using a VPN. Please refer to these posts
 
             for f in tqdm(files_to_delete):
                 os.remove(f)
+
+    print("Preparing output directories ...")
+    all_out_dirs = {
+        os.path.join(out_dir, os.path.dirname(x.relative_path)) for x in all_paths
+    }
+    for x in tqdm(all_out_dirs):
+        os.makedirs(x, exist_ok=True)
 
     print("Downloading ...")
     assert all(size is not None for size in ps_to_dl.values())
