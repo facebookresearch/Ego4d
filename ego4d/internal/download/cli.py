@@ -244,6 +244,20 @@ If you meant to download the public release, please use the script `ego4d/egoexo
             continue
 
         ms = manifest_loads(pathmgr.open(manifest_path).read())
+        valid_benchmark_names = {b for m in ms for b in m.benchmarks or []}
+        invalid_benchmarks = (
+            args.benchmarks - valid_benchmark_names if args.benchmarks else set()
+        )
+        if len(invalid_benchmarks) > 0:
+            print(f"Provided invalid benchmarks: {invalid_benchmarks}")
+            print("Valid benchmark names include: ")
+            print()
+            for b in valid_benchmark_names:
+                print(b)
+            print()
+            print("Quitting ...")
+            sys.exit(3)
+
         for m in ms:
             num_paths += len(m.paths)
             if not _manifest_ok(m, args):
@@ -348,7 +362,7 @@ If you are located in China, please try using a VPN. Please refer to these posts
     ps_to_dl = {
         path: size
         for path, size in path_size_pairs
-        if (path, size) not in existing_paths
+        if (path, size) not in existing_paths and size > 0
     }
     if len(ps_to_dl) == 0 and not args.force:
         print("Everything has been downloaded. Bye.")
@@ -378,13 +392,6 @@ If you are located in China, please try using a VPN. Please refer to these posts
         print("Aborting...")
         sys.exit(0)
 
-    print("Preparing output directories ...")
-    all_out_dirs = {
-        os.path.join(out_dir, os.path.dirname(x.relative_path)) for x in all_paths
-    }
-    for x in tqdm(all_out_dirs):
-        os.makedirs(x, exist_ok=True)
-
     if args.delete:
         print("Scanning for files to delete ...")
         files_that_exist = []
@@ -395,24 +402,32 @@ If you are located in China, please try using a VPN. Please refer to these posts
         files_to_delete = files_that_exist - {
             os.path.join(out_dir, x[0].relative_path) for x in path_size_pairs
         }
-        response = input(
-            f"Will delete: {len(files_to_delete)} files (there is {len(files_that_exist)} total files) "
-            f"Continue? (y/[n]): "
-        )
-        if not delete_yes:
-            if response.lower() in ["yes", "y"]:
-                confirm = True
+        if len(files_to_delete) > 0:
+            response = input(
+                f"Will delete: {len(files_to_delete)} files (there is {len(files_that_exist)} total files) "
+                f"Continue? (y/[n]): "
+            )
+            if not delete_yes:
+                if response.lower() in ["yes", "y"]:
+                    confirm = True
+                else:
+                    confirm = False
             else:
-                confirm = False
-        else:
-            confirm = True
+                confirm = True
 
-        if not confirm:
-            print("Aborting...")
-            sys.exit(0)
+            if not confirm:
+                print("Aborting...")
+                sys.exit(0)
 
-        for f in tqdm(files_to_delete):
-            os.remove(f)
+            for f in tqdm(files_to_delete):
+                os.remove(f)
+
+    print("Preparing output directories ...")
+    all_out_dirs = {
+        os.path.join(out_dir, os.path.dirname(x.relative_path)) for x in all_paths
+    }
+    for x in tqdm(all_out_dirs):
+        os.makedirs(x, exist_ok=True)
 
     print("Downloading ...")
     assert all(size is not None for size in ps_to_dl.values())

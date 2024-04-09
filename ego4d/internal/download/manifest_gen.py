@@ -627,8 +627,11 @@ if "annotations" in manifests:
     }
     if not dev_release:
         egopose_base_dir = os.path.join(release_dir, "annotations/ego_pose/")
-        for split in ["train", "val"]:
+        for split in ["train", "val", "test"]:
             for part in ["body", "hand", "camera_pose"]:
+                if part in ("body", "hand") and split == "test":
+                    continue
+
                 subdir = os.path.join(egopose_base_dir, split, part)
                 print(subdir)
 
