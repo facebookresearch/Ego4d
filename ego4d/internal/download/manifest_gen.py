@@ -522,7 +522,7 @@ for c in tqdm(egoexo["captures"]):
     )
 
     capture_paths = []
-    if post_fp is not None:
+    if post_fp is not None and "public_internal" not in post_fp:
         desc = downloader.file_desc(post_fp)
         if desc is not None:
             assert desc is not None
