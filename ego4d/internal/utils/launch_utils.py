@@ -2,6 +2,9 @@ import argparse
 import datetime
 import getpass
 import json
+import submitit
+import copy
+import functools
 
 try:
     from virtual_fs import virtual_os as os
@@ -9,9 +12,17 @@ try:
 except ImportError:
     import os
 import subprocess
+import ego4d.internal.human_pose.extract_camera_info as extract_camera_info
 
 
 def add_arguments(parser):
+    parser.add_argument(
+        "--take_names",
+        default="georgiatech_covid_02_2",
+        type=str,
+        help="take names to run, concatenated by '+', "
+        + "e.g., uniandes_dance_007_3+iiith_cooking_23+nus_covidtest_01",
+    )
     parser.add_argument(
         "--base_work_dir",
         default=f"/checkpoint/{getpass.getuser()}/flow/ego4d/default",
@@ -40,7 +51,7 @@ def add_arguments(parser):
         "--num_cpus", default=40, type=int, help="Number of CPUs **per machine**"
     )
     parser.add_argument(
-        "--num_gpus", default=8, type=int, help="Number of GPUs **per machine**"
+        "--num_gpus", default=2, type=int, help="Number of GPUs **per machine**"
     )
     parser.add_argument("--ram-gb", default=200, type=int)
     parser.add_argument("--retry", default=1, type=int, help="Number of retries")
@@ -110,83 +121,47 @@ def create_work_dir_list(args):
 
     args.forwarded_opts = ""
 
-
-def launch_job(task, args):
-    if args.run_type == "submitit":
-        assert args.num_machines >= 1
-        import submitit
-
-        executor = submitit.AutoExecutor(folder=args.work_dir)
-
-        executor.update_parameters(
-            # mem_gb=int(16 * args.num_gpus),
-            gpus_per_node=args.num_gpus,
-            # tasks_per_node=int(args.num_gpus),
-            # tasks_per_node=1,
-            # cpus_per_task=args.workers,
-            cpus_per_task=10 * args.num_gpus,
-            nodes=args.num_machines,
-            timeout_min=3 * 24 * 60,
-            name=args.name,
-            # Below are cluster dependent parameters
-            slurm_partition=args.partition,
-            slurm_constraint=args.gpu_type,
-        )
-
-        job = executor.submit(task.main, args)
-        # print out job id and working dir for record
-        print(f"j{job.job_id}={args.work_dir}")
-    elif args.run_type in ["flow_canary", "flow_canary_rebuild", "flow_local"]:
-        args_json = os.path.join(args.work_dir, "flow_args.json")
-
-        with open(args_json, "wt") as f:
-            json.dump(vars(args), f, indent=4)
-
-        if args.run_type == "flow_canary":
-            flow_run_type = "canary"
-        elif args.run_type == "flow_canary_rebuild":
-            flow_run_type = "canary --force-build"
-        else:
-            flow_run_type = "test-locally"
-
-        run_cmd = " ".join(
-            [
-                "flow-cli",
-                flow_run_type,
-                f"--entitlement {args.entitlement}",
-                f"--run-as-secure-group {args.secure_group}",
-                task.flow_name(),
-                f'--parameters-json \'{{"args_json": "{args_json}"}}\'',
-            ]
-        )
-
-        print("Flow command: {}".format(run_cmd))
-
-        env = os.environ.get("LD_LIBRARY_PATH")
-        if env is not None:
-            print(f"Deleting LD_LIBRARY_PATH from env: {env}")
-            del os.environ["LD_LIBRARY_PATH"]
-
-        subprocess.check_call(run_cmd, stderr=subprocess.STDOUT, shell=True)
-    else:
-        assert args.run_type == "local"
-        task.main(args)
+def create_executor(args, log_dir):    
+    executor = submitit.AutoExecutor(folder=log_dir+"%j")    
+    executor.update_parameters(
+        gpus_per_node=args.num_gpus,        
+        cpus_per_task=80,
+        nodes=args.num_machines,
+        timeout_min=3 * 24 * 60,
+        name=args.name,        
+        slurm_partition=args.partition,
+        slurm_constraint=args.gpu_type,
+    )  
+    executor.update_parameters(array_parallelism=2)
+    return executor
 
 
 def run_task(task):
-    parser = argparse.ArgumentParser()
-    # add task-specific arguments
-    task.add_arguments(parser)
-    # add common job-launching arguments
+    parser = argparse.ArgumentParser()    
     add_arguments(parser)
-    args = parser.parse_args()
+    args = parser.parse_args()   
+    print(args)
 
-    task.create_job_list(args)
-    create_work_dir_list(args)
+    '''
+    log_dir = os.path.join(args.base_work_dir, args.batch_job_name)    
+    executor = create_executor(args, log_dir)
 
-    print("Args: {}".format(args))
+    take_name_list = args.take_names.split("+") 
+    print(take_name_list)
+    print(task)
+    func = functools.partial(task, args)
+    print(func)
+    '''
 
+    #jobs = executor.map_array(functools.partial(task, args=args), take_name_list)
+    #print(f"Jobs: {jobs}")   
+    
+    #print("Args: {}".format(args))
+    #jobs = executor.map_array(task, args, task_name)  # just a list of jobs
+
+
+    '''
     for job_id in range(args.job_num):
         task.config_single_job(args, job_id)
-
-        launch_job(task, args)
+        launch_job_array(task, args)
+    '''

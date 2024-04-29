@@ -5,6 +5,6 @@
     "error_output_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production_v2/triangulated_results_error/",    
     "release_dir": "/large_experiments/egoexo/egopose/suyogjain/project_retriangulation_production_v2/ego_pose_release_v2/",    
     "camera_format": "new",
-    "annotation_type": "annotation",
+    "annotation_type": "automatic",
     "body_or_hand": "body"
 }
