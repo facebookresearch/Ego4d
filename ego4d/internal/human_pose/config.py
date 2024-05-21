@@ -40,6 +40,7 @@ class PreprocessFrameConfig:
     dataset_name: str
     vrs_bin_path: str
     extract_all_aria_frames: bool
+    extract_frames: bool
     download_video_files: bool
     force_download: bool
 
@@ -64,6 +65,11 @@ class PoseEstimationConfig:
 
 
 @dataclass
+class Pose3DConfig:
+    min_body_kpt2d_conf: float
+
+
+@dataclass
 class TriangulationConfig:
     pass
 
@@ -73,7 +79,7 @@ class Config:
     legacy: bool
     data_dir: str
     cache_root_dir: str
-    root_repo_dir: str
+    repo_root_dir: str
     gpu_id: int  # use -1 for CPU
     mode: str
     inputs: Input
@@ -81,4 +87,5 @@ class Config:
     mode_preprocess: PreprocessFrameConfig
     mode_bbox: BBoxConfig
     mode_pose2d: PoseEstimationConfig
+    mode_pose3d: Pose3DConfig
     mode_triangulate: TriangulationConfig

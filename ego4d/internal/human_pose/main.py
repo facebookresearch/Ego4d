@@ -50,7 +50,6 @@ from ego4d.internal.human_pose.utils import (
     draw_bbox_xyxy,
     draw_points_2d,
     get_bbox_from_kpts,
-    get_exo_camera_plane,
     get_region_proposal,
     normalize_reprojection_error,
     wholebody_hand_selector,
@@ -96,13 +95,11 @@ class Context:
     human_height: float = 1.5
     human_radius: float = 0.3
     min_bbox_score: float = 0.7
-    pose3d_start_frame: int = 0
-    pose3d_end_frame: int = -1
     refine_pose3d_dir: Optional[str] = None
     vis_refine_pose3d_dir: Optional[str] = None
     take: Optional[Dict[str, Any]] = None
     all_cams: Optional[List[str]] = None
-    frame_rel_dir: str = None
+    frame_rel_dir: Optional[str] = None
     storage_level: int = 30
 
 
@@ -143,98 +140,10 @@ def _create_json_from_capture_dir(capture_dir: Optional[str]) -> Dict[str, Any]:
     }
 
 
-def get_context_legacy(config: Config) -> Context:
-    if config.inputs.metadata_json_path is not None:
-        metadata_json = (
-            json.load(pathmgr.open(config.inputs.metadata_json_path))
-            if config.inputs.metadata_json_path is not None
-            else _create_json_from_capture_dir(config.inputs.input_capture_dir)
-        )
-    else:
-        metadata_json = _create_json_from_capture_dir(config.inputs.capture_data_dir)
-
-    if not config.data_dir.startswith("/"):
-        config.data_dir = os.path.join(config.repo_root_dir, config.data_dir)
-        print(f"Using data dir: {config.data_dir}")
-
-    data_dir = config.data_dir
-    cache_rel_dir = os.path.join(
-        "cache",
-        f"{metadata_json['video_source']}_{metadata_json['take_id']}",
-    )
-    cache_dir = os.path.join(
-        config.data_dir,
-        cache_rel_dir,
-    )
-    exo_cam_names = [
-        x["device_id"]
-        for x in metadata_json["videos"]
-        if not x["is_ego"] and not x["has_walkaround"]
-    ]
-    dataset_dir = os.path.join(cache_dir, config.mode_preprocess.dataset_name)
-    dataset_rel_dir = os.path.join(cache_rel_dir, config.mode_preprocess.dataset_name)
-
-    # pose2d config
-    for rel_path_key in ["pose_config", "dummy_pose_config"]:
-        rel_path = config.mode_pose2d[rel_path_key]
-        abs_path = os.path.join(config.repo_root_dir, rel_path)
-        assert os.path.exists(
-            abs_path
-        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
-        config.mode_pose2d[rel_path_key] = abs_path
-
-    # bbox config
-    for rel_path_key in ["detector_config"]:
-        rel_path = config.mode_bbox[rel_path_key]
-        abs_path = os.path.join(config.repo_root_dir, rel_path)
-        assert os.path.exists(
-            abs_path
-        ), f"path for {rel_path_key} must be relative to root repo dir ({config.repo_root_dir})"
-        config.mode_bbox[rel_path_key] = abs_path
-
-    return Context(
-        data_dir=data_dir,
-        repo_root_dir=config.repo_root_dir,
-        cache_dir=cache_dir,
-        cache_rel_dir=cache_rel_dir,
-        metadata_json=metadata_json,  # pyre-ignore
-        dataset_dir=dataset_dir,
-        dataset_json_path=os.path.join(dataset_dir, "data.json"),
-        dataset_rel_dir=os.path.join(
-            cache_rel_dir, config.mode_preprocess.dataset_name
-        ),
-        frame_dir=os.path.join(dataset_dir, "frames"),
-        frame_rel_dir=os.path.join(dataset_rel_dir, "frames"),
-        exo_cam_names=exo_cam_names,
-        bbox_dir=os.path.join(dataset_dir, "bbox"),
-        vis_bbox_dir=os.path.join(dataset_dir, "vis_bbox"),
-        pose2d_dir=os.path.join(dataset_dir, "pose2d"),
-        vis_pose2d_dir=os.path.join(dataset_dir, "vis_pose2d"),
-        pose3d_dir=os.path.join(dataset_dir, "pose3d"),
-        vis_pose3d_dir=os.path.join(dataset_dir, "vis_pose3d"),
-        detector_config=config.mode_bbox.detector_config,
-        detector_checkpoint=config.mode_bbox.detector_checkpoint,
-        pose_config=config.mode_pose2d.pose_config,
-        pose_checkpoint=config.mode_pose2d.pose_checkpoint,
-        dummy_pose_config=config.mode_pose2d.dummy_pose_config,
-        dummy_pose_checkpoint=config.mode_pose2d.dummy_pose_checkpoint,
-        human_height=config.mode_bbox.human_height,
-        human_radius=config.mode_bbox.human_radius,
-        min_bbox_score=config.mode_bbox.min_bbox_score,
-        pose3d_start_frame=config.mode_pose3d.start_frame,
-        pose3d_end_frame=config.mode_pose3d.end_frame,
-        refine_pose3d_dir=os.path.join(dataset_dir, "refine_pose3d"),
-        vis_refine_pose3d_dir=os.path.join(dataset_dir, "vis_refine_pose3d"),
-    )
-
-
 def get_context(config: Config) -> Context:
-    if config.legacy:
-        return get_context_legacy(config)
-
     take_json_path = os.path.join(config.data_dir, "takes.json")
     takes = json.load(open(take_json_path))
-    take = [t for t in takes if t["root_dir"] == config.inputs.take_name]
+    take = [t for t in takes if t["take_name"] == config.inputs.take_name]
     if len(take) != 1:
         print(f"Take: {config.inputs.take_name} does not exist")
         sys.exit(1)
@@ -247,7 +156,7 @@ def get_context(config: Config) -> Context:
     data_dir = config.data_dir
     cache_rel_dir = os.path.join(
         "cache",
-        take["root_dir"],
+        take["take_name"],
     )
     cache_dir = os.path.join(
         config.cache_root_dir,
@@ -255,7 +164,7 @@ def get_context(config: Config) -> Context:
     )
     # Initialize exo cameras from calibration file since sometimes some exo camera is missing
     traj_dir = os.path.join(
-        data_dir, "captures", take["capture"]["root_dir"], "trajectory"
+        data_dir, "captures", take["capture"]["capture_name"], "trajectory"
     )
     exo_traj_path = os.path.join(traj_dir, "gopro_calibs.csv")
     exo_traj_df = pd.read_csv(exo_traj_path)
@@ -340,8 +249,6 @@ def get_context(config: Config) -> Context:
         human_height=config.mode_bbox.human_height,
         human_radius=config.mode_bbox.human_radius,
         min_bbox_score=config.mode_bbox.min_bbox_score,
-        pose3d_start_frame=config.mode_pose3d.start_frame,
-        pose3d_end_frame=config.mode_pose3d.end_frame,
         refine_pose3d_dir=os.path.join(dataset_dir, "refine_pose3d"),
         vis_refine_pose3d_dir=os.path.join(dataset_dir, "vis_refine_pose3d"),
         take=take,
@@ -511,8 +418,8 @@ def mode_body_bbox(config: Config):
     # Directory to store bbox result and visualization
     bbox_dir = os.path.join(ctx.dataset_dir, skel_type, "bbox")
     os.makedirs(bbox_dir, exist_ok=True)
+    vis_bbox_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_bbox")
     if visualization:
-        vis_bbox_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_bbox")
         os.makedirs(vis_bbox_dir, exist_ok=True)
 
     bboxes = {}
@@ -525,8 +432,8 @@ def mode_body_bbox(config: Config):
             image = cv2.imread(image_path)
 
             # Directory to store body bbox visualization
+            vis_bbox_cam_dir = os.path.join(vis_bbox_dir, exo_camera_name)
             if visualization:
-                vis_bbox_cam_dir = os.path.join(vis_bbox_dir, exo_camera_name)
                 if not os.path.exists(vis_bbox_cam_dir):
                     os.makedirs(vis_bbox_cam_dir)
 
@@ -623,8 +530,8 @@ def mode_body_pose2d(config: Config):
     if not os.path.exists(pose2d_dir):
         os.makedirs(pose2d_dir)
 
+    vis_pose2d_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_pose2d")
     if visualization:
-        vis_pose2d_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_pose2d")
         if not os.path.exists(vis_pose2d_dir):
             os.makedirs(vis_pose2d_dir)
 
@@ -649,8 +556,8 @@ def mode_body_pose2d(config: Config):
             image = cv2.imread(image_path)
 
             # Directory to store body kpts visualization for current camera
+            vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, exo_camera_name)
             if visualization:
-                vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, exo_camera_name)
                 if not os.path.exists(vis_pose2d_cam_dir):
                     os.makedirs(vis_pose2d_cam_dir)
 
@@ -722,8 +629,8 @@ def mode_body_pose3d(config: Config):
     pose3d_dir = os.path.join(ctx.dataset_dir, skel_type, "pose3d")
     if not os.path.exists(pose3d_dir):
         os.makedirs(pose3d_dir)
+    vis_pose3d_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_pose3d")
     if visualization:
-        vis_pose3d_dir = os.path.join(ctx.dataset_dir, skel_type, "vis_pose3d")
         if not os.path.exists(vis_pose3d_dir):
             os.makedirs(vis_pose3d_dir)
 
@@ -747,7 +654,11 @@ def mode_body_pose3d(config: Config):
 
         # triangulate
         triangulator = Triangulator(
-            time_stamp, ctx.exo_cam_names, exo_cameras, multi_view_pose2d
+            time_stamp,
+            ctx.exo_cam_names,
+            exo_cameras,
+            multi_view_pose2d,
+            keypoint_thres=config.mode_pose3d.min_body_kpt2d_conf,
         )
 
         pose3d = triangulator.run(debug=False)  ## 17 x 4 (x, y, z, confidence)
@@ -852,10 +763,10 @@ def mode_wholebodyHand_pose3d(config: Config):
     if not os.path.exists(pose3d_dir):
         os.makedirs(pose3d_dir)
 
+    vis_pose3d_dir = os.path.join(
+        ctx.dataset_dir, f"body/vis_pose3d/wholebodyHand_triThresh={tri_threshold}"
+    )
     if visualization:
-        vis_pose3d_dir = os.path.join(
-            ctx.dataset_dir, f"body/vis_pose3d/wholebodyHand_triThresh={tri_threshold}"
-        )
         if not os.path.exists(vis_pose3d_dir):
             os.makedirs(vis_pose3d_dir)
 
@@ -986,16 +897,16 @@ def mode_exo_hand_pose2d(config: Config):
     if not os.path.exists(pose2d_dir):
         os.makedirs(pose2d_dir)
 
+    # Directory to store pose2d estimation
+    vis_pose2d_dir = os.path.join(
+        ctx.dataset_dir, f"hand/vis_pose2d/visThresh={kpts_vis_threshold}"
+    )
+    # Directory to store hand bbox
+    vis_bbox_dir = os.path.join(ctx.dataset_dir, f"hand/vis_bbox")
     if visualization:
-        # Directory to store pose2d estimation
-        vis_pose2d_dir = os.path.join(
-            ctx.dataset_dir, f"hand/vis_pose2d/visThresh={kpts_vis_threshold}"
-        )
         if not os.path.exists(vis_pose2d_dir):
             os.makedirs(vis_pose2d_dir)
     if vis_hand_bbox:
-        # Directory to store hand bbox
-        vis_bbox_dir = os.path.join(ctx.dataset_dir, f"hand/vis_bbox")
         os.makedirs(vis_bbox_dir, exist_ok=True)
 
     # Load human body keypoints result from mode_pose2d
@@ -1016,15 +927,15 @@ def mode_exo_hand_pose2d(config: Config):
             image_path = info[f"{exo_camera_name}_0"]["abs_frame_path"]
             image = cv2.imread(image_path)
 
+            # Directory to store hand pose2d results
+            vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, exo_camera_name)
             if visualization:
-                # Directory to store hand pose2d results
-                vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, exo_camera_name)
                 if not os.path.exists(vis_pose2d_cam_dir):
                     os.makedirs(vis_pose2d_cam_dir)
 
+            # Directory to store hand bbox results
+            vis_bbox_cam_dir = os.path.join(vis_bbox_dir, exo_camera_name)
             if vis_hand_bbox:
-                # Directory to store hand bbox results
-                vis_bbox_cam_dir = os.path.join(vis_bbox_dir, exo_camera_name)
                 if not os.path.exists(vis_bbox_cam_dir):
                     os.makedirs(vis_bbox_cam_dir)
 
@@ -1170,16 +1081,16 @@ def mode_ego_hand_pose2d(config: Config):
         os.makedirs(pose2d_dir)
 
     # Directory to store bbox and pose2d estimation
+    vis_pose2d_dir = os.path.join(
+        ctx.dataset_dir,
+        f"hand/vis_pose2d/visThresh={kpts_vis_threshold}",
+    )
+    vis_bbox_dir = os.path.join(ctx.dataset_dir, "hand/vis_bbox")
     if visualization:
-        vis_pose2d_dir = os.path.join(
-            ctx.dataset_dir,
-            f"hand/vis_pose2d/visThresh={kpts_vis_threshold}",
-        )
         if not os.path.exists(vis_pose2d_dir):
             os.makedirs(vis_pose2d_dir)
 
     if vis_hand_bbox:
-        vis_bbox_dir = os.path.join(ctx.dataset_dir, "hand/vis_bbox")
         os.makedirs(vis_bbox_dir, exist_ok=True)
 
     # Load wholebody-Hand pose3d estimation result
@@ -1196,9 +1107,10 @@ def mode_ego_hand_pose2d(config: Config):
 
     # Create aria camera model
     capture_dir = os.path.join(
-        ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
+        ctx.data_dir, "captures", ctx.take["capture"]["capture_name"]
     )
-    aria_path = os.path.join(capture_dir, f"videos/{ctx.ego_cam_names[0]}.vrs")
+    take_dir = os.path.join(ctx.data_dir, "takes", ctx.take["take_name"])
+    aria_path = os.path.join(take_dir, f"{ctx.ego_cam_names[0]}.vrs")
     assert os.path.exists(
         aria_path
     ), f"{aria_path} doesn't exit. Need aria video downloaded"
@@ -1230,15 +1142,15 @@ def mode_ego_hand_pose2d(config: Config):
             )
 
             # Directory to save visualization
+            vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, ego_cam_name)
             if visualization:
                 # Directory to store hand pose2d results
-                vis_pose2d_cam_dir = os.path.join(vis_pose2d_dir, ego_cam_name)
                 if not os.path.exists(vis_pose2d_cam_dir):
                     os.makedirs(vis_pose2d_cam_dir)
 
+            # Directory to store hand bbox results
+            vis_bbox_cam_dir = os.path.join(vis_bbox_dir, ego_cam_name)
             if vis_hand_bbox:
-                # Directory to store hand bbox results
-                vis_bbox_cam_dir = os.path.join(vis_bbox_dir, ego_cam_name)
                 if not os.path.exists(vis_bbox_cam_dir):
                     os.makedirs(vis_bbox_cam_dir)
 
@@ -1398,13 +1310,13 @@ def mode_exo_hand_pose3d(config: Config):
     if not os.path.exists(pose3d_dir):
         os.makedirs(pose3d_dir)
     # Directory to store pose3d visualization
+    vis_pose3d_dir = os.path.join(
+        ctx.dataset_dir,
+        f"hand/vis_pose3d",
+        "exo_camera",
+        f"triThresh={tri_threshold}",
+    )
     if visualization:
-        vis_pose3d_dir = os.path.join(
-            ctx.dataset_dir,
-            f"hand/vis_pose3d",
-            "exo_camera",
-            f"triThresh={tri_threshold}",
-        )
         if not os.path.exists(vis_pose3d_dir):
             os.makedirs(vis_pose3d_dir)
 
@@ -1610,13 +1522,13 @@ def mode_egoexo_hand_pose3d(config: Config):
     if not os.path.exists(pose3d_dir):
         os.makedirs(pose3d_dir)
     # Directory to store pose3d visualization
+    vis_pose3d_dir = os.path.join(
+        ctx.dataset_dir,
+        "hand/vis_pose3d",
+        "ego_exo_camera",
+        f"triThresh={tri_threshold}",
+    )
     if visualization:
-        vis_pose3d_dir = os.path.join(
-            ctx.dataset_dir,
-            "hand/vis_pose3d",
-            "ego_exo_camera",
-            f"triThresh={tri_threshold}",
-        )
         if not os.path.exists(vis_pose3d_dir):
             os.makedirs(vis_pose3d_dir)
 
@@ -1642,9 +1554,10 @@ def mode_egoexo_hand_pose3d(config: Config):
 
     # Create aria calibration model
     capture_dir = os.path.join(
-        ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
+        ctx.data_dir, "captures", ctx.take["capture"]["capture_name"]
     )
-    aria_path = os.path.join(capture_dir, f"videos/{ctx.ego_cam_names[0]}.vrs")
+    take_dir = os.path.join(ctx.data_dir, "takes", ctx.take["take_name"])
+    aria_path = os.path.join(take_dir, f"{ctx.ego_cam_names[0]}.vrs")
     assert os.path.exists(
         aria_path
     ), f"{aria_path} doesn't exit. Need aria video downloaded"
@@ -2065,12 +1978,17 @@ def mode_preprocess(config: Config):
         mode_preprocess_legacy(config)
     ctx = get_context(config)
     assert config.mode_preprocess.download_video_files, "must download files"
-    shutil.rmtree(ctx.frame_dir, ignore_errors=True)
+    # Note: sometimes the preprocess takes >72 hours,
+    # so we need to resume without deleting saved frames.
+    # if there's a change in meta data (e.g., different set of cameras),
+    # please manually remove the frames first
+    # shutil.rmtree(ctx.frame_dir, ignore_errors=True)
     os.makedirs(ctx.frame_dir, exist_ok=True)
 
     capture_dir = os.path.join(
-        ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
+        ctx.data_dir, "captures", ctx.take["capture"]["capture_name"]
     )
+    take_dir = os.path.join(ctx.data_dir, "takes", ctx.take["take_name"])
     traj_dir = os.path.join(capture_dir, "trajectory")
     aria_traj_path = os.path.join(traj_dir, "closed_loop_trajectory.csv")
     exo_traj_path = os.path.join(traj_dir, "gopro_calibs.csv")
@@ -2118,11 +2036,13 @@ def mode_preprocess(config: Config):
             rel_frame_dir = f"{cam}_{stream_name}"
             cam_frame_dir = os.path.join(ctx.frame_dir, f"{cam}_{stream_name}")
             os.makedirs(cam_frame_dir, exist_ok=True)
-            path = os.path.join(ctx.data_dir, "takes", ctx.take["root_dir"], rel_path)
+            path = os.path.join(ctx.data_dir, "takes", ctx.take["take_name"], rel_path)
             reader = PyAvReader(
                 path=path,
                 resize=None,
+                crop=None,
                 mean=None,
+                std=None,
                 frame_window_size=frame_window_size,
                 stride=1,
                 gpu_idx=-1,
@@ -2134,18 +2054,41 @@ def mode_preprocess(config: Config):
             frame_paths[key] = {}
 
             count = 0
+            count_skipped = 0
 
             for idx in range(start_frame, end_frame, config.inputs.sample_interval):
                 if frame_selection[idx - start_frame] == 1:
-                    frame = reader[idx][0].cpu().numpy()
+
                     rel_out_path = os.path.join(rel_frame_dir, f"{idx:06d}.jpg")
                     out_path = os.path.join(cam_frame_dir, f"{idx:06d}.jpg")
                     frame_paths[key][idx] = rel_out_path
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                    assert cv2.imwrite(out_path, frame), out_path
-                    count += 1
-                    if count % 100 == 0:
-                        print(f"[Info] Saved {count} frames for {cam}_{stream_name}")
+
+                    if not config.mode_preprocess.extract_frames:
+                        count_skipped += 1
+                        if count_skipped % 500 == 0:
+                            print(
+                                f"[Info] Skipped saving {count_skipped} frames for {cam}_{stream_name}"
+                            )
+                    elif os.path.exists(out_path):
+                        count_skipped += 1
+                        if count_skipped % 100 == 0:
+                            print(
+                                " ".join(
+                                    [
+                                        "[Info] Found and skipped",
+                                        f"{count_skipped} frames for {cam}_{stream_name}",
+                                    ]
+                                )
+                            )
+                    else:
+                        frame = reader[idx]["video"][0].cpu().numpy()
+                        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                        assert cv2.imwrite(out_path, frame), out_path
+                        count += 1
+                        if count % 100 == 0:
+                            print(
+                                f"[Info] Saved {count} frames for {cam}_{stream_name}"
+                            )
 
     stream_name_to_id = {
         "et": "211-1",
@@ -2154,16 +2097,20 @@ def mode_preprocess(config: Config):
         "slam-right": "1201-2",
     }
 
-    aria_dir = os.path.join(capture_dir, "videos")
+    aria_dir = take_dir
     aria_path = os.path.join(aria_dir, f"{ctx.ego_cam_names[0]}.vrs")
     assert os.path.exists(aria_path), f"Cannot find {aria_path}"
     aria_camera_models = get_aria_camera_models(aria_path)
 
     assert config.inputs.exo_timesync_name_to_calib_name is None
 
+    print("[Info] Preparing metadata for data.json ..")
+
     output = []
     for idx in range(start_frame, end_frame, config.inputs.sample_interval):
         if frame_selection[idx - start_frame] == 1:
+            if (idx - start_frame) % 100 == 0:
+                print(f"Processed {idx - start_frame}")
             row = {}
             row_df = synced_df.iloc[idx]
             skip_frame = False
@@ -2402,10 +2349,10 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
         ###############################
         # TODO: extract this to a separate function
         capture_dir = os.path.join(
-            ctx.data_dir, "captures", ctx.take["capture"]["root_dir"]
+            ctx.data_dir, "captures", ctx.take["capture"]["capture_name"]
         )
-        aria_dir = os.path.join(capture_dir, "videos")
-        aria_path = os.path.join(aria_dir, f"{ctx.ego_cam_names[0]}.vrs")
+        take_dir = os.path.join(ctx.data_dir, "takes", ctx.take["take_name"])
+        aria_path = os.path.join(take_dir, f"{ctx.ego_cam_names[0]}.vrs")
         assert os.path.exists(aria_path), f"Cannot find {aria_path}"
         print(f"Creating data provider from {aria_path}")
         provider = data_provider.create_vrs_data_provider(aria_path)
@@ -2620,7 +2567,9 @@ def mode_upload_to_s3(config: Config):
                 f"'s3://ego4d-fair/egopose/production/{today}/{take_name}/{skel_type}'",
             ]
         )
-        os.system(command)
+        print(f"Running command: {command}")
+        # os.system(command)
+        subprocess.check_call(command, stderr=subprocess.STDOUT, shell=True)
 
     command = " ".join(
         [
@@ -2629,7 +2578,9 @@ def mode_upload_to_s3(config: Config):
             f"'s3://ego4d-fair/egopose/production/{today}/{take_name}'",
         ]
     )
-    os.system(command)
+    print(f"Running command: {command}")
+    subprocess.check_call(command, stderr=subprocess.STDOUT, shell=True)
+    # os.system(command)
 
 
 """
@@ -2670,11 +2621,24 @@ def add_arguments(parser):
         "--config_path", default="configs", help="Path to the config folder"
     )
     parser.add_argument(
+        "--min_resume_date",
+        default="20231130",
+        type=str,
+        help="start from scratch if the date in finished_step.log is earlier",
+    )
+    parser.add_argument(
         "--take_name",
         default="georgiatech_covid_02_2",
         type=str,
         help="take names to run, concatenated by '+', "
         + "e.g., uniandes_dance_007_3+iiith_cooking_23+nus_covidtest_01",
+    )
+    parser.add_argument(
+        "--resume",
+        default="on",
+        type=str,
+        choices=["on", "off"],
+        help="whether to resume from the step in finished_step.log",
     )
     parser.add_argument(
         "--steps",
@@ -2731,8 +2695,51 @@ def get_hydra_config(args):
 def main(args):
     # Note: this function is called from launch_main.py
     config = get_hydra_config(args)
+    ctx = get_context(config)
 
     steps = args.steps.split("+")
+
+    resume_log = os.path.join(ctx.dataset_dir, "finished_step.log")
+    if args.resume == "on":
+        if os.path.exists(resume_log):
+            with open(resume_log, "r") as f:
+                lines = [line.split("\n")[0] for line in f.readlines()]
+            previous_step = lines[0]
+            checkpoint_date = lines[1]
+            if int(checkpoint_date) >= int(args.min_resume_date):
+                if (
+                    int(checkpoint_date) >= 20231203
+                    and int(checkpoint_date) <= 20240101
+                ):
+                    if previous_step == "upload_to_s3":
+                        previous_step = "hand_undistort_to_halo"
+                        print(
+                            " ".join(
+                                [
+                                    "[Warning] Redo upload_to_s3 step",
+                                    "between 20231203 and 20240101 due to aws upgrade",
+                                ]
+                            )
+                        )
+                print(
+                    f"[Info] Resume from previous step {previous_step} on {checkpoint_date}"
+                )
+                new_steps = []
+                reached_previous_skip = False
+                for step in steps:
+                    if reached_previous_skip:
+                        new_steps.append(step)
+                    else:
+                        print(f"[Info] Skipping {step}")
+                        if step == previous_step:
+                            reached_previous_skip = True
+                steps = new_steps
+            else:
+                print(
+                    f"[Info] Previous checkpoint date {checkpoint_date}"
+                    + f"was earlier than {args.min_resume_date}, start from scratch"
+                )
+
     print(f"steps: {steps}")
 
     skip_body_refine_pose3d = False
@@ -2795,6 +2802,11 @@ def main(args):
         else:
             raise Exception(f"Unknown step: {step}")
         print(f"[Info] Time for {step}: {time.time() - start_time} s")
+
+        today = date.today().strftime("%Y%m%d")
+        with open(resume_log, "w") as f:
+            f.write(f"{step}\n{today}\n")
+        print(f"[Info] Updated {resume_log} with {step} on {today}")
 
 
 if __name__ == "__main__":
