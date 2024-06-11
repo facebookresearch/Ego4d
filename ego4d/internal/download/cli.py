@@ -237,6 +237,7 @@ If you meant to download the public release, please use the script `ego4d/egoexo
     all_paths = []
     part_errs = []
     print("Obtaining part metadata ...", flush=True)
+    valid_benchmark_names = set()
     for part in tqdm(parts):
         manifest_path = _s3_path_join(_s3_path_join(release_dir, part), "manifest.json")
         if not pathmgr.exists(manifest_path):
@@ -244,27 +245,33 @@ If you meant to download the public release, please use the script `ego4d/egoexo
             continue
 
         ms = manifest_loads(pathmgr.open(manifest_path).read())
-        valid_benchmark_names = {b for m in ms for b in m.benchmarks or []}
-        invalid_benchmarks = (
-            args.benchmarks - valid_benchmark_names if args.benchmarks else set()
-        )
-        if len(invalid_benchmarks) > 0:
-            print(f"Provided invalid benchmarks: {invalid_benchmarks}")
-            print("Valid benchmark names include: ")
-            print()
-            for b in valid_benchmark_names:
-                print(b)
-            print()
-            print("Quitting ...")
-            sys.exit(3)
-
+        valid_benchmark_names.update({b for m in ms for b in m.benchmarks or []})
         for m in ms:
             num_paths += len(m.paths)
             if not _manifest_ok(m, args):
                 continue
 
             all_paths.extend([p for p in m.paths if _path_ok(p, args)])
+
     print("Done", flush=True)
+
+    invalid_benchmarks = (
+        args.benchmarks - valid_benchmark_names if args.benchmarks else set()
+    )
+    if len(invalid_benchmarks) > 0:
+        print(
+            f"WARN: Provided invalid benchmarks: {invalid_benchmarks} for parts provided (parts may not be associated to benchmarks)"  # noqa
+        )
+        if len(valid_benchmark_names) == 0:
+            print("Parts are not associated to benchmarks")
+        else:
+            print("Valid benchmark names include: ")
+            print()
+            for b in valid_benchmark_names:
+                print(b)
+            print()
+        print("Proceeding anyway via setting benchmarks to the empty set ...")
+        args.benchmarks = set()
 
     if len(part_errs) == len(parts):
         print("ERROR: could not get manifests for all parts (nothing to download)")
