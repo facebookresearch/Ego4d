@@ -4,6 +4,7 @@
 Functionality related to parsing the video manifest and storing an in-memory
 representation for the download operation.
 """
+
 import csv
 import datetime
 import logging

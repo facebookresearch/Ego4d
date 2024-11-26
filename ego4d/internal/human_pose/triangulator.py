@@ -75,7 +75,6 @@ class Triangulator:
                 choosen_cameras = []
 
                 for view_idx, camera_name in enumerate(self.pose2d[human_name].keys()):
-
                     point_2d = self.pose2d[human_name][camera_name][
                         keypoint_idx, :2
                     ]  # chop off the confidnece
@@ -317,7 +316,6 @@ class Triangulator:
     ):
         reprojection_error_matrix = []
         for keypoints_2d, proj_matrix in zip(keypoints_2d_list, proj_matricies):
-
             if len(keypoints_2d) == 3:
                 keypoints_2d = keypoints_2d[:2]  ## chop off the confidence
 

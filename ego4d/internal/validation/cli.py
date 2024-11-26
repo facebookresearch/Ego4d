@@ -15,6 +15,7 @@ Examples:
         -u georgiatech \
         -o errors
 """
+
 import boto3
 import botocore.client as bclient
 from ego4d.cli.universities import UNIV_TO_BUCKET
@@ -24,7 +25,6 @@ from ego4d.internal.validation.validate import run_validation
 
 
 def main_cfg(cfg: Config) -> None:
-
     validated_cfg = validate_config(cfg)
     run_validation(
         manifest_dir=validated_cfg.input_directory,

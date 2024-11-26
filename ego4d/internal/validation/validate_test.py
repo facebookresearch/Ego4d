@@ -66,7 +66,6 @@ aux_dict = {uid1: [aux1, aux2]}
 
 
 def test_validate_video_components():
-
     meta_dict = {uid1: metadata}
     component_dict = {uid1: [component1]}
 
@@ -170,7 +169,6 @@ def test_validate_mp4(video_info_dict):
 
 
 if __name__ == "__main__":
-
     test_validate_video_components()
     video_info_dict = test_get_videos()
     video_info_dict[uid1].append(video_info_dict[uid1][0])

@@ -3,6 +3,7 @@
 taken from
 https://github.com/marcel-dancak/lz-string-python/blob/master/lzstring.py
 """
+
 import math
 
 KEYSTRURISAFE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-$"

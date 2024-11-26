@@ -178,9 +178,7 @@ def main(args):
         parts.remove("default")
         parts.update(parts_to_add)
 
-    assert (
-        release_name is not None
-    ), """You must provide a release name via `--release`.
+    assert release_name is not None, """You must provide a release name via `--release`.
 If you meant to download the public release, please use the script `ego4d/egoexo/download/cli.py` instead.
 """
 

@@ -11,7 +11,6 @@ from .universities import BUCKET_TO_UNIV
 
 
 def test_constructor():
-
     row = {
         "video_uid": "12345",
         "canonical_s3_location": "s3://ego4d-georgiatech/object/key/123",
@@ -42,9 +41,7 @@ def test_constructor():
 
 
 def test_csv_reader():
-
     with tempfile.NamedTemporaryFile(mode="w") as f:
-
         writer = csv.DictWriter(f, fieldnames=["video_uid", "canonical_s3_location"])
         writer.writeheader()
         writer.writerow(

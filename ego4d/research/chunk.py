@@ -72,9 +72,7 @@ def split_av_frames(
                     af_frames_sorted = sorted(af_buffer.items(), key=lambda x: x[0])
                     vf_frames_np = np.stack(
                         [x.to_ndarray(format="rgb24") for _, x in vf_frames_sorted]
-                    ).transpose(
-                        0, 3, 1, 2
-                    )  # THWC -> TCHW
+                    ).transpose(0, 3, 1, 2)  # THWC -> TCHW
                     assert vf_frames_np.dtype == np.uint8
                     indices = None
                     if subsample_n_frames is not None:

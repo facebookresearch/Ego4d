@@ -9,6 +9,7 @@ References:
     https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
 
 """
+
 import re
 from typing import Tuple
 

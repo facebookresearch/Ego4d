@@ -136,13 +136,12 @@ def write_attachment(
     frame_name,
     high_conf_frame_list,
 ):
-
     default_attachment_json[0]["payload"][0]["data"]["capture_id"] = capture_id
     default_attachment_json[0]["payload"][0]["data"]["camera_id"] = camera_id
     default_attachment_json[0]["payload"][0]["data"]["frame_number"] = frame_number
-    default_attachment_json[0]["payload"][0]["data"][
-        "camera_intrinsics"
-    ] = intrinsic_list
+    default_attachment_json[0]["payload"][0]["data"]["camera_intrinsics"] = (
+        intrinsic_list
+    )
     default_attachment_json[0]["payload"][0]["data"]["camera_extrinsics"] = (
         extrinsic_list[:-1]
     )
@@ -340,7 +339,6 @@ def process_exocam_data(
     output_images_dir,
     output_attachments_dir,
 ):
-
     frame_path = exocam_data["frame_path"]
     frame_path = os.path.join(frames_folder, frame_path)
     save_name = ("_").join(frame_path.split("/")[-2:])

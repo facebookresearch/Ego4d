@@ -4,6 +4,7 @@
 A data object for storing user options, along with utilities for parsing input options
 from command line flags and a configuration file.
 """
+
 import argparse
 import json
 from pathlib import Path

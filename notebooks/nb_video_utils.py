@@ -73,7 +73,6 @@ def _get_frames_pts(
     previous_audio_pts = None
 
     for frame in container.decode(**streams_to_decode):
-
         if isinstance(frame, av.AudioFrame):
             assert include_audio
             # ensure frames are in order

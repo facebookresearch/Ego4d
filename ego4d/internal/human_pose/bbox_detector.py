@@ -52,7 +52,6 @@ class DetectorModel:
             max_iou_index = -1
 
             for j, offshelf_bbox in enumerate(person_results):
-
                 if is_offshelf_valid[j] == True:
                     iou = self.bb_intersection_over_union(
                         boxA=bbox["bbox"], boxB=offshelf_bbox["bbox"]

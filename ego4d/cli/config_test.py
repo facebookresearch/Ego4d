@@ -146,7 +146,6 @@ def test_json_file():
     }
 
     with tempfile.NamedTemporaryFile(mode="w") as f:
-
         json.dump(conf, f)
         f.flush()
 

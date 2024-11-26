@@ -3,6 +3,7 @@
 """
 Verifies integrity of downloaded files
 """
+
 from typing import Collection, List
 
 from ego4d.cli.download import VideoOnDisk

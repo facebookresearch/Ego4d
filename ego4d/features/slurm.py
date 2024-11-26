@@ -45,9 +45,7 @@ def greedy_create_batches(
     vt = [(v, t) for v, t in zip(videos, times)]
     vt.sort(key=lambda x: x[1])
 
-    assert (
-        vt[-1][1] <= max_time_per_batch
-    ), f"""
+    assert vt[-1][1] <= max_time_per_batch, f"""
         can't batch things if the max time is larger than max_time_per_batch
         {vt[-1][-1]} vs. {max_time_per_batch}
     """
@@ -74,9 +72,7 @@ def greedy_create_batches(
             curr_time += times[j]
             j -= 1
 
-        assert (
-            i != old_i or j != old_j
-        ), f"""
+        assert i != old_i or j != old_j, f"""
         Could not batch it up -
             i = {i}, j = {j}
             old_i = {old_i}, old_j = {old_j}
@@ -97,9 +93,7 @@ def greedy_create_batches(
 def validate_batches(timeout_minutes, times_per_batch, batched_vids):
     for t, b in zip(times_per_batch, batched_vids):
         print(len(b), t)
-        assert (
-            t <= timeout_minutes * 60
-        ), f"""
+        assert t <= timeout_minutes * 60, f"""
             Algorithm to batch videos is incorrect.
 
             Batch estimated time = {t}

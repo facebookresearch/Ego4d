@@ -66,7 +66,6 @@ class TriangulatorNonLinear:
         self.pose2d = {}
 
         for camera_name, pose2d in multiview_pose2d.items():
-
             if multiview_pose2d[camera_name] is not None:
                 keypoints = multiview_pose2d[camera_name][
                     self.keypoints_idxs

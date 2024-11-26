@@ -867,9 +867,7 @@ def mode_exo_hand_pose2d(config: Config):
     ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args
     ##################################
-    exo_cam_names = (
-        ctx.exo_cam_names
-    )  # Select all default cameras: ctx.exo_cam_names or manual selection: ['cam01','cam02']
+    exo_cam_names = ctx.exo_cam_names  # Select all default cameras: ctx.exo_cam_names or manual selection: ['cam01','cam02']
     kpts_vis_threshold = 0.3  # hand pose2d kpts confidence threshold for visualization
     visualization = True  # Whether show visualization
     vis_hand_bbox = ctx.storage_level > 50
@@ -962,9 +960,10 @@ def mode_exo_hand_pose2d(config: Config):
                     left_hand_kpts, img_W, img_H, padding=50
                 )
                 ################# Heuristic Check: If wholeBody-Hand kpts confidence is too low, then assign zero bbox #################
-                right_kpts_avgConf, left_kpts_avgConf = np.mean(
-                    right_hand_kpts[:, 2]
-                ), np.mean(left_hand_kpts[:, 2])
+                right_kpts_avgConf, left_kpts_avgConf = (
+                    np.mean(right_hand_kpts[:, 2]),
+                    np.mean(left_hand_kpts[:, 2]),
+                )
                 if right_kpts_avgConf < 0.5:
                     right_hand_bbox = None
                 if left_kpts_avgConf < 0.5:
@@ -1483,9 +1482,7 @@ def mode_egoexo_hand_pose3d(config: Config):
     ctx = get_context(config)
     # TODO: Integrate those hardcoded values into args
     ########### Modify as needed #############
-    exo_cam_names = (
-        ctx.exo_cam_names
-    )  # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
+    exo_cam_names = ctx.exo_cam_names  # Select all default cameras: ctx.exo_cam_names or manual seelction: ['cam01','cam02']
     ego_cam_names = [f"{cam}_rgb" for cam in ctx.ego_cam_names]
     all_used_cam = exo_cam_names + ego_cam_names
     tri_threshold = 0.3
@@ -2058,7 +2055,6 @@ def mode_preprocess(config: Config):
 
             for idx in range(start_frame, end_frame, config.inputs.sample_interval):
                 if frame_selection[idx - start_frame] == 1:
-
                     rel_out_path = os.path.join(rel_frame_dir, f"{idx:06d}.jpg")
                     out_path = os.path.join(cam_frame_dir, f"{idx:06d}.jpg")
                     frame_paths[key][idx] = rel_out_path
@@ -2534,7 +2530,6 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
 
         # Process exocams (gopros)
         for exocam in exocam_list:
-
             exocam_data = frame[exocam]
 
             default_attachment_json = get_default_attachment()

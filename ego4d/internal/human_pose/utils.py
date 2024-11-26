@@ -306,13 +306,15 @@ def whether_use_selector(joint_angles, pose3d, num_threshold):
     )
     right_joint_angles, left_joint_angles = joint_angles[:15], joint_angles[15:]
     # All joints can reach maximum 180 degrees so only check for minimum threshold
-    right_joint_angle_outliers, left_joint_angle_outliers = np.sum(
-        right_joint_angles < joint_angle_min_threshold
-    ), np.sum(left_joint_angles < joint_angle_min_threshold)
+    right_joint_angle_outliers, left_joint_angle_outliers = (
+        np.sum(right_joint_angles < joint_angle_min_threshold),
+        np.sum(left_joint_angles < joint_angle_min_threshold),
+    )
 
     # Compute number of invalid joints
-    right_invalid_count, left_invalid_count = np.sum(pose3d[:21, -1] == 0), np.sum(
-        pose3d[21:, -1] == 0
+    right_invalid_count, left_invalid_count = (
+        np.sum(pose3d[:21, -1] == 0),
+        np.sum(pose3d[21:, -1] == 0),
     )
 
     # Determine whether use selector for both hands

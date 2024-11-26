@@ -10,6 +10,7 @@ Examples:
         --datasets full_scale annotations \
         --output_directory="~/ego4d_data"
 """
+
 import logging
 from pathlib import Path
 from typing import List
@@ -44,7 +45,6 @@ from tqdm import tqdm
 
 
 def main_cfg(cfg: Config) -> None:
-
     validated_cfg = validate_config(cfg)
 
     # This service resource in the default session will be used for general light-weight

@@ -1487,7 +1487,6 @@ def validate_egoexo_files(
     # Pre Survey Checks - Flagging if participant + scenario does not have matching pre_survey
     parts_by_key = {}
     for (participant_id, scenario_id, _), p in manifest.participants.items():
-
         key = (participant_id, scenario_id)
         if key not in parts_by_key:
             parts_by_key[key] = []

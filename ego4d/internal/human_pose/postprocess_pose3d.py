@@ -231,7 +231,6 @@ def sliding_interpolate(x_df, y_df, z_df, polyorder=5):
 
 
 def smooth_keypoints(poses, window_length=5, polyorder=3):
-
     num_keypoints = poses.shape[1]
 
     # ------smoothing---------
