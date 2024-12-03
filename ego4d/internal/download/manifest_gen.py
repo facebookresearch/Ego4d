@@ -592,6 +592,9 @@ if "annotations" in manifests:
         benchmarks = [benchmark_name] if len(benchmark_name) > 0 else None
         if "proficiency" in benchmark_name:
             benchmarks.append("proficiency")
+        if "procedural" in benchmark_name: 
+            benchmarks.extend(["taskgraph", "keystep_taskgraph"])
+
 
         manifests["annotations"].append(
             ManifestEntry(
@@ -697,6 +700,7 @@ if "annotations" in manifests:
                                 )
                             )
 
+
 if "expert_commentary" in manifests:
     manifests["expert_commentary"] = []
     ec_base_dir = os.path.join(release_dir, "annotations/expert_commentary/")
@@ -783,6 +787,7 @@ if "features/omnivore_video" in manifests:
                     splits=take_uid_to_splits.get(take_uid, None),
                 )
             )
+
 
 
 all_bs = set()
