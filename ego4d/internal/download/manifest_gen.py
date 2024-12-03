@@ -592,9 +592,8 @@ if "annotations" in manifests:
         benchmarks = [benchmark_name] if len(benchmark_name) > 0 else None
         if "proficiency" in benchmark_name:
             benchmarks.append("proficiency")
-        if "procedural" in benchmark_name: 
+        if "procedural" in benchmark_name:
             benchmarks.extend(["taskgraph", "keystep_taskgraph"])
-
 
         manifests["annotations"].append(
             ManifestEntry(
