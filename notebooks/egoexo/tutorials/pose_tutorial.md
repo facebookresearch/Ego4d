@@ -1,4 +1,4 @@
-# Tutorial 1: Hand and Body Pose in Ego-Exo4D Dataset
+# Tutorial 2: Hand and Body Pose in Ego-Exo4D Dataset
 
 ![Status](https://img.shields.io/static/v1.svg?label=Status&message=Finished&color=green)
 
@@ -137,17 +137,7 @@ for static_calibration in static_calibrations:
 
 #### 2.2 load egocentric camera calibrations
 
-We read the egocentric camera calibrations from **camera_pose** of ego_pose annotations into camera_info. camera_info contains camera intrinsics and extrinsics of both egocentric cameras and exocentric cameras.
-
-
-```python
-egopose_camera_dir = os.path.join(annotation_dir, f"ego_pose/train/camera_pose/")
-# egopose is self-contained and has camera params that are necessary to use the annotations, please refer to the camera dir
-camera_info_path = os.path.join(egopose_camera_dir, f"{take_uid}.json")
-camera_info = json.load(open(camera_info_path))
-```
-
-We read the VRS data using vrs_data_provider which contains camera calibrations to undistort aria camera frames for visualization.
+We read the egocentric camera intrinsics using VRS and camera extrinsics using MPS.
 
 
 ```python
@@ -157,9 +147,18 @@ ego_exo_project_path = os.path.join(release_dir, 'takes', take['take_name'])
 aria_dir = os.path.join(release_dir, take["root_dir"])
 aria_path = os.path.join(aria_dir, f"{ego_cam_name}.vrs")
 vrs_data_provider = data_provider.create_vrs_data_provider(aria_path)
+device_calibration = vrs_data_provider.get_device_calibration()
+
+rgb_stream_id = StreamId("214-1")
+rgb_stream_label = vrs_data_provider.get_label_from_stream_id(rgb_stream_id)
+rgb_camera_calibration = device_calibration.get_camera_calib(rgb_stream_label)
+
+mps_data_paths_provider = mps.MpsDataPathsProvider(ego_exo_project_path)
+mps_data_paths = mps_data_paths_provider.get_data_paths()
+mps_data_provider = mps.MpsDataProvider(mps_data_paths)
 ```
 
-    [38;2;000;000;255m[ProgressLogger][INFO]: 2024-12-19 01:57:54: Opening /datasets01/egoexo4d/v2/takes/upenn_0721_Piano_2_5/aria01.vrs...[0m
+    [38;2;000;000;255m[ProgressLogger][INFO]: 2025-01-08 01:22:38: Opening /datasets01/egoexo4d/v2/takes/upenn_0721_Piano_2_5/aria01.vrs...[0m
     [0m[38;2;000;128;000m[MultiRecordFileReader][DEBUG]: Opened file '/datasets01/egoexo4d/v2/takes/upenn_0721_Piano_2_5/aria01.vrs' and assigned to reader #0[0m
     [0m[38;2;000;000;255m[VrsDataProvider][INFO]: streamId 211-1/camera-et activated[0m
     [0m[38;2;000;000;255m[VrsDataProvider][INFO]: streamId 214-1/camera-rgb activated[0m
@@ -170,8 +169,11 @@ vrs_data_provider = data_provider.create_vrs_data_provider(aria_path)
     [0m[38;2;000;000;255m[VrsDataProvider][INFO]: streamId 1201-1/camera-slam-left activated[0m
     [0m[38;2;000;000;255m[VrsDataProvider][INFO]: streamId 1201-2/camera-slam-right activated[0m
     [0m[38;2;000;000;255m[VrsDataProvider][INFO]: streamId 1202-1/imu-right activated[0m
-    [0m[38;2;000;000;255m[VrsDataProvider][INFO]: streamId 1202-2/imu-left activated[0m
+    [0m[38;2;000;000;255m[VrsDataProvider][INF
+
+    O]: streamId 1202-2/imu-left activated[0m
     [0m[38;2;000;000;255m[VrsDataProvider][INFO]: streamId 1203-1/mag0 activated[0m
+    [0m[38;2;255;165;000m[MpsDataPathsProvider][WARNING]: Hand tracking folder (/datasets01/egoexo4d/v2/takes/upenn_0721_Piano_2_5/hand_tracking) does not exist in MPS root folder, not loading wrist and palm poses.[0m
     [0m
 
 ### 3. Load body / hand pose and project it to exocentric views
@@ -196,7 +198,7 @@ frame_idx = int(frame_idx)
 print(f"annotation at sampled frame {frame_idx} is {annotation.keys()}.")
 ```
 
-    annotation at sampled frame 2146 is dict_keys(['annotation3D', 'annotation2D']).
+    annotation at sampled frame 3382 is dict_keys(['annotation3D', 'annotation2D']).
 
 
 Next we read the corresponding at the sampled frame index from exocentric videos and egocentric video. We store it in a dictionary **videos** with camera name as key.
@@ -211,33 +213,10 @@ for cam_name in all_cams:
     else:
         stream_name = 'rgb'
         
-    local_path = os.path.join(base_directory, take['frame_aligned_videos'][cam_name][stream_name]['relative_path'])  
+    local_path = os.path.join(base_directory, take['frame_aligned_videos'][cam_name][stream_name]['relative_path'])
+    container = av.open(local_path) 
     videos[cam_name] = get_frame(local_path, frame_idx)    
 ```
-
-
-    0it [00:00, ?it/s]
-
-
-
-    0it [00:00, ?it/s]
-
-
-
-    0it [00:00, ?it/s]
-
-
-
-    0it [00:00, ?it/s]
-
-
-
-    0it [00:00, ?it/s]
-
-
-
-    0it [00:00, ?it/s]
-
 
 We retrieve the pose in the format of 3D keypoints from the annotation file. 3D keypoints are world coordinates of the pose. Note that annotation also have **annotation2D** which are 2D keypoints annotated on undistorted frames. We will show this part later in projecting hand pose to egocentric frame.
 
@@ -299,25 +278,25 @@ show_results(projection_results)
 
 
     
-![png](images/pose_tutorial_31_0.png)
+![png](pose_tutorial-VRS_files/pose_tutorial-VRS_29_0.png)
     
 
 
 
     
-![png](images/pose_tutorial_31_1.png)
+![png](pose_tutorial-VRS_files/pose_tutorial-VRS_29_1.png)
     
 
 
 
     
-![png](images/pose_tutorial_31_2.png)
+![png](pose_tutorial-VRS_files/pose_tutorial-VRS_29_2.png)
     
 
 
 
     
-![png](images/pose_tutorial_31_3.png)
+![png](pose_tutorial-VRS_files/pose_tutorial-VRS_29_3.png)
     
 
 
@@ -332,24 +311,43 @@ In this section, we further provide instructions projecting hand pose to egocent
 
 
 ```python
+takes_info = json.load(open(os.path.join(release_dir, "takes.json")))
+
+# go through all takes to locate the sampled take, i.e., cmu_bike01_5
+take_name = take["take_name"]
+import re
+
+# get the capture name, and load the timesync.csv
+capture_name = re.sub(r"_\d+$", "", take_name)
+timesync = pd.read_csv(os.path.join(release_dir, f"captures/{capture_name}/timesync.csv"))
+
+start_idx = take["timesync_start_idx"]+1
+end_idx = take["timesync_end_idx"]
+take_timestamps = []
+for idx in range(start_idx, end_idx):
+    take_timestamps.append(int(timesync.iloc[idx][f"aria01_214-1_capture_timestamp_ns"]))
+sample_timestamp = take_timestamps[int(frame_idx)]
+```
+
+
+```python
 ego_reprojection = {}
+pose_info = mps_data_provider.get_closed_loop_pose(sample_timestamp)
 
 cam = ego_cam_name
 for part in parts:
     pose_vector_in_world = annot_3d[part]
-    
-    camera_intrinsics = np.array(camera_info[cam]['camera_intrinsics']) #(3,3)
-    camera_extrinsics = np.array(camera_info[cam]['camera_extrinsics'][str(frame_idx)]) #(3,4)
-    
-    pose_vector_in_world = np.append(pose_vector_in_world, 1)
-    pose_in_aria_world = np.dot(camera_extrinsics, pose_vector_in_world)
 
-    pose_in_aria_world = pose_in_aria_world.reshape(3,1)
+    if pose_info:
+        # transform coordinates from device to world
+        T_world_device = pose_info.transform_world_device
+        
+    T_device_camera = rgb_camera_calibration.get_transform_device_camera()
+    T_world_camera = T_world_device @ T_device_camera
 
-    device_projection = camera_intrinsics @ pose_in_aria_world
-    device_projection = device_projection[:2] / device_projection[2]
-    device_projection = device_projection.reshape(2)
-    
+    pose_in_aria_world = T_world_camera.inverse() @ pose_vector_in_world
+    device_projection = rgb_camera_calibration.project(pose_in_aria_world)
+
     if device_projection is None:
         continue
     else:
@@ -358,32 +356,10 @@ for part in parts:
         ego_reprojection[part] = {'x': x_coord, 'y': y_coord, 'placement': 'auto'}   
 ```
 
-We also provide the following Aria Undistortion utility function to undistort the aria frame for visualization.
+    Loaded #closed loop trajectory poses records: 646865
 
 
-```python
-def undistort_aria(image_array, provider, sensor_name, focal_length, size):
-    device_calib = provider.get_device_calibration()
-    src_calib = device_calib.get_camera_calib(sensor_name)
-
-    # create output calibration: a linear model of image size 512x512 and focal length 150
-    # Invisible pixels are shown as black.
-    dst_calib = calibration.get_linear_camera_calibration(
-        size, size, focal_length, sensor_name
-    )
-
-    # distort image
-    rectified_array = calibration.distort_by_calibration(
-        image_array, dst_calib, src_calib
-    )
-    return (
-        rectified_array,
-        dst_calib.get_principal_point(),
-        dst_calib.get_focal_lengths(),
-    )
-```
-
-Now let's visualize the projected hand pose on the undistorted aria frame.
+Now let's visualize the projected hand pose on the aria frame.
 
 
 ```python
@@ -395,10 +371,9 @@ if annotation_type == 'hand':
     img = ego_frame
     img = img.rotate(90)
     image_array = np.asarray(img)
-    rectified_array, principal_points, focal_lengths = undistort_aria(image_array, vrs_data_provider, "camera-rgb", 150, 512)
-    undistorted_frame = Image.fromarray(rectified_array, "RGB")
+    image = Image.fromarray(image_array, "RGB")
 
-    viz_img = get_viz(undistorted_frame, keypoints_map, ann, skeleton, pose_kpt_color, annot_type=annotation_type, is_aria=True)
+    viz_img = get_viz(image, keypoints_map, ann, skeleton, pose_kpt_color, annot_type=annotation_type, is_aria=True)
     plt.figure(figsize=(8, 8))
     plt.imshow(viz_img.rotate(270))
     plt.axis("off")  # Hide the axes ticks
@@ -407,45 +382,8 @@ if annotation_type == 'hand':
 ```
 
 
-    0it [00:00, ?it/s]
-
-
-
     
-![png](images/pose_tutorial_38_1.png)
-    
-
-
-As mentioned in the previous section, annotation of hand/body pose in EgoPose also provides 2D annotations which are annotated on undistorted frame. We can also visualize the 2D annotations on the aria frame.
-
-
-```python
-ego_local_path = os.path.join(base_directory, take['frame_aligned_videos'][ego_cam_name]['rgb']['relative_path'])  
-ego_frame = get_frame(ego_local_path, frame_idx) 
-if annotation_type == 'hand':
-    cam_name = ego_cam_name
-    ann = annotation["annotation2D"][ego_cam_name]
-    img = ego_frame
-    img = img.rotate(90)
-    image_array = np.asarray(img)
-    rectified_array, principal_points, focal_lengths = undistort_aria(image_array, vrs_data_provider, "camera-rgb", 150, 512)
-    undistorted_frame = Image.fromarray(rectified_array, "RGB")
-
-    viz_img = get_viz(undistorted_frame, keypoints_map, ann, skeleton, pose_kpt_color, annot_type=annotation_type, is_aria=True)
-    plt.figure(figsize=(8, 8))
-    plt.imshow(viz_img.rotate(270))
-    plt.axis("off")  # Hide the axes ticks
-    plt.title(f"{cam_name}")
-    plt.show()
-```
-
-
-    0it [00:00, ?it/s]
-
-
-
-    
-![png](images/pose_tutorial_40_1.png)
+![png](pose_tutorial-VRS_files/pose_tutorial-VRS_35_0.png)
     
 
 
