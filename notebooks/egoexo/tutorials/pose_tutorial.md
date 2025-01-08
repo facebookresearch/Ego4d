@@ -278,25 +278,25 @@ show_results(projection_results)
 
 
     
-![png](pose_tutorial-VRS_files/pose_tutorial-VRS_29_0.png)
+![png](images/pose_tutorial-0.png)
     
 
 
 
     
-![png](pose_tutorial-VRS_files/pose_tutorial-VRS_29_1.png)
+![png](images/pose_tutorial-1.png)
     
 
 
 
     
-![png](pose_tutorial-VRS_files/pose_tutorial-VRS_29_2.png)
+![png](images/pose_tutorial-2.png)
     
 
 
 
     
-![png](pose_tutorial-VRS_files/pose_tutorial-VRS_29_3.png)
+![png](images/pose_tutorial-3.png)
     
 
 
@@ -383,7 +383,7 @@ if annotation_type == 'hand':
 
 
     
-![png](pose_tutorial-VRS_files/pose_tutorial-VRS_35_0.png)
+![png](images/pose_tutorial-4.png)
     
 
 
