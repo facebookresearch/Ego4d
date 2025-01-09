@@ -6,7 +6,7 @@
 [![View on Github](https://img.shields.io/static/v1.svg?logo=github&label=Tutorial&message=View%20On%20Github&color=lightgrey)](https://github.com/facebookresearch/Ego4d/tree/main/notebooks/egoexo)   
 **Author:** Xizi Wang
 
-3D hand and body pose are two important annotations of the Ego-Exo4D dataset. The **first-person (ego)** perspective (right) captures the details of close-by **hand-object** interactions and the camera wearer’s attention, whereas the **third-person (exo)** perspective (left) captures the **full body pose** and surrounding environment context. In this tutorial, we provide a step-by-step guide on retrieving the hand and body pose of one example take, and projecting the body pose to exocentric views and the hand pose to egocentric views, then visualizing it on the corresponding frame.
+3D hand and body pose are two important annotations of the Ego-Exo4D dataset. The figure on the left captures the **full body pose** and surrounding environment context, whereas the figure on the right captures the details of close-by **hand-object** interactions and the camera wearer’s attention. In this tutorial, we provide a step-by-step guide on retrieving the hand and body pose of one example take, and projecting the body pose to exocentric views and the hand pose to egocentric views, then visualizing it on the corresponding frame.
 
 <center><img src="./images/hand_body_pose.png" width=600 height=400 /></center>
 
