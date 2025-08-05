@@ -3,7 +3,6 @@ import functools
 import json
 import math
 import os
-import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
