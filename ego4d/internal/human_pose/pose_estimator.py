@@ -1,15 +1,6 @@
-import os
-
-import cv2
 import numpy as np
-from mmdet.apis import inference_detector, init_detector
 
-from mmpose.apis import (
-    inference_top_down_pose_model,
-    init_pose_model,
-    process_mmdet_results,
-    vis_pose_result,
-)
+from mmpose.apis import inference_top_down_pose_model, init_pose_model, vis_pose_result
 
 from mmpose.core.bbox.transforms import (
     bbox_cs2xywh,
@@ -18,7 +9,6 @@ from mmpose.core.bbox.transforms import (
     bbox_xyxy2xywh,
 )
 from mmpose.datasets import DatasetInfo
-from tqdm import tqdm
 
 
 ##------------------------------------------------------------------------------------
