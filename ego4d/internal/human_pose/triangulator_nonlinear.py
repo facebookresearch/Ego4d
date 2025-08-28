@@ -4,7 +4,6 @@ import cv2
 import numpy as np
 import pycolmap
 from scipy.optimize import least_squares
-from utils import COCO_KP_ORDER
 
 
 COCO_SKELETON = {
