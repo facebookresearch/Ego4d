@@ -10,7 +10,6 @@ import cv2
 import hydra
 
 import numpy as np
-import pandas as pd
 from ego4d.internal.colmap.preprocess import download_andor_generate_streams
 from ego4d.internal.human_pose.camera import (
     batch_xworld_to_yimage,
