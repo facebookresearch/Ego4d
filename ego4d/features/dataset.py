@@ -18,7 +18,6 @@ from pytorchvideo.data.utils import thwc_to_cthw
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose
-from tqdm.auto import tqdm
 
 
 def get_frames(container, t1, t2, buffer, max_buffer_size, frame_window_size):
