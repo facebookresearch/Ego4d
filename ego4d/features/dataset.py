@@ -2,7 +2,7 @@
 
 import functools
 from fractions import Fraction
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import av
 import av.error
