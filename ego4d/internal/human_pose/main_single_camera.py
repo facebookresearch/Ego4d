@@ -1,7 +1,6 @@
 import json
 import os
 import pickle
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import List
 
