@@ -147,7 +147,7 @@ class SkeletonFit:
 
         ##-------------------------------------------------------
         total_loss = 0
-        for loss_name, loss in losses.items():
+        for loss in losses.values():
             if loss.ndim == 3:
                 total_loss = total_loss + loss.sum(dim=(2, 1))
             elif loss.ndim == 2:
