@@ -85,9 +85,9 @@ def fix_limb_mistakes(poses, std_thres=6):
         pose = poses[t][:, :3]  # 17 x 3
         validity = poses[t][:, 3]  # 17 x 1
 
-        assert (
-            validity.sum() == num_keypoints
-        ), "All keypoints need to be visible for all timesteps after interpolation"
+        assert validity.sum() == num_keypoints, (
+            "All keypoints need to be visible for all timesteps after interpolation"
+        )
 
         for limb_idx, limb_name in enumerate(COCO_SKELETON.keys()):
             limb_idxs = COCO_SKELETON[limb_name]

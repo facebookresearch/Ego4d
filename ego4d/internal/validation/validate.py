@@ -5,12 +5,10 @@ import os
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from ego4d.cli.manifest import VideoMetadata
-
 from ego4d.cli.universities import BUCKET_TO_UNIV
 from ego4d.internal.s3 import StreamPathMgr
 from ego4d.internal.validation.ffmpeg_utils import get_video_info, VideoInfo
@@ -34,7 +32,6 @@ from ego4d.internal.validation.manifest import (
     SynchronizedVideos,
     VideoComponentFile,
 )
-
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
 from tqdm import tqdm

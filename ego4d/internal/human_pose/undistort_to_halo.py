@@ -4,7 +4,6 @@ import os
 import cv2
 import numpy as np
 from PIL import Image
-
 from projectaria_tools.core import calibration
 
 body_keypoints_list = [
@@ -270,9 +269,9 @@ def undistort_exocam(image_path, intrinsics, distortion_coeffs, dimension=(3840,
     if DIM[0] != dim1[0]:
         DIM = (DIM[1], DIM[0])
 
-    assert (
-        dim1[0] / dim1[1] == DIM[0] / DIM[1]
-    ), "Image to undistort needs to have same aspect ratio as the ones used in calibration"
+    assert dim1[0] / dim1[1] == DIM[0] / DIM[1], (
+        "Image to undistort needs to have same aspect ratio as the ones used in calibration"
+    )
     if not dim2:
         dim2 = dim1
     if not dim3:

@@ -7,20 +7,15 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import av
-
 import boto3
 import cv2
 import hydra
 import numpy as np
 import pandas as pd
-
 from ego4d.internal.s3 import StreamPathMgr
-
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
-
 from omegaconf import OmegaConf
-
 from tqdm.auto import tqdm
 
 stream_pathmgr = StreamPathMgr()
@@ -71,9 +66,9 @@ class ColmapConfig:
 
 
 def get_uniq_cache_root_dir(config) -> str:
-    assert (
-        config.video_source is not None and config.take_id is not None
-    ), "need video source and take_id to set unique output dir for COLMAP data"
+    assert config.video_source is not None and config.take_id is not None, (
+        "need video source and take_id to set unique output dir for COLMAP data"
+    )
     assert config.output_dir is not None, "need cache root dir"
     return os.path.join(
         config.output_dir, "cache", f"{config.video_source}_{config.take_id}"
@@ -89,9 +84,9 @@ def pilot_video_metadata(uni_name: str, take_id: str) -> str:
 
 
 def get_colmap_data_dir(config) -> str:
-    assert (
-        config.video_source is not None and config.take_id is not None
-    ), "need video source and take_id to set unique output dir for COLMAP data"
+    assert config.video_source is not None and config.take_id is not None, (
+        "need video source and take_id to set unique output dir for COLMAP data"
+    )
     name = config.name
     if name is None:
         name = f"{config.camera_model}_s{int(config.sync_exo_views)}_r{config.rot_mode}_a{int(config.include_aria)}_fr{config.frame_rate:.3f}"  # noqa
@@ -180,9 +175,9 @@ def _download_data(config: ColmapConfig, force_download: bool) -> Dict[str, Any]
     assert config.output_dir is not None, "Please set the output directory"
 
     if config.in_metadata_path is None:
-        assert (
-            config.in_videos is not None
-        ), "require input video paths if metdata path is None"
+        assert config.in_videos is not None, (
+            "require input video paths if metdata path is None"
+        )
         assert not config.sync_exo_views, "cannot sync videos without metadata"
 
         print("WARNING: using input video paths. This should only be used for TESTING")
@@ -195,9 +190,9 @@ def _download_data(config: ColmapConfig, force_download: bool) -> Dict[str, Any]
                 }
             )
     else:
-        assert (
-            config.in_videos is None
-        ), "cannot use input videos if metadata is not None"
+        assert config.in_videos is None, (
+            "cannot use input videos if metadata is not None"
+        )
         meta = json.load(pathmgr.open(config.in_metadata_path))
         if config.take_id is None or config.video_source is None:
             config.take_id = meta["take_id"]
@@ -226,9 +221,9 @@ def _extract_frames(config, by_dev_id, vrs_bin):
         and config.aria_walkthrough_end_sec is None
         and config.in_metadata_path is not None
     ):
-        assert (
-            config.aria_walkthrough_start_sec is None
-        ), "If not providing end sec of walkthrough time, please set start to none for timesync option"  # noqa
+        assert config.aria_walkthrough_start_sec is None, (
+            "If not providing end sec of walkthrough time, please set start to none for timesync option"
+        )  # noqa
         timesync_df = pd.read_csv(get_timesync_path(config))
         cam01_idx = timesync_df.cam01_global_time.first_valid_index()
         cam02_idx = timesync_df.cam02_global_time.first_valid_index()
@@ -298,9 +293,9 @@ def _extract_frames(config, by_dev_id, vrs_bin):
         pts_by_key["cam04"] = cam04_pts
     else:
         if config.exo_from_frame is not None:
-            assert (
-                config.exo_frames is None
-            ), "if given exo_from_frame and exo_to_frame - you cannot supply frames"
+            assert config.exo_frames is None, (
+                "if given exo_from_frame and exo_to_frame - you cannot supply frames"
+            )
             assert config.exo_to_frame is not None, "need to_frame"
             assert config.frame_rate is not None, "need frame rate"
             f1 = config.exo_from_frame
@@ -504,9 +499,9 @@ def extract_aria_frames(
         print(" ".join(cmd))
         subprocess.run(cmd)
     else:
-        assert (
-            to_point is not None or from_point is not None
-        ), "will not exact all aria frames, please specify a region"
+        assert to_point is not None or from_point is not None, (
+            "will not exact all aria frames, please specify a region"
+        )
         cmd = [
             vrs_bin,
             "extract-images",

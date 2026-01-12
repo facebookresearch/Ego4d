@@ -20,9 +20,9 @@ def is_file_readable(file_path):
 
 def parse_bucket_key(key: str) -> Tuple[str, str]:
     # Determine from the key
-    assert key and key.startswith(
-        "s3://"
-    ), f"Invalid key without bucket supplied: {key}"
+    assert key and key.startswith("s3://"), (
+        f"Invalid key without bucket supplied: {key}"
+    )
     m = re.match("^s3://([^/]*)/(.*)$", key)
     assert m, f"Invalid s3:// search key: {key}"
     grp = m.groups()

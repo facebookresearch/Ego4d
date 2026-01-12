@@ -171,7 +171,7 @@ def inference_k400(config: RunInferenceConfig):
         predictions_summary = "\n".join(predictions_strs)
 
         print(
-            f"""Example {i+1}: {video_path}
+            f"""Example {i + 1}: {video_path}
 
 Expected label: {expected_label}
 Predicted labels:

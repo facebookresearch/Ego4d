@@ -10,7 +10,6 @@ from ego4d.research.clep.preprocess.common import (
     get_language_model,
     run_feature_extraction,
 )
-
 from ego4d.research.common import batch_it, create_executor
 from omegaconf import OmegaConf
 from tqdm.auto import tqdm

@@ -324,7 +324,7 @@ def config_from_args(args=None) -> Config:
     if "video_uid_file" in flags:
         if "video_uids" in flags:
             raise RuntimeError(
-                "argument --video_uid_file: not allowed with argument" "--video_uids"
+                "argument --video_uid_file: not allowed with argument--video_uids"
             )
 
         uids_str = Path(flags.pop("video_uid_file")).expanduser().read_text()

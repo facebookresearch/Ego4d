@@ -338,9 +338,9 @@ def perform_feature_extraction(
 
 @hydra.main(config_path="configs", config_name=None)
 def run_extraction(config: FeatureExtractConfig):
-    assert (
-        config.schedule_config.run_locally
-    ), "Local only permitted - use slurm otherwise!"
+    assert config.schedule_config.run_locally, (
+        "Local only permitted - use slurm otherwise!"
+    )
 
     print("###################### Feature Extraction Config ####################")
     print(OmegaConf.to_yaml(config))

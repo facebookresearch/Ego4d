@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
 from ego4d.research.clep.config import ModelConfig
 
 

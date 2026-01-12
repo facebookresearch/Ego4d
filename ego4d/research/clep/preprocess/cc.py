@@ -1,13 +1,10 @@
 import functools
 import os
-
 from multiprocessing import Pool
 from typing import List, Tuple
 
 import h5py
-
 import pandas as pd
-
 import torch
 import torchvision.transforms as T
 from ego4d.features.config import FeatureExtractConfig, load_model

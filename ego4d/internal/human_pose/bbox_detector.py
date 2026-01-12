@@ -1,5 +1,4 @@
 from mmdet.apis import inference_detector, init_detector
-
 from mmpose.apis import process_mmdet_results
 
 

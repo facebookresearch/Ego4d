@@ -1,7 +1,6 @@
 import copy
 
 import numpy as np
-
 import torch.nn as nn
 from ego4d.features.config import FeatureExtractConfig, Video
 from ego4d.features.extract_features import extract_features

@@ -3,14 +3,12 @@ import copy
 import hydra
 import torch
 import torch.nn.functional as F
-
 from ego4d.features.config import FeatureExtractConfig, load_model
 from ego4d.research.clep.config import TrainConfig
 from ego4d.research.clep.dataset import create_data_loader, create_kinetics_dset
 from ego4d.research.clep.utils import charades_map
 from omegaconf import OmegaConf
 from torch.nn import Identity
-
 from tqdm.auto import tqdm
 
 

@@ -2,7 +2,6 @@ import math
 from typing import Optional
 
 import av
-
 import torch
 from pytorchvideo.transforms import Normalize, ShortSideScale
 from torchvision.transforms._transforms_video import CenterCropVideo
@@ -57,9 +56,9 @@ def _yuv_to_rgb(img: torch.Tensor) -> torch.Tensor:
 
 def _derive_cthw_axis_order(axis_order):
     mapping = {"c": 0, "t": 1, "h": 2, "w": 3}
-    assert set(mapping.keys()) == set(
-        axis_order
-    ), "please provide 't', 'c', 'h', 'w' in any order"
+    assert set(mapping.keys()) == set(axis_order), (
+        "please provide 't', 'c', 'h', 'w' in any order"
+    )
     assert len(axis_order) == 4, "please provide 't', 'c', 'h', 'w' in any order"
     result = []
     for ch in axis_order:

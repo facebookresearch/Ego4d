@@ -8,7 +8,6 @@ from typing import Callable, List, Optional, Tuple, TypeVar
 
 from ego4d.cli.progressbar import DownloadProgressBar
 from ego4d.cli.universities import UNIV_TO_BUCKET
-
 from ego4d.internal.download.manifest import (
     manifest_loads,
     ManifestEntry,
@@ -440,7 +439,7 @@ If you are located in China, please try using a VPN. Please refer to these posts
         (path, size) for path, size in ps_to_dl.items() if size is not None
     ]
     total_bytes_to_fetch = sum(size for _, size in paths_to_fetch)
-    print(f"Fetching: {total_bytes_to_fetch/1024**3:.3f}GiB")
+    print(f"Fetching: {total_bytes_to_fetch / 1024**3:.3f}GiB")
     paths_downloaded, dl_failures = map_all(
         paths_to_fetch,  # pyre-ignore
         map_fn=download,  # pyre-ignore

@@ -9,7 +9,6 @@ import sys
 from typing import List, Tuple
 
 import hydra
-
 import numpy as np
 import submitit
 import torch
@@ -149,7 +148,7 @@ def print_stats_for_videos(
     Incomplete videos = {len(videos)}
 
     Total Seconds = {total_secs_uncompleted}
-    Incomplete seconds = {secs_uncompleted} = {secs_uncompleted/total_secs_uncompleted * 100:.2f}%
+    Incomplete seconds = {secs_uncompleted} = {secs_uncompleted / total_secs_uncompleted * 100:.2f}%
     """
     )
 
@@ -177,7 +176,7 @@ def print_stats_for_scheduling(
     {config.schedule_config.slurm_array_parallelism} batch of machines.
 
     Will take: {sec_to_take} seconds
-        Schedule overhead: - {schedule_overhead} ({100*schedule_overhead/sec_to_take:.2f}%)
+        Schedule overhead: - {schedule_overhead} ({100 * schedule_overhead / sec_to_take:.2f}%)
     """
     )
 

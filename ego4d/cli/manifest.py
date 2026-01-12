@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Dict, Iterable, Set
 
 import regex
-
 from ego4d.cli.s3path import bucket_and_key_from_path
 from ego4d.cli.universities import BUCKET_TO_UNIV
 
@@ -43,9 +42,9 @@ class VideoMetadata:
             self.file_download = True
             self.uid: str = row[self.__FILE_UID_KEY]
         else:
-            assert (
-                self.__VIDEO_UID_KEY in row
-            ), "Either file_uid or video_uid must be specified"
+            assert self.__VIDEO_UID_KEY in row, (
+                "Either file_uid or video_uid must be specified"
+            )
             self.file_download = False
             self.uid: str = row[self.__VIDEO_UID_KEY]
 
@@ -128,13 +127,13 @@ def list_videos_in_manifest(
                 grps = m.captures(1) + m.captures(2)
                 cnt_bars = metadata.benchmarks.count("|")
                 if cnt_bars > 0:
-                    assert len(grps) == (
-                        cnt_bars + 1
-                    ), f"Invalid benchmarks row: {metadata.benchmarks}"
+                    assert len(grps) == (cnt_bars + 1), (
+                        f"Invalid benchmarks row: {metadata.benchmarks}"
+                    )
                 else:
-                    assert (
-                        len(grps) <= 1
-                    ), f"Invalid benchmarks row: {metadata.benchmarks}"
+                    assert len(grps) <= 1, (
+                        f"Invalid benchmarks row: {metadata.benchmarks}"
+                    )
                 if not any(x in benchmarks for x in grps):
                     continue
             if for_universities and metadata.university not in for_universities:

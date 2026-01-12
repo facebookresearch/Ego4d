@@ -442,9 +442,9 @@ def upsert_version(download: FileToDownload, entries: List[VersionEntry]):
     if len(matches) == 0:
         entries.append(download.to_version_entry())
     else:
-        assert (
-            len(matches) == 1
-        ), f"Multiple version entries for uid invalid: {download.uid}"
+        assert len(matches) == 1, (
+            f"Multiple version entries for uid invalid: {download.uid}"
+        )
         entry = matches[0]
         if download.s3_version:
             entry.version = download.s3_version

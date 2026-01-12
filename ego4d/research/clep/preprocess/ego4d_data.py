@@ -4,7 +4,6 @@ import os
 from typing import Any, Dict, List, Tuple
 
 import submitit.helpers as sh
-
 import torch
 from ego4d.research.clep.config import (
     EgoPreprocessFeatureConfig,
@@ -15,7 +14,6 @@ from ego4d.research.clep.config import (
 from ego4d.research.clep.preprocess.common import get_language_model
 from ego4d.research.common import batch_it, create_executor
 from ego4d.research.dataset import save_features_to_hdf5
-
 from tqdm.auto import tqdm
 
 
@@ -178,8 +176,8 @@ def filter_narrations(
     print(f"Narrations filtered from {len(narrations)} -> {len(ret)}")
     print(
         f"""
-    Val Filtered = {num_val_filtered} = {num_val_filtered/len(narrations):.2%}
-    Txt Filtered = {num_txt_filtered} = {num_txt_filtered/len(narrations):.2%}
+    Val Filtered = {num_val_filtered} = {num_val_filtered / len(narrations):.2%}
+    Txt Filtered = {num_txt_filtered} = {num_txt_filtered / len(narrations):.2%}
 
     """
     )

@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional
 
 import cv2
 import pandas as pd
-
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
 

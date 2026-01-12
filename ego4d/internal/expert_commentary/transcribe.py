@@ -11,7 +11,6 @@ import submitit
 import torch
 import whisper
 from ego4d.egoexo.expert_commentary.data import load_all_raw_commentaries
-
 from ego4d.research.common import batch_it
 from tqdm.auto import tqdm
 
@@ -113,9 +112,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    assert os.path.exists(
-        args.commentary_root
-    ), f"{args.commentary_root} does not exist"
+    assert os.path.exists(args.commentary_root), (
+        f"{args.commentary_root} does not exist"
+    )
     comms = load_all_raw_commentaries(args.commentary_root)
     comms = [
         x for x in comms if not os.path.exists(os.path.join(x, "transcriptions.json"))

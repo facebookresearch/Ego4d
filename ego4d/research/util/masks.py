@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 import numpy as np
-
 from ego4d.research.util.lzstring import decompress_from_encoded_uri
 from pycocotools import mask as mask_utils
 

@@ -1,7 +1,5 @@
 import numpy as np
-
 from mmpose.apis import inference_top_down_pose_model, init_pose_model, vis_pose_result
-
 from mmpose.core.bbox.transforms import (
     bbox_cs2xywh,
     bbox_xywh2cs,

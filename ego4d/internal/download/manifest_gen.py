@@ -10,7 +10,6 @@ This should only be used internally by the Eng Team of the EgoExo dataset.
 import json
 import os
 from collections import defaultdict
-
 from concurrent.futures import ThreadPoolExecutor
 
 from ego4d.internal.download.manifest import (
@@ -19,7 +18,6 @@ from ego4d.internal.download.manifest import (
     ManifestEntry,
     PathSpecification,
 )
-
 from ego4d.internal.s3 import S3Downloader
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
@@ -660,9 +658,9 @@ if "annotations" in manifests:
                             take_uid = os.path.splitext(bn)[0]
                             uid = take_uid
                             splits = take_uid_to_splits.get(take_uid, [])
-                            assert (
-                                len(splits) == 1 and splits[0] == split
-                            ), "split diff: {splits} vs {split}"
+                            assert len(splits) == 1 and splits[0] == split, (
+                                "split diff: {splits} vs {split}"
+                            )
                             benchmarks = ["egopose", "ego_pose"]
                             if part in ["body", "hand"]:
                                 benchmarks += [

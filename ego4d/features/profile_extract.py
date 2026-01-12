@@ -75,7 +75,7 @@ def profile_extraction(config: FeatureExtractConfig):
             )
         else:
             print(
-                f"{pf},{batch_size},{nw},{total_time},{mean_sum},{forward_pass.mean()/batch_size},{to_load.mean()/batch_size},{transfer_time.mean()/batch_size}"  # noqa
+                f"{pf},{batch_size},{nw},{total_time},{mean_sum},{forward_pass.mean() / batch_size},{to_load.mean() / batch_size},{transfer_time.mean() / batch_size}"  # noqa
             )
 
 

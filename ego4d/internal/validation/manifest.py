@@ -10,7 +10,6 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from ego4d.internal.s3 import ls_relative
-
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
 
@@ -430,7 +429,7 @@ def load_standard_metadata_files(
     file_name = "device.csv"
     if file_name not in available_files:
         raise AssertionError(
-            f"required file {file_name} not found in " f"{standard_metadata_folder}"
+            f"required file {file_name} not found in {standard_metadata_folder}"
         )
 
     file_path = os.path.join(standard_metadata_folder, file_name)
@@ -444,7 +443,7 @@ def load_standard_metadata_files(
     file_name = "component_type.csv"
     if file_name not in available_files:
         raise AssertionError(
-            f"required file {file_name} not found in " f"{standard_metadata_folder}"
+            f"required file {file_name} not found in {standard_metadata_folder}"
         )
 
     file_path = os.path.join(standard_metadata_folder, file_name)
@@ -458,7 +457,7 @@ def load_standard_metadata_files(
     file_name = "scenario.csv"
     if file_name not in available_files:
         raise AssertionError(
-            f"required file {file_name} not found in " f"{standard_metadata_folder}"
+            f"required file {file_name} not found in {standard_metadata_folder}"
         )
     file_path = os.path.join(standard_metadata_folder, file_name)
     scenarios = load_dataclass_dict_from_csv(

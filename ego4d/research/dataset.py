@@ -6,7 +6,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import h5py
 import torch
 from ego4d.research.readers import PyAvReader, StridedReader, TorchAudioStreamReader
-
 from tqdm import tqdm
 
 

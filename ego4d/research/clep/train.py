@@ -7,7 +7,6 @@ import time
 import hydra
 import submitit
 import torch
-
 import torch.nn.functional as F
 from ego4d.research.clep.config import TrainConfig
 from ego4d.research.clep.dataset import (
@@ -18,13 +17,9 @@ from ego4d.research.clep.dataset import (
     Ego4DCLEP,
 )
 from ego4d.research.clep.model import EgoLangaugeAssociation
-
 from ego4d.research.clep.val import eval_classification, eval_multi_class_classification
-
 from pytorch_lightning.lite import LightningLite
-
 from torch.utils.tensorboard import SummaryWriter
-
 from tqdm.auto import tqdm
 
 

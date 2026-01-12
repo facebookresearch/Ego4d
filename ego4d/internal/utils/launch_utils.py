@@ -92,13 +92,13 @@ def create_work_dir_list(args):
                     os.makedirs(work_dir, exist_ok=False)
                     args.work_dir_list.append(work_dir)
                     break
-            assert (
-                id < max_id
-            ), f"Could not find an available id for {batch_job_dir}/{job}"
+            assert id < max_id, (
+                f"Could not find an available id for {batch_job_dir}/{job}"
+            )
     else:
-        assert (
-            len(args.job_list) == 1
-        ), "Cannot use work_dir when there are more than 1 job"
+        assert len(args.job_list) == 1, (
+            "Cannot use work_dir when there are more than 1 job"
+        )
         assert os.path.exists(args.work_dir), (
             f"{args.work_dir} does not exist. If you are not resuming "
             + "a previous training job, please set work_dir to None"

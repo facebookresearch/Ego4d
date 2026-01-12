@@ -7,7 +7,6 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 import submitit
-
 import whisper
 from ego4d.research.common import batch_it
 from tqdm.auto import tqdm

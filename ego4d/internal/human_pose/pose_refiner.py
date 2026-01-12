@@ -2,7 +2,6 @@ from typing import List
 
 import numpy as np
 import torch
-
 from ego4d.internal.human_pose.utils import COCO_SKELETON, COCO_SKELETON_FLIP_PAIRS
 from mmcv.runner import build_optimizer
 

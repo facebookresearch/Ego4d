@@ -12,12 +12,10 @@ from datetime import date
 from typing import Any, Dict, List, Optional
 
 import cv2
-
 import hydra
 import numpy as np
 import pandas as pd
 from ego4d.internal.colmap.preprocess import download_andor_generate_streams
-
 from ego4d.internal.human_pose.bbox_detector import DetectorModel
 from ego4d.internal.human_pose.camera import (
     batch_xworld_to_yimage,
@@ -55,7 +53,6 @@ from ego4d.internal.human_pose.utils import (
     wholebody_hand_selector,
 )
 from ego4d.research.readers import PyAvReader
-
 from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
 from projectaria_tools.core import data_provider
@@ -189,9 +186,9 @@ def get_context(config: Config) -> Context:
             ]
             if len(ego_cam_names_filtered) == 1:
                 ego_cam_names = ego_cam_names_filtered
-        assert (
-            len(ego_cam_names) == 1
-        ), f"Found too many ({len(ego_cam_names)}) ego cameras: {ego_cam_names}"
+        assert len(ego_cam_names) == 1, (
+            f"Found too many ({len(ego_cam_names)}) ego cameras: {ego_cam_names}"
+        )
 
     all_cams = ego_cam_names + exo_cam_names
     dataset_dir = cache_dir
@@ -1098,9 +1095,9 @@ def mode_ego_hand_pose2d(config: Config):
         "body/pose3d",
         f"wholebodyHand_pose3d_triThresh={tri_threshold}.pkl",
     )
-    assert os.path.exists(
-        pose3d_dir
-    ), f"{pose3d_dir} doesn't exist. Please make sure you have run mode=body_pose3d_wholebodyHand"
+    assert os.path.exists(pose3d_dir), (
+        f"{pose3d_dir} doesn't exist. Please make sure you have run mode=body_pose3d_wholebodyHand"
+    )
     with open(pose3d_dir, "rb") as f:
         wholebodyHand_pose3d = pickle.load(f)
 
@@ -1110,9 +1107,9 @@ def mode_ego_hand_pose2d(config: Config):
     )
     take_dir = os.path.join(ctx.data_dir, "takes", ctx.take["take_name"])
     aria_path = os.path.join(take_dir, f"{ctx.ego_cam_names[0]}.vrs")
-    assert os.path.exists(
-        aria_path
-    ), f"{aria_path} doesn't exit. Need aria video downloaded"
+    assert os.path.exists(aria_path), (
+        f"{aria_path} doesn't exit. Need aria video downloaded"
+    )
     aria_camera_models = get_aria_camera_models(aria_path)
     stream_name_to_id = {
         f"{ctx.ego_cam_names[0]}_rgb": "214-1",
@@ -1329,9 +1326,9 @@ def mode_exo_hand_pose3d(config: Config):
         ctx.dataset_dir,
         f"body/pose3d/wholebodyHand_pose3d_triThresh={wholebody_hand_tri_threshold}.pkl",
     )
-    assert os.path.exists(
-        wholebody_hand_pose3d_file
-    ), f"{wholebody_hand_pose3d_file} does not exist"
+    assert os.path.exists(wholebody_hand_pose3d_file), (
+        f"{wholebody_hand_pose3d_file} does not exist"
+    )
     with open(wholebody_hand_pose3d_file, "rb") as f:
         wholebody_hand_poses3d = pickle.load(f)
 
@@ -1543,9 +1540,9 @@ def mode_egoexo_hand_pose3d(config: Config):
         ctx.dataset_dir,
         f"body/pose3d/wholebodyHand_pose3d_triThresh={wholebody_hand_tri_threshold}.pkl",
     )
-    assert os.path.exists(
-        wholebody_hand_pose3d_file
-    ), f"{wholebody_hand_pose3d_file} does not exist"
+    assert os.path.exists(wholebody_hand_pose3d_file), (
+        f"{wholebody_hand_pose3d_file} does not exist"
+    )
     with open(wholebody_hand_pose3d_file, "rb") as f:
         wholebody_hand_poses3d = pickle.load(f)
 
@@ -1555,9 +1552,9 @@ def mode_egoexo_hand_pose3d(config: Config):
     )
     take_dir = os.path.join(ctx.data_dir, "takes", ctx.take["take_name"])
     aria_path = os.path.join(take_dir, f"{ctx.ego_cam_names[0]}.vrs")
-    assert os.path.exists(
-        aria_path
-    ), f"{aria_path} doesn't exit. Need aria video downloaded"
+    assert os.path.exists(aria_path), (
+        f"{aria_path} doesn't exit. Need aria video downloaded"
+    )
     aria_camera_models = get_aria_camera_models(aria_path)
     stream_name_to_id = {
         f"{ctx.ego_cam_names[0]}_rgb": "214-1",
@@ -2414,9 +2411,9 @@ def mode_undistort_to_halo(config: Config, skel_type="body"):
         reproj_error_file = os.path.join(
             ctx.cache_dir, skel_type, "pose3d", "body_pose3d_reprojection_error.pkl"
         )
-        assert os.path.exists(
-            reproj_error_file
-        ), "Please first run mode=body_pose3d to get body reprojection error .pkl file"
+        assert os.path.exists(reproj_error_file), (
+            "Please first run mode=body_pose3d to get body reprojection error .pkl file"
+        )
         # Load body bbox
         body_bbox_file = os.path.join(ctx.cache_dir, skel_type, "bbox", "bbox.pkl")
         with open(body_bbox_file, "rb") as f:
