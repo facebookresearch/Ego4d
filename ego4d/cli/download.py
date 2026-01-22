@@ -13,17 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, fields
 from itertools import compress
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Collection,
-    Iterable,
-    List,
-    NamedTuple,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import Any, Callable, Collection, Iterable, List, Optional
 
 import boto3.session
 import botocore.exceptions

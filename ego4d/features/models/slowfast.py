@@ -7,7 +7,7 @@ import torch
 from ego4d.features.config import BaseModelConfig, InferenceConfig
 from ego4d.features.models.common import FeedVideoInput
 from pytorchvideo.transforms import ApplyTransformToKey, ShortSideScale
-from torch.nn import Identity, Module
+from torch.nn import Module
 from torchvision.transforms import Compose, Lambda
 from torchvision.transforms._transforms_video import CenterCropVideo, NormalizeVideo
 

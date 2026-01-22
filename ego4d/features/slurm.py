@@ -19,7 +19,6 @@ from ego4d.features.config import (
     Video,
 )
 from ego4d.features.extract_features import num_fvs, perform_feature_extraction
-from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from tqdm import tqdm
 

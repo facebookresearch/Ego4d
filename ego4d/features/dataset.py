@@ -1,6 +1,5 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates. All Rights Reserved.
 
-import functools
 from fractions import Fraction
 from typing import Any, Dict, List
 
@@ -10,7 +9,6 @@ import numpy as np
 import torch
 from ego4d.features.config import FeatureExtractConfig, get_transform, Video
 from ego4d.research.dataset import VideoDataset
-from ego4d.research.readers import PyAvReader, TorchAudioStreamReader
 from pytorchvideo.data import UniformClipSampler
 from pytorchvideo.data.encoded_video import EncodedVideo
 from pytorchvideo.data.utils import thwc_to_cthw

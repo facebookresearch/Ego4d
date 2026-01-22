@@ -7,23 +7,12 @@ from typing import List
 import cv2
 import hydra
 import numpy as np
-from ego4d.internal.colmap.preprocess import download_andor_generate_streams
-from ego4d.internal.human_pose.camera import (
-    batch_xworld_to_yimage,
-    create_camera,
-    create_camera_data,
-    get_aria_camera_models,
-)
+from ego4d.internal.human_pose.camera import batch_xworld_to_yimage, create_camera
 from ego4d.internal.human_pose.config import Config
-from ego4d.internal.human_pose.dataset import (
-    get_synced_timesync_df,
-    SyncedEgoExoCaptureDset,
-)
-from ego4d.internal.human_pose.readers import read_frame_idx_set
+from ego4d.internal.human_pose.dataset import SyncedEgoExoCaptureDset
 from ego4d.internal.human_pose.utils import (
     check_and_convert_bbox,
     draw_bbox_xyxy,
-    draw_points_2d,
     get_exo_camera_plane,
     get_region_proposal,
 )

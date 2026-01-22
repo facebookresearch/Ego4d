@@ -3,8 +3,6 @@ import functools
 import json
 import math
 import os
-import tempfile
-from concurrent.futures import ThreadPoolExecutor
 
 import submitit
 import whisper
