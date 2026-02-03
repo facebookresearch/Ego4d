@@ -298,7 +298,7 @@ def mode_body_refine_pose3d(config: Config):
     ]
 
     poses3d = []
-    for time_stamp, pose3d_file in enumerate(pose3d_files):
+    for pose3d_file in pose3d_files:
         poses3d.append(np.load(pose3d_file))
 
     poses3d = np.stack(poses3d, axis=0)  ## T x 17 x 4 (x, y, z, confidence)
