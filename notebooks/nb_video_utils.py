@@ -132,3 +132,36 @@ def _get_frames(
         frame_index_to_pts(f, video_start, video_pt_diff) for f in video_frames
     ]
     return _get_frames_pts(time_pts_set, container, include_audio, audio_buffer_pts)
+
+# modifier version of _get_frames for PyAV version 10
+def _get_frames2(
+    video_frames,  # this has type List[int]
+    container: av.container.Container,
+    include_audio: bool,
+    audio_buffer_frames: int = 0,
+):  # -> Iterable[av.frame.Frame]
+    assert len(container.streams.video) == 1
+
+    video_stream = container.streams.video[0]
+    video_start: int = video_stream.start_time
+    video_base: Fraction = video_stream.time_base
+    fps: Fraction = video_stream.average_rate
+    video_pt_diff = pts_difference_per_frame(fps, video_base)
+
+    audio_buffer_pts = (
+        frame_index_to_pts(audio_buffer_frames, 0, video_pt_diff)
+        if include_audio
+        else 0
+    )
+
+    for frame_num in video_frames:
+        framerate = container.streams.video[0].average_rate # get the frame rate
+        time_base = container.streams.video[0].time_base # get the time base
+        sec = int(frame_num/framerate) # timestamp for that frame_num
+        container.seek(sec*1000000, backward=True)  # seek to that nearest timestamp
+        frame = next(container.decode(video=0)) # get the next available frame
+        sec_frame = int(frame.pts * time_base * framerate) # get the proper key frame number of that timestamp
+
+        for _ in range(sec_frame, frame_num):
+            frame = next(container.decode(video=0))
+        yield frame
