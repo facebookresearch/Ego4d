@@ -188,12 +188,15 @@ def main_cfg(cfg: Config) -> None:
             exit(0)
 
         expected_gb = total_size_bytes / 1024 / 1024 / 1024
+    else:
+        expected_gb = None
 
     if validated_cfg.assume_yes:
         if expected_gb:
             print(f"Downloading {len(active_downloads)} files..")
         else:
-            print(f"Downloading {expected_gb:.4f} GB..")
+            if not validated_cfg.skip_s3_checks:
+                print(f"Downloading {expected_gb:.4f} GB..")
     else:
         confirm = None
         while confirm is None:
