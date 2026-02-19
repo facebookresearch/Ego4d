@@ -63,7 +63,7 @@ def charades_map(submission_array, gt_array):
     """
     fix = submission_array.copy()
     empty = np.sum(gt_array, axis=1) == 0
-    fix[empty, :] = np.NINF
+    fix[empty, :] = -np.inf
     return mAP(fix, gt_array)
 
 
@@ -74,5 +74,5 @@ def charades_nanmap(submission_array, gt_array):
     """
     fix = submission_array.copy()
     empty = np.sum(gt_array, axis=1) == 0
-    fix[empty, :] = np.NINF
+    fix[empty, :] = -np.inf
     return nanmap(fix, gt_array)
