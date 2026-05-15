@@ -167,7 +167,7 @@ class Ego4DCLEP(Dataset):
                 config.pre_config.ego4d_features.hdf5_path,
             )
         )
-        uids = set(meta["uid"] for meta in self.narr_meta)
+        uids = {meta["uid"] for meta in self.narr_meta}
         assert len(uids - set(self.features.keys())) == 0, "not all features cached"
         self.narr_meta = [meta for meta in self.narr_meta if meta["uid"] in uids]
 
