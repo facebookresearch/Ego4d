@@ -1248,12 +1248,12 @@ def _check_video_metadata(
 
 def _check_video_components(manifest: ManifestEgoExo) -> List[Error]:
     ret = []
-    all_video_ids = set(
+    all_video_ids = {
         v.university_video_id
         for vs in manifest.videos.values()
         for v in vs
         if v.number_video_components > 0
-    )
+    }
     for (capture_uid, video_id), vcs in manifest.video_components.items():
         next_expected_idx = 0
         for vc in sorted(vcs, key=lambda x: x.component_index):
