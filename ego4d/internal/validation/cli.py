@@ -16,7 +16,6 @@ Examples:
         -o errors
 """
 
-import boto3
 import botocore.client as bclient
 from ego4d.internal.s3 import get_client
 from ego4d.internal.validation.config import Config, config_from_args, validate_config
