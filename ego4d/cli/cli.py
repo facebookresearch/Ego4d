@@ -33,7 +33,6 @@ from ego4d.cli.download import (
     list_videos_for_download,
     load_version_file,
     save_version_file,
-    upsert_version,
 )
 from ego4d.cli.manifest import (
     download_manifest_for_version,
