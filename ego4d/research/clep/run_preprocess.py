@@ -1,5 +1,4 @@
 import hydra
-from ego4d.features.config import FeatureExtractConfig
 from ego4d.research.clep.config import TrainConfig
 from ego4d.research.clep.preprocess.cc import preprocess_cc
 from ego4d.research.clep.preprocess.charades import preprocess_ego_charade
