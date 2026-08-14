@@ -19,7 +19,11 @@ import boto3.session
 import botocore.exceptions
 from botocore.client import Config
 from ego4d.cli import manifest
-from ego4d.cli.config import DATASET_FILE_EXTENSIONS, DATASETS_VIDEO, ValidatedConfig
+from ego4d.cli.config import (
+    DATASET_FILE_EXTENSIONS,
+    DATASETS_VIDEO,
+    ValidatedConfig,
+)
 from ego4d.cli.manifest import VideoMetadata
 from tqdm import tqdm
 
@@ -358,11 +362,25 @@ def list_videos_for_download(
     if cfg.video_uids:
         if any(x != x.lower() for x in cfg.video_uids):
             raise RuntimeError(
-                "ERROR: Upper case uids invalid - please sanity check your inputs: {cfg.video_uids}"
+                "ERROR: Upper case uids invalid - please sanity check your inputs: "
+                f"{cfg.video_uids}"
             )
-        matches = [x for x in videos if x.uid in cfg.video_uids]
-        if dataset in DATASETS_VIDEO or dataset.lower() in DATASETS_VIDEO:
-            missing = cfg.video_uids - {v.uid for v in videos}
+
+        is_video_dataset = dataset.lower() in DATASETS_VIDEO
+        manifest_is_video_uid_addressable = bool(videos) and all(
+            video.video_uid for video in videos
+        )
+
+        if is_video_dataset or manifest_is_video_uid_addressable:
+
+            def uid_for_filter(video: VideoMetadata) -> str:
+                if is_video_dataset:
+                    return video.uid
+                assert video.video_uid is not None
+                return video.video_uid
+
+            available_uids = {uid_for_filter(video) for video in videos}
+            missing = cfg.video_uids - available_uids
             if missing:
                 raise RuntimeError(
                     "The following requested video UIDs could not be found "
@@ -371,12 +389,25 @@ def list_videos_for_download(
                     f"{missing}"
                 )
 
-            videos = matches
+            videos = [
+                video for video in videos if uid_for_filter(video) in cfg.video_uids
+            ]
+            file_count = len(videos)
+            file_noun = "file" if file_count == 1 else "files"
+            print(
+                "Only downloading a subset of files for "
+                f"dataset '{dataset}' because the 'video_uids' flag has been set "
+                "on the command line or in the config file. "
+                f"A total of {file_count} {file_noun} will be downloaded.\n"
+            )
         else:
-            if matches:
-                print(
-                    "ERROR: video_uids not supported for non-video datasets: {[x.uid for x in matches]}"
-                )
+            matches = [video for video in videos if video.uid in cfg.video_uids]
+            print(
+                "WARNING: video_uids filtering is not supported for dataset "
+                f"'{dataset}' because its manifest entries are not keyed by "
+                "video_uid; the filter will be ignored. Manifest file UIDs matching "
+                f"the requested values: {[video.uid for video in matches]}"
+            )
 
     return videos
 

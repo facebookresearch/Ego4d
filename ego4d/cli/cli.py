@@ -20,7 +20,6 @@ from ego4d.cli.config import (
     Config,
     config_from_args,
     DATASET_PRIMARY,
-    DATASETS_VIDEO,
     validate_config,
 )
 from ego4d.cli.download import (
@@ -52,11 +51,6 @@ def main_cfg(cfg: Config) -> None:
     s3 = boto3.session.Session(profile_name=validated_cfg.aws_profile_name).resource(
         "s3"
     )
-
-    if cfg.video_uids and all(x not in DATASETS_VIDEO for x in validated_cfg.datasets):
-        logging.error(
-            "ERROR: video_uids specified for non-video datasets (and will be ignored)"
-        )
 
     if validated_cfg.list_datasets:
         print_datasets(validated_cfg.version, s3)
@@ -121,13 +115,6 @@ def main_cfg(cfg: Config) -> None:
 
         version_entries = load_version_file(download_path)
 
-        if validated_cfg.video_uids:
-            print(
-                "Only downloading a subset of the video files because the "
-                "'video_uids' flag has been set on the command line or in the config "
-                f"file. A total of {len(validated_cfg.video_uids)} video files will "
-                f"be downloaded.\n"
-            )
         to_download = list_videos_for_download(validated_cfg, dataset, manifest_path)
         downloads.extend(
             [FileToDownload.create(video, download_path) for video in to_download]
