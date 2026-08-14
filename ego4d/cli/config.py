@@ -260,7 +260,8 @@ def config_from_args(args=None) -> Config:
     video_uid_group.add_argument(
         "--video_uids",
         nargs="+",
-        help="List of video UIDs to be downloaded. If not specified, all relevant UIDs "
+        help="List of video UIDs to be downloaded. Per-video files whose manifests "
+        "expose video UIDs can also be filtered. If not specified, all relevant files "
         "will be downloaded.",
     )
     video_uid_group.add_argument(

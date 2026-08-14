@@ -11,7 +11,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict, Iterable, Set
+from typing import Dict, Iterable, Optional, Set
 
 import regex
 from ego4d.cli.s3path import bucket_and_key_from_path
@@ -36,6 +36,10 @@ class VideoMetadata:
     def __init__(self, row: Dict[str, str]):
         # The raw contents of the CSV row
         self.raw_data: Dict[str, str] = dict(row)
+
+        # The video associated with this entry, when the manifest exposes one. File
+        # manifests may contain both a file_uid and a video_uid.
+        self.video_uid: Optional[str] = row.get(self.__VIDEO_UID_KEY) or None
 
         # Unique identifier for the video
         if self.__FILE_UID_KEY in row:

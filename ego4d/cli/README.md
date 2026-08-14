@@ -47,7 +47,7 @@ Note that if you want to use the AWS credentials stored in a different [named pr
 | `--benchmarks`  |  [Optional] A list of benchmarks to filter dataset downloads by - e.g. Narrations/EM/FHO/AV |
 | `-y` `--yes` | [Optional] If this flag is set, then the CLI will not show a prompt asking the user to confirm the download. This is so that the tool can be used as part of shell scripts. |
 | `--aws_profile_name` | [Optional] Defaults to “default”. Specifies the AWS profile name from ~/.aws/credentials to use for the download |
-| `--video_uids` | [Optional] List of video or clip UIDs to be downloaded. If not specified, all relevant UIDs will be downloaded. |
+| `--video_uids` | [Optional] List of video or clip UIDs to be downloaded. Per-video files whose manifests expose video UIDs, including precomputed features, can also be filtered. If not specified, all relevant files will be downloaded. |
 | `--video_uid_file` | [Optional] Path to a whitespace delimited file that contains a list of UIDs. Mutually exclusive with the `video_uids` flag. |
 | `--universities` | [Optional] List of university IDs. If specified, only UIDs from the S3 buckets belonging to the listed universities will be downloaded. |
 | `--version`  |  [Optional] A version identifier - e.g. “v1” or "v2" (default) |
