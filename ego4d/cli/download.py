@@ -375,7 +375,8 @@ def list_videos_for_download(
         else:
             if matches:
                 print(
-                    "ERROR: video_uids not supported for non-video datasets: {[x.uid for x in matches]}"
+                    "ERROR: video_uids not supported for non-video datasets: "
+                    f"{[x.uid for x in matches]}"
                 )
 
     return videos

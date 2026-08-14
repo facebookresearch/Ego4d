@@ -121,7 +121,7 @@ def main_cfg(cfg: Config) -> None:
 
         version_entries = load_version_file(download_path)
 
-        if validated_cfg.video_uids:
+        if validated_cfg.video_uids and dataset in DATASETS_VIDEO:
             print(
                 "Only downloading a subset of the video files because the "
                 "'video_uids' flag has been set on the command line or in the config "
