@@ -77,7 +77,7 @@ class InferenceConfig:
     device: str = "cuda"
 
     video_reader_class: str = "PyAvReader"
-    video_reader_kwargs_override: dict = field(default_factory=lambda _: {})
+    video_reader_kwargs_override: dict = field(default_factory=lambda: {})
 
     # 0 == don't use dataloader
     # >0 use dataloader with bs=batch_size
