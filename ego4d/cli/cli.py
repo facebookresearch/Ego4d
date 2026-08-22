@@ -26,10 +26,9 @@ from ego4d.cli.config import (
 from ego4d.cli.download import (
     create_download_directory,
     create_output_directory,
-    download_all,
+    download_all_with_retries,
     FileToDownload,
     filter_already_downloaded,
-    list_corrupt_files,
     list_videos_for_download,
     load_version_file,
     save_version_file,
@@ -41,6 +40,10 @@ from ego4d.cli.manifest import (
 )
 from ego4d.cli.progressbar import DownloadProgressBar
 from tqdm import tqdm
+
+
+class DownloadFailedError(RuntimeError):
+    """Raised when files remain incomplete after all download retries."""
 
 
 def main_cfg(cfg: Config) -> None:
@@ -218,23 +221,26 @@ def main_cfg(cfg: Config) -> None:
 
     progress = DownloadProgressBar(total_size_bytes=total_size_bytes)
 
-    files = download_all(
+    corrupted = download_all_with_retries(
         active_downloads,
         version_entries,
         aws_profile_name=validated_cfg.aws_profile_name,
+        download_retries=validated_cfg.download_retries,
+        retry_delay_seconds=validated_cfg.retry_delay_seconds,
         callback=progress.update,
         save_callback=lambda: save_version_file(version_entries, download_path),
     )
 
     print("Checking file integrity...")
-    corrupted = list_corrupt_files(files)
 
     if corrupted:
-        msg = f"ERROR: {len(corrupted)} files failed download: "
+        msg = (
+            f"ERROR: {len(corrupted)} files failed download after "
+            f"{validated_cfg.download_retries} retries:\n"
+        )
         for x in corrupted:
             msg += f"\t{x.uid}\n"
         logging.error(msg)
-        # TODO: retry these downloads?
 
     # for x in active_downloads:
     #     upsert_version(x, version_entries)
@@ -242,13 +248,20 @@ def main_cfg(cfg: Config) -> None:
     # One additional save to confirm
     save_version_file(version_entries, download_path)
 
+    if corrupted:
+        raise DownloadFailedError("Download incomplete after retry exhaustion.")
 
-def main() -> None:
+
+def main() -> int:
     config = config_from_args()
     if not config:
-        return
-    main_cfg(config)
+        return 0
+    try:
+        main_cfg(config)
+    except DownloadFailedError:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

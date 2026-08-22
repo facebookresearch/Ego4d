@@ -9,6 +9,7 @@ import datetime
 import logging
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, fields
 from itertools import compress
@@ -386,6 +387,46 @@ def list_corrupt_files(downloads: Collection[FileToDownload]) -> List[FileToDown
     Returns a list of any downloaded files that appear corrupted.
     """
     return [d for d in downloads if _file_is_corrupt(d)]
+
+
+def download_all_with_retries(
+    downloads: Collection[FileToDownload],
+    entries: List[VersionEntry],
+    aws_profile_name: str,
+    download_retries: int,
+    retry_delay_seconds: int,
+    callback: Callable[[int], None] = None,
+    save_callback: Callable[[], None] = None,
+) -> List[FileToDownload]:
+    """Download files and return any that remain corrupt after bounded retries.
+
+    The initial attempt includes every supplied download. Each subsequent attempt
+    includes only files that failed the preceding download or integrity check.
+    """
+    pending = list(downloads)
+
+    for attempt in range(download_retries + 1):
+        if attempt > 0:
+            info(
+                f"Retrying {len(pending)} failed downloads "
+                f"(retry {attempt}/{download_retries})..."
+            )
+            if retry_delay_seconds > 0:
+                time.sleep(retry_delay_seconds)
+
+        results = download_all(
+            pending,
+            entries,
+            aws_profile_name=aws_profile_name,
+            # Retried bytes are outside the initial transfer-size progress total.
+            callback=callback if attempt == 0 else None,
+            save_callback=save_callback,
+        )
+        pending = list_corrupt_files(results)
+        if not pending:
+            break
+
+    return pending
 
 
 def _file_is_corrupt(download: FileToDownload):

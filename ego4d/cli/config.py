@@ -16,6 +16,8 @@ from ego4d.cli.universities import UNIV_TO_BUCKET
 
 
 VERSION_DEFAULT = "v2_1"
+DOWNLOAD_RETRIES_DEFAULT = 3
+RETRY_DELAY_SECONDS_DEFAULT = 5
 DATASET_PRIMARY = "full_scale"
 DATASETS_VIDEO = ["full_scale", "clips", "components/videos", "video_540ss"]
 DATASETS_FILE = [
@@ -70,6 +72,8 @@ class ValidatedConfig(NamedTuple):
     manifest: bool
     bypass_version_check: bool
     skip_s3_checks: bool
+    download_retries: int
+    retry_delay_seconds: int
     video_uids: Set[str]
     universities: Set[str]
     annotations: Union[bool, Set[str]]
@@ -98,6 +102,8 @@ class Config(NamedTuple):
     manifest: bool = False
     bypass_version_check: bool = False
     skip_s3_checks: bool = False
+    download_retries: int = DOWNLOAD_RETRIES_DEFAULT
+    retry_delay_seconds: int = RETRY_DELAY_SECONDS_DEFAULT
     video_uids: List[str] = []
     universities: List[str] = []
     annotations: Union[bool, List[str]] = True
@@ -113,6 +119,11 @@ def validate_config(cfg: Config) -> ValidatedConfig:
     Returns:
         A ValidatedConfig if all user-supplied options appear valid
     """
+
+    if cfg.download_retries < 0:
+        raise RuntimeError("download_retries must be greater than or equal to zero.")
+    if cfg.retry_delay_seconds < 0:
+        raise RuntimeError("retry_delay_seconds must be greater than or equal to zero.")
 
     try:
         boto3.session.Session(profile_name=cfg.aws_profile_name)
@@ -134,6 +145,8 @@ def validate_config(cfg: Config) -> ValidatedConfig:
         assume_yes=bool(cfg.assume_yes),
         bypass_version_check=cfg.bypass_version_check,
         skip_s3_checks=cfg.skip_s3_checks,
+        download_retries=cfg.download_retries,
+        retry_delay_seconds=cfg.retry_delay_seconds,
         annotations=cfg.annotations if isinstance(cfg.annotations, bool) else set(),
         list_datasets=cfg.list_datasets,
         manifest_override_path=cfg.manifest_override_path,
@@ -225,6 +238,20 @@ def config_from_args(args=None) -> Config:
         action="store_const",
         dest="skip_s3_checks",
         help="Skips initial check that files are present on S3 before downloading. Download size estimates are disabled with this flag.",
+    )
+    flag_parser.add_argument(
+        "--download-retries",
+        type=int,
+        default=DOWNLOAD_RETRIES_DEFAULT,
+        help="Number of times to retry files that fail download or integrity checks. "
+        f"Defaults to {DOWNLOAD_RETRIES_DEFAULT}.",
+    )
+    flag_parser.add_argument(
+        "--retry-delay-seconds",
+        type=int,
+        default=RETRY_DELAY_SECONDS_DEFAULT,
+        help="Seconds to wait before retrying failed downloads. "
+        f"Defaults to {RETRY_DELAY_SECONDS_DEFAULT}.",
     )
     flag_parser.add_argument(
         "--version",
