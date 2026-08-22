@@ -53,6 +53,14 @@ Note that if you want to use the AWS credentials stored in a different [named pr
 | `--version`  |  [Optional] A version identifier - e.g. “v1” or "v2" (default) |
 | `--no-metadata`  |  [Optional] Bypass the `ego4d.json` metadata download |
 | `--config` | [Optional] Local path to a config JSON file. If specified, the flags will be read from this file instead of the command line |
+| `--download-retries` | [Optional] Number of times to retry only files that fail download or integrity checks. Defaults to 3. Set to 0 to disable retries. |
+| `--retry-delay-seconds` | [Optional] Seconds to wait before each retry of failed files. Defaults to 5. |
+
+When retries are exhausted, the CLI reports the files that remain incomplete and
+returns a non-zero exit status. Files that completed successfully are not downloaded
+again during the same invocation. Rerunning the same command remains safe because the
+existing version and size checks skip complete current files. A partially downloaded
+file may restart; cross-process exact-byte resume is not guaranteed.
 
 ### Datasets
 
