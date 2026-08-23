@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from .config import config_from_args
+from .config import Config, config_from_args, validate_config
 
 
 def test_invalid_flags():
@@ -85,6 +85,31 @@ def test_valid_flags():
     assert c.aws_profile_name == "ego4d"
     assert c.video_uids == ["123", "456", "789"]
     assert c.metadata == True
+
+
+def test_download_retry_flags():
+    c = config_from_args(
+        [
+            "--output_directory=~/test",
+            "--download-retries=0",
+            "--retry-delay-seconds=12",
+        ]
+    )
+
+    assert c.download_retries == 0
+    assert c.retry_delay_seconds == 12
+
+
+@pytest.mark.parametrize(
+    "config, message",
+    [
+        (Config(download_retries=-1), "download_retries"),
+        (Config(retry_delay_seconds=-1), "retry_delay_seconds"),
+    ],
+)
+def test_negative_download_retry_config_is_invalid(config, message):
+    with pytest.raises(RuntimeError, match=message):
+        validate_config(config)
 
 
 def test_version_flags():
